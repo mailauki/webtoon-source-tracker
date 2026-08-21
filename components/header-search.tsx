@@ -13,6 +13,11 @@ import { cn } from "@/lib/utils";
  * Same URL-as-state contract as the chips: the query lives in `?q=`, so
  * results stay linkable and /library stays a Server Component.
  *
+ * One field drives two result sets. The server filters the user's shelf by
+ * `?q=`, and <MalSearchResults> reads the same param to search the MAL
+ * catalog underneath — so finding a title you have and adding one you don't
+ * are the same gesture.
+ *
  * Expanding overlays the nav rather than reflowing it. Laying the field over
  * the row keeps the header exactly one row tall in both states — animating the
  * nav out of the way instead makes the buttons jump under the pointer as the
@@ -65,7 +70,7 @@ export function HeaderSearch() {
           // The input mounts this tick; focus it on the next one.
           requestAnimationFrame(() => inputRef.current?.focus());
         }}
-        aria-label="Search your library"
+        aria-label="Search titles"
         aria-expanded={false}
         className="inline-flex size-9 shrink-0 items-center justify-center rounded-pill text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       >
@@ -79,7 +84,7 @@ export function HeaderSearch() {
     // max-width keeps it from swallowing the wordmark on narrow screens.
     <div className="absolute inset-y-0 right-0 z-10 flex w-full max-w-md items-center pl-2">
       <label htmlFor={inputId} className="sr-only">
-        Search your library
+        Search titles
       </label>
       <div className="relative w-full">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -98,7 +103,7 @@ export function HeaderSearch() {
             // on screen so the filtered state is never silently invisible.
             if (!value) setOpen(false);
           }}
-          placeholder="Search your library…"
+          placeholder="Search titles to find or add…"
           className={cn(
             "rounded-pill border-border bg-background pl-9 pr-9",
             // Hide the WebKit affordance; the X below is the clear control.
