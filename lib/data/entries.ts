@@ -10,8 +10,6 @@ import { createClient } from "@/lib/supabase/server";
  */
 
 export type LibraryFilters = {
-  status?: string;
-  source?: string;
   q?: string;
 };
 
@@ -21,6 +19,11 @@ export type LibraryFilters = {
  *
  * `media_titles!inner` makes the title join an inner join so a filter on the
  * title (search) narrows the entries rather than returning nulls.
+ *
+ * Status and source are deliberately not filtered here. They are stored per
+ * user and applied in the browser (see components/library-grid.tsx), because
+ * every field they filter on already rides along on these rows — re-querying
+ * for a chip click would be a round-trip for data we already sent.
  */
 export async function getLibrary(filters: LibraryFilters = {}) {
   const supabase = await createClient();
@@ -48,10 +51,6 @@ export async function getLibrary(filters: LibraryFilters = {}) {
     )
     .order("mal_updated_at", { ascending: false, nullsFirst: false });
 
-  if (filters.status) {
-    query = query.eq("list_status", filters.status);
-  }
-
   if (filters.q) {
     // Escape PostgREST's pattern characters so a search for "%" is literal.
     const term = filters.q.replace(/[%_]/g, "\\$&");
@@ -61,21 +60,7 @@ export async function getLibrary(filters: LibraryFilters = {}) {
   const { data, error } = await query;
   if (error) throw new Error(`Failed to load library: ${error.message}`);
 
-  const rows = data ?? [];
-
-  // Source filtering happens here rather than in SQL: filtering on the joined
-  // entry_sources would return the entry with only the matching source
-  // attached, hiding its other sources. We need the full set per entry, so we
-  // fetch all and narrow in memory.
-  if (!filters.source) return rows;
-
-  if (filters.source === "none") {
-    return rows.filter((row) => row.entry_sources.length === 0);
-  }
-
-  return rows.filter((row) =>
-    row.entry_sources.some((es) => es.sources?.slug === filters.source),
-  );
+  return data ?? [];
 }
 
 export type LibraryRow = Awaited<ReturnType<typeof getLibrary>>[number];

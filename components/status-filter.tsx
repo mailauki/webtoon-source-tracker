@@ -1,9 +1,9 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 
+import { useLibraryFilters } from "@/components/library-grid";
 import { cn } from "@/lib/utils";
 
 export type StatusChip = { value: string; label: string; count?: number };
@@ -16,30 +16,21 @@ export type StatusChip = { value: string; label: string; count?: number };
  * do not fit a phone header, and a horizontally scrolling row hides filters
  * behind a gesture with nothing to indicate they are there.
  *
- * State lives in `?status=`, matching the source chips on the page body.
+ * The selection is stored per user rather than in the URL, so it survives
+ * leaving the page. State comes from LibraryFilters, which both this row and
+ * the grid read — see components/library-grid.tsx.
  */
 export function StatusFilter({ statuses }: { statuses: StatusChip[] }) {
-  const router = useRouter();
-  const params = useSearchParams();
-  const [pending, startTransition] = useTransition();
+  const { status: active, setStatus, pending } = useLibraryFilters();
   const [expanded, setExpanded] = useState(false);
 
-  const active = params.get("status") ?? "";
   const chips: StatusChip[] = [{ value: "", label: "All" }, ...statuses];
   const activeChip = chips.find((c) => c.value === active) ?? chips[0];
 
   function apply(value: string) {
-    const next = new URLSearchParams(params.toString());
     // Clicking the active chip clears the filter.
-    if (value === "" || next.get("status") === value) next.delete("status");
-    else next.set("status", value);
-
+    setStatus(value === active ? "" : value);
     setExpanded(false);
-    startTransition(() => {
-      router.replace(next.size ? `/library?${next}` : "/library", {
-        scroll: false,
-      });
-    });
   }
 
   return (

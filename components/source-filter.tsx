@@ -1,8 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
-import { useTransition } from "react";
-
+import { useLibraryFilters } from "@/components/library-grid";
 import { cn } from "@/lib/utils";
 
 type Chip = { value: string; label: string; count?: number };
@@ -13,30 +11,16 @@ type Chip = { value: string; label: string; count?: number };
  * Status filtering moved to the header's secondary row (see StatusFilter);
  * this covers where a title is read, which is scoped to the grid below it.
  *
- * State lives in the URL rather than component state, so views are linkable
- * and shareable and /library stays a Server Component. This is the only part
- * that needs to be a client component.
+ * The selection is stored per user rather than in the URL, so it survives
+ * leaving the page. State comes from LibraryFilters, shared with the grid and
+ * the status row — see components/library-grid.tsx.
  */
 export function SourceFilter({ sources }: { sources: Chip[] }) {
-  const router = useRouter();
-  const params = useSearchParams();
-  const [pending, startTransition] = useTransition();
+  const { source: active, setSource, pending } = useLibraryFilters();
 
-  const activeSource = params.get("source") ?? "";
-
-  function apply(key: string, value: string) {
-    const next = new URLSearchParams(params.toString());
+  function apply(value: string) {
     // Clicking the active chip clears that filter.
-    if (value === "" || next.get(key) === value) {
-      next.delete(key);
-    } else {
-      next.set(key, value);
-    }
-    startTransition(() => {
-      router.replace(next.size ? `/library?${next}` : "/library", {
-        scroll: false,
-      });
-    });
+    setSource(value === active ? "" : value);
   }
 
   return (
@@ -48,8 +32,8 @@ export function SourceFilter({ sources }: { sources: Chip[] }) {
           { value: "none", label: "No source" },
           ...sources,
         ]}
-        active={activeSource}
-        onSelect={(v) => apply("source", v)}
+        active={active}
+        onSelect={apply}
       />
     </div>
   );

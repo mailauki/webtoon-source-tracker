@@ -9,6 +9,8 @@ import type { Database } from "@/lib/supabase/types";
 export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 export type MalConnection =
   Database["public"]["Tables"]["mal_connections"]["Row"];
+export type LibraryPrefs =
+  Database["public"]["Tables"]["library_prefs"]["Row"];
 
 /**
  * Data Access Layer.
@@ -103,4 +105,24 @@ export const getUserIdentities = cache(async () => {
 
   if (error) return [];
   return data.identities;
+});
+
+/**
+ * The user's saved library filters, or null when they have never set one.
+ *
+ * Null columns mean "no preference"; the string 'all' means the user
+ * explicitly chose to see everything. `resolveActiveChip` in
+ * lib/data/library-prefs.ts flattens both into the chip the page renders.
+ */
+export const getLibraryPrefs = cache(async (): Promise<LibraryPrefs | null> => {
+  const { userId } = await verifySession();
+  const supabase = await createClient();
+
+  const { data } = await supabase
+    .from("library_prefs")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  return data;
 });
