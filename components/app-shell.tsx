@@ -37,9 +37,9 @@ export async function AppShell({
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="fixed w-full top-0 z-40 border-b border-border bg-background/80 backdrop-blur">
+      <header className="fixed w-full top-0 z-40 border-b border-border bg-background/80 backdrop-blur px-4">
         {/* `relative` anchors the expanded search, which overlays the row. */}
-        <div className="relative h-[60px] mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
+        <div className="relative h-[60px] mx-auto flex max-w-6xl items-center justify-between gap-4 py-3">
 					<div className="flex items-center gap-10">
 						<Link
 							href="/library"
