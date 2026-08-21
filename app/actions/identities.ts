@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import type { AuthError } from "@supabase/supabase-js";
 import { z } from "zod";
 
 import { verifySession } from "@/lib/auth/dal";
@@ -11,6 +12,24 @@ export type IdentityState = { error?: string; message?: string } | null;
 
 function siteUrl(): string {
   return process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+}
+
+/**
+ * Turn a linking failure into something the person who clicked the button can
+ * act on. Supabase's own messages are accurate but describe the *server's*
+ * configuration ("Manual linking is disabled"), which reads as a bug rather
+ * than a setting.
+ */
+function linkErrorMessage(error: AuthError | null): string {
+  switch (error?.code) {
+    case "manual_linking_disabled":
+      // Dashboard toggle: Authentication → Advanced. OFF by default.
+      return "Linking extra logins isn't switched on for this app yet. You can still sign in with any provider that uses the same email address as your account.";
+    case "identity_already_exists":
+      return "That login is already connected to another account.";
+    default:
+      return error?.message ?? "Could not start linking.";
+  }
 }
 
 /**
@@ -35,11 +54,7 @@ export async function linkProvider(formData: FormData) {
   });
 
   if (error || !data?.url) {
-    redirect(
-      `/settings?error=${encodeURIComponent(
-        error?.message ?? "Could not start linking.",
-      )}`,
-    );
+    redirect(`/settings?error=${encodeURIComponent(linkErrorMessage(error))}`);
   }
 
   redirect(data.url);
@@ -86,6 +101,18 @@ export async function unlinkProvider(
 
   const { error } = await supabase.auth.unlinkIdentity(identity);
   if (error) {
+    if (error.code === "single_identity_not_deletable") {
+      return {
+        error:
+          "This is your only way to sign in. Add another login before removing this one.",
+      };
+    }
+    if (error.code === "manual_linking_disabled") {
+      return {
+        error:
+          "Managing linked logins isn't switched on for this app yet. Your existing logins all still work.",
+      };
+    }
     return { error: error.message };
   }
 
