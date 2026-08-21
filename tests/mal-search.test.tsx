@@ -22,12 +22,20 @@ const { addEntry, refresh } = vi.hoisted(() => ({
 
 vi.mock("@/app/actions/add-entry", () => ({ addEntry }));
 
-const { searchParams } = vi.hoisted(() => ({
-  searchParams: { current: new URLSearchParams({ q: "solo leveling" }) },
+// <LibraryFilters> saves chip changes through this. It is a Server Action
+// reaching the server-only DAL, which cannot be imported into a client test.
+vi.mock("@/app/actions/library-prefs", () => ({
+  saveLibraryPrefs: vi.fn(async () => {}),
 }));
+
 vi.mock("next/navigation", () => ({
-  useSearchParams: () => searchParams.current,
-  useRouter: () => ({ refresh }),
+  useRouter: () => ({ refresh, replace: vi.fn() }),
+}));
+
+// The panel takes its term from <LibraryFilters> state now, not from `?q=`,
+// so these render it inside the real provider and seed the query there.
+vi.mock("@/components/entry-card", () => ({
+  EntryCard: () => null,
 }));
 
 // next/image needs a real loader config; a plain img is all this asserts on.
@@ -38,7 +46,21 @@ vi.mock("next/image", () => ({
   },
 }));
 
+import { LibraryFilters } from "@/components/library-grid";
 import { MalSearchResults } from "@/components/mal-search-results";
+import { DEFAULT_SORT } from "@/lib/data/library-prefs";
+
+/** Renders the panel with `q` as the active search term. */
+function renderPanel(q = "solo leveling") {
+  return render(
+    <LibraryFilters
+      initial={{ status: "", source: "", sort: DEFAULT_SORT }}
+      initialQuery={q}
+    >
+      <MalSearchResults />
+    </LibraryFilters>,
+  );
+}
 
 const RESULT = {
   mal_media_id: 1,
@@ -65,13 +87,12 @@ afterEach(cleanup);
 beforeEach(() => {
   addEntry.mockReset();
   refresh.mockReset();
-  searchParams.current = new URLSearchParams({ q: "solo leveling" });
 });
 
 describe("MAL search panel", () => {
   it("lists results for the active query", async () => {
     mockSearch([RESULT]);
-    render(<MalSearchResults />);
+    renderPanel();
 
     expect(
       await screen.findByRole("heading", { name: "Solo Leveling" }),
@@ -81,15 +102,14 @@ describe("MAL search panel", () => {
 
   it("renders nothing until the query is long enough", () => {
     mockSearch([RESULT]);
-    searchParams.current = new URLSearchParams({ q: "so" });
-    const { container } = render(<MalSearchResults />);
+    const { container } = renderPanel("so");
 
     expect(container).toBeEmptyDOMElement();
   });
 
   it("offers no add button for a title already in the library", async () => {
     mockSearch([{ ...RESULT, in_library: true }]);
-    render(<MalSearchResults />);
+    renderPanel();
 
     expect(await screen.findByText("In library")).toBeInTheDocument();
     expect(
@@ -100,7 +120,7 @@ describe("MAL search panel", () => {
 
   it("surfaces a server error instead of failing silently", async () => {
     mockSearch([], false, 500);
-    render(<MalSearchResults />);
+    renderPanel();
 
     expect(await screen.findByRole("alert")).toHaveTextContent("boom");
   });
@@ -118,7 +138,7 @@ describe("MAL search panel", () => {
       message: "Added Solo Leveling to your list.",
     });
 
-    render(<MalSearchResults />);
+    renderPanel();
     await userEvent.click(await screen.findByRole("button", { name: /add/i }));
 
     // The card flips to "In library" once the add succeeds.

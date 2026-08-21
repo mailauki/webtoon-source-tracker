@@ -1,19 +1,28 @@
 "use client";
 
 import Image from "next/image";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { Loader2, Plus, Check } from "lucide-react";
 
 import { addEntry, type AddEntryState } from "@/app/actions/add-entry";
+import { useLibraryFilters } from "@/components/library-grid";
 import { Button } from "@/components/ui/button";
 
 /**
- * MyAnimeList catalog results for the current `?q=`, shown under the library.
+ * MyAnimeList catalog results for the current search, shown under the library.
  *
- * The header search drives both halves: the server filters the shelf by `?q=`,
- * and this reads the same param to search MAL. One field, two result sets —
- * so "is this in my library, and if not can I add it?" is one question.
+ * The header search drives both halves: the shelf above filters the rows the
+ * page already loaded, and this searches the MAL catalog for the same term.
+ * One field, two result sets — so "is this in my library, and if not can I add
+ * it?" is one question.
+ *
+ * The term comes from <LibraryFilters> state, not from `?q=`. Reading the URL
+ * meant this panel only woke once the debounced navigation committed, which
+ * put it a beat behind the shelf; more importantly it made the URL write part
+ * of the typing path, and re-rendering the page per keystroke was what closed
+ * the mobile keyboard. The deferred copy is used so this never schedules a
+ * fetch ahead of the keystroke being painted.
  *
  * Fetching goes through a Route Handler, not a Server Action: Next dispatches
  * actions sequentially per client, which would queue every keystroke behind
@@ -33,7 +42,8 @@ type MalResult = {
 };
 
 export function MalSearchResults() {
-  const query = (useSearchParams().get("q") ?? "").trim();
+  const { deferredQuery } = useLibraryFilters();
+  const query = deferredQuery.trim();
   const active = query.length >= MIN_QUERY_LENGTH;
 
   if (!active) return null;
@@ -58,8 +68,9 @@ function MalSearchPanel({ query }: { query: string }) {
     // can never land after a newer one and overwrite it.
     const controller = new AbortController();
 
-    // The header already debounces the URL write; this second, shorter delay
-    // covers a paste or a fast typist landing several URL updates in a row.
+    // The query arrives per keystroke now that it is state rather than a
+    // debounced URL write, so this delay is the only thing standing between a
+    // fast typist and a request per character.
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
@@ -93,7 +104,7 @@ function MalSearchPanel({ query }: { query: string }) {
         // The aborted request's `finally` must not clear a newer one's spinner.
         if (!controller.signal.aborted) setLoading(false);
       }
-    }, 200);
+    }, 300);
 
     return () => {
       clearTimeout(timer);
