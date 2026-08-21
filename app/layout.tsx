@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Poppins } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
@@ -23,7 +23,10 @@ export const metadata: Metadata = {
   },
   description: "Track which app or site you read each manga and webtoon on.",
   icons: {
-    icon: "/wst-logo.png",
+    icon: [
+      "/wst-logo.png",
+      { url: "/wst-logo-dark.png", media: "(prefers-color-scheme: dark)" },
+    ],
     // Android home-screen icons, picked by the launcher from these sizes.
     shortcut: [
       { url: "/android-chrome-192x192.png", sizes: "192x192", type: "image/png" },
@@ -31,6 +34,23 @@ export const metadata: Metadata = {
     ],
     apple: "/apple-touch-icon.png",
   },
+};
+
+/**
+ * Tints the browser/status-bar chrome around the app.
+ *
+ * Unlike the manifest's single `theme_color`, this one can follow the active
+ * theme, so the chrome matches the page surface instead of floating above it.
+ * `viewportFit: "cover"` lets the layout reach into the safe areas on notched
+ * phones, which matters once the app is installed and running fullscreen.
+ */
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#121212" },
+  ],
+  colorScheme: "light dark",
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
