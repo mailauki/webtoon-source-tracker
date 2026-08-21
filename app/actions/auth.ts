@@ -95,6 +95,10 @@ export async function signInWithEmail(
 }
 
 export async function signInWithProvider(formData: FormData) {
+  // TODO(apple-login): add "apple" here once the provider is enabled in
+  // Supabase. Blocked on a paid Apple Developer account and a client secret
+  // that expires every 6 months — see TODO.md. The allowlist below, the same
+  // one in identities.ts, and LINKABLE in linked-logins.tsx must stay in sync.
   const provider = formData.get("provider");
   if (provider !== "google" && provider !== "discord") {
     throw new Error("Unsupported provider");

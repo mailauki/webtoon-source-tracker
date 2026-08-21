@@ -198,6 +198,11 @@ export async function syncMalList(
     .select("id", { count: "exact", head: true })
     .eq("user_id", userId);
 
+  // TODO(soft-delete): this is a hard delete, and it cascades to entry_sources
+  // — the hand-entered data no sync can rebuild. The 50% guard below makes a
+  // truncated MAL response non-destructive, but a genuine MAL-side deletion is
+  // still irreversible here. Consider an `archived_at` column so removals are
+  // recoverable. Highest-consequence code in the app; see TODO.md.
   const looksComplete =
     complete && (existingCount ?? 0) > 0 &&
     entryRows.length > (existingCount ?? 0) * 0.5;

@@ -11,6 +11,12 @@ import type { MalTokenResponse } from "./oauth";
  * is deliberately excluded (a direct request returns 406 even with the secret
  * key). The RPCs are granted to service_role only, so the admin client is
  * required — anon/authenticated get "permission denied".
+ *
+ * TODO(encrypt-tokens): tokens are stored in plaintext. Three layers already
+ * guard them (unexposed schema, revoked grants, RLS with no policies), and a
+ * key living in the same env as SUPABASE_SECRET_KEY would add little — so this
+ * was a deliberate v1 call, not an oversight. Revisit with Supabase Vault if
+ * this ever holds tokens for people other than its author. See TODO.md.
  */
 
 export type StoredTokens = {

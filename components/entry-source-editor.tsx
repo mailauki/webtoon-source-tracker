@@ -409,6 +409,11 @@ function RemoveButton({
 }) {
   const [, action] = useActionState(removeEntrySource, null);
 
+  // TODO(confirm-destructive): this deletes immediately on click, with no undo.
+  // The URL, per-source progress, and notes are hand-entered and unrecoverable
+  // — the one kind of data in this app that a sync cannot rebuild. Wrap in the
+  // AlertDialog from components/ui/alert-dialog.tsx (already installed, not yet
+  // used anywhere). See TODO.md.
   return (
     <form action={action}>
       <input type="hidden" name="id" value={sourceRowId} />

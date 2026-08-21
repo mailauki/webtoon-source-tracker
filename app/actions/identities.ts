@@ -42,6 +42,8 @@ function linkErrorMessage(error: AuthError | null): string {
 export async function linkProvider(formData: FormData) {
   await verifySession();
 
+  // TODO(apple-login): mirror any provider added to signInWithProvider here —
+  // a provider you can sign up with but not link is a confusing half-state.
   const provider = formData.get("provider");
   if (provider !== "google" && provider !== "discord") {
     throw new Error("Unsupported provider");
