@@ -138,3 +138,34 @@ without the user initiating it.
   overwrite local-only values. `NEXT_PUBLIC_SITE_URL` and `MAL_REDIRECT_URI`
   must point at `http://localhost:3000` locally and are worth re-checking after
   running either command.
+
+---
+
+## Testing
+
+### `TODO(e2e-smoke)` — a browser smoke test for the library
+
+**Where:** would live in `tests/e2e/`, run by Playwright.
+
+The Vitest suite covers filter logic, component state, and a static guard
+against function props crossing the server/client boundary. What it cannot
+cover is a real RSC render: RTL mounts every component as a client component,
+so serialization errors only surface in a browser against a running server.
+
+Two bugs shipped that only a real render would have caught — a render prop
+passed into a Client Component, and filter state reverting when its
+transition settled. The static guard in `tests/rsc-boundary.test.ts` now
+catches the first shape, but not every variant of it.
+
+Deferred because it needs an authenticated session. The intended setup:
+
+- `TEST_USER_EMAIL` / `TEST_USER_PASSWORD` in `.env.local` (gitignored),
+  pointing at a dedicated account, never a real one — the test writes to
+  `library_prefs` and would clobber a real user's saved filters.
+- Playwright signs in once and reuses the storage state.
+- The one test worth having: pick a status filter, reload, assert it holds.
+  That single path exercises the whole feature — the write, the read, the
+  RSC boundary, and the hydration.
+
+Worth adding when the app has a second stateful surface to cover, or the
+first time a bug reaches production that the unit suite could not see.
