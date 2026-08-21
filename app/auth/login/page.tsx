@@ -7,7 +7,7 @@ export const metadata = { title: "Sign in" };
 
 export default async function LoginPage({
   searchParams,
-}: PageProps<"/login">) {
+}: PageProps<"/auth/login">) {
   const params = await searchParams;
   const next = typeof params.next === "string" ? params.next : undefined;
   const error = typeof params.error === "string" ? params.error : undefined;
@@ -43,7 +43,7 @@ export default async function LoginPage({
       <p className="text-center text-sm text-muted-foreground">
         No account?{" "}
         <Link
-          href="/signup"
+          href="/auth/signup"
           className="font-medium text-foreground underline-offset-4 hover:underline"
         >
           Sign up
