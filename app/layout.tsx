@@ -22,6 +22,15 @@ export const metadata: Metadata = {
     default: "Webtoon Source Tracker",
   },
   description: "Track which app or site you read each manga and webtoon on.",
+  icons: {
+    icon: "/wst-logo.png",
+    // Android home-screen icons, picked by the launcher from these sizes.
+    shortcut: [
+      { url: "/android-chrome-192x192.png", sizes: "192x192", type: "image/png" },
+      { url: "/android-chrome-512x512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
