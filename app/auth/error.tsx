@@ -30,7 +30,7 @@ export default function AuthError({
           Try again
         </Button>
         <Button asChild variant="outline" className="rounded-pill">
-          <Link href="/login">Back to sign in</Link>
+          <Link href="/auth/login">Back to sign in</Link>
         </Button>
       </div>
     </div>

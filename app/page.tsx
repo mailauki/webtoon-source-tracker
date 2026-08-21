@@ -27,9 +27,9 @@ export default async function RootPage({ searchParams }: PageProps<"/">) {
 
   if (reason) {
     // Signed-in users were mid-link; everyone else was mid-sign-in.
-    const page = session ? "/settings" : "/login";
+    const page = session ? "/settings" : "/auth/login";
     redirect(`${page}?error=${encodeURIComponent(reason)}`);
   }
 
-  redirect(session ? "/library" : "/login");
+  redirect(session ? "/library" : "/auth/login");
 }

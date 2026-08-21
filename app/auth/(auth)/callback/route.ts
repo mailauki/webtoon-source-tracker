@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
   // message is silently discarded and the link appears to do nothing.
   // Link failures belong on /settings, where the button lives.
   const isLink = searchParams.get("linked") === "1";
-  const errorPage = isLink ? "/settings" : "/login";
+  const errorPage = isLink ? "/settings" : "/auth/login";
   const fail = (message: string) =>
     NextResponse.redirect(
       `${origin}${errorPage}?error=${encodeURIComponent(message)}`,

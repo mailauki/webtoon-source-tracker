@@ -178,7 +178,7 @@ export function ProgressEditor({ entry }: { entry: EntryDetail }) {
             {state.needsReauth ? (
               <>
                 {" "}
-                <a href="/mal/connect" className="font-medium underline">
+                <a href="/api/mal/connect" className="font-medium underline">
                   Reconnect
                 </a>
               </>

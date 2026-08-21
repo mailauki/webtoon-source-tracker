@@ -17,7 +17,7 @@ import type { NextRequest } from "next/server";
  */
 
 const PROTECTED_PREFIXES = ["/library", "/entry", "/settings"];
-const AUTH_PAGES = ["/login", "/signup"];
+const AUTH_PAGES = ["/auth/login", "/auth/signup"];
 
 function hasSessionCookie(request: NextRequest): boolean {
   // @supabase/ssr names cookies `sb-<project-ref>-auth-token`, and chunks
@@ -42,7 +42,7 @@ export function proxy(request: NextRequest) {
 
   if (isProtected && !signedIn) {
     const url = request.nextUrl.clone();
-    url.pathname = "/login";
+    url.pathname = "/auth/login";
     // Preserve where they were headed so login can send them back.
     url.searchParams.set("next", pathname + request.nextUrl.search);
     return NextResponse.redirect(url);
@@ -76,8 +76,16 @@ export const config = {
      * Everything except:
      *   _next/static, _next/image  — build output
      *   favicon.ico, static assets — public files
-     *   auth/, mal/                — OAuth callbacks must never be intercepted
+     *   api/                       — route handlers, incl. the MAL OAuth
+     *                                  callbacks
+     *   auth/callback, auth/confirm,
+     *   auth/logout, auth/clear-session
+     *                              — Supabase route handlers. Excluded by
+     *                                exact name, NOT the whole `auth/` prefix:
+     *                                the sign-in *pages* now live under
+     *                                /auth/login and /auth/signup, and those
+     *                                still need the signed-in redirect above.
      */
-    "/((?!_next/static|_next/image|favicon.ico|auth/|mal/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/|auth/(?:callback|confirm|logout|clear-session)|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

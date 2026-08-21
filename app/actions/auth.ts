@@ -132,7 +132,7 @@ export async function requestPasswordReset(
 
   const supabase = await createClient();
   await supabase.auth.resetPasswordForEmail(parsed.data, {
-    redirectTo: `${siteUrl()}/auth/confirm?type=recovery&next=/reset-password`,
+    redirectTo: `${siteUrl()}/auth/confirm?type=recovery&next=/auth/reset-password`,
   });
 
   // Always the same response, whether or not the address exists.
