@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: yarn install --immutable
+      - run: yarn lint
+      # `PageProps` and `LayoutProps` are generated into .next/types, not
+      # written by hand — so a checkout that has never been built has no
+      # definitions for them and tsc fails on every page. Locally the types
+      # linger from `next dev`, which is why this only ever broke in CI.
+      # `next typegen` writes them without the cost of a full build.
+      - run: npx next typegen
+      - run: npx tsc --noEmit
+      - run: yarn test

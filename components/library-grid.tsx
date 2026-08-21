@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { createContext, useContext, useState, useTransition } from "react";
 
 import { saveLibraryPrefs } from "@/app/actions/library-prefs";
@@ -23,6 +24,7 @@ import type { LibraryRow } from "@/lib/data/entries";
  *
  * Search stays on the server: `?q=` is an indexed `ilike`, and shipping the
  * whole library to the browser to match text would be worse on every axis.
+ * The chips do NOT narrow those results — see LibraryGrid below for why.
  */
 
 type Filters = { status: string; source: string };
@@ -114,19 +116,30 @@ export function LibraryGrid({
   emptyFiltered: React.ReactNode;
 }) {
   const { status, source } = useLibraryFilters();
+  const searching = (useSearchParams().get("q") ?? "").trim() !== "";
 
-  const visible = entries.filter((entry) => {
-    if (status && entry.list_status !== status) return false;
+  // A search deliberately ignores the chips. The chips are a standing view of
+  // the shelf; a search is a one-off lookup of a specific title, and the user
+  // asking for it by name has already said which one they want. Intersecting
+  // the two hides the match whenever it happens to sit outside the current
+  // view — and worse, the MAL panel below would then offer to add a title the
+  // user already owns, because the shelf appeared not to have it.
+  const visible = searching
+    ? entries
+    : entries.filter((entry) => {
+        if (status && entry.list_status !== status) return false;
 
-    if (source === "none") return entry.entry_sources.length === 0;
-    if (source) {
-      return entry.entry_sources.some((es) => es.sources?.slug === source);
-    }
-    return true;
-  });
+        if (source === "none") return entry.entry_sources.length === 0;
+        if (source) {
+          return entry.entry_sources.some((es) => es.sources?.slug === source);
+        }
+        return true;
+      });
 
   if (visible.length === 0) {
-    return <>{status || source ? emptyFiltered : emptyUnfiltered}</>;
+    // While searching the chips are not applied, so a miss is never "your
+    // filters hid it" — it is simply not on the shelf.
+    return <>{!searching && (status || source) ? emptyFiltered : emptyUnfiltered}</>;
   }
 
   return (

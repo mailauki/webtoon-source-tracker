@@ -138,3 +138,52 @@ without the user initiating it.
   overwrite local-only values. `NEXT_PUBLIC_SITE_URL` and `MAL_REDIRECT_URI`
   must point at `http://localhost:3000` locally and are worth re-checking after
   running either command.
+- **Variables marked `--sensitive` pull as an empty string, not an error.**
+  This is the same silent-empty failure as the `MAL_REDIRECT_URI` note above,
+  but caused by Vercel rather than by hand: the CLI cannot decrypt a sensitive
+  variable, so `vercel env pull` writes `KEY=` and every guard that tests
+  `!value` fires. It cost a full debugging session — the symptom was
+  `SUPABASE_SECRET_KEY is not set` immediately after a successful pull.
+  `SUPABASE_SECRET_KEY` now also exists as a *non-sensitive* Development
+  variable so local pulls carry the real value; Production keeps the sensitive
+  one. If a key ever reads as unset right after pulling, check for an empty
+  value before assuming the variable is missing.
+
+---
+
+## Testing
+
+### `TODO(e2e-smoke)` — a browser smoke test for the library
+
+**Where:** would live in `tests/e2e/`, run by Playwright.
+
+The Vitest suite covers filter logic, component state, and a static guard
+against function props crossing the server/client boundary. What it cannot
+cover is a real RSC render: RTL mounts every component as a client component,
+so serialization errors only surface in a browser against a running server.
+
+Three bugs shipped that only a real render would have caught — a render prop
+passed into a Client Component, filter state reverting when its transition
+settled, and an effect whose inline-closure dependency looped until React
+threw "Maximum update depth exceeded". The static guard in
+`tests/rsc-boundary.test.ts` now catches the first shape, but not every
+variant of it.
+
+The third is covered by `tests/mal-search.test.tsx`, which renders the panel
+under RTL and asserts the success effect fires exactly once. That works
+because the bug was purely client-side — no session needed. It is worth
+noting as the cheaper pattern: a render loop, a stale closure, or an effect
+that re-fires does not need a browser to catch, only an actual render.
+
+Deferred because it needs an authenticated session. The intended setup:
+
+- `TEST_USER_EMAIL` / `TEST_USER_PASSWORD` in `.env.local` (gitignored),
+  pointing at a dedicated account, never a real one — the test writes to
+  `library_prefs` and would clobber a real user's saved filters.
+- Playwright signs in once and reuses the storage state.
+- The one test worth having: pick a status filter, reload, assert it holds.
+  That single path exercises the whole feature — the write, the read, the
+  RSC boundary, and the hydration.
+
+Worth adding when the app has a second stateful surface to cover, or the
+first time a bug reaches production that the unit suite could not see.
