@@ -12,6 +12,8 @@ import {
   type Sort,
 } from "@/lib/data/library-prefs";
 import type { LibraryRow } from "@/lib/data/entries";
+import type { RankedSource } from "@/lib/data/rank-sources";
+import type { Source } from "@/lib/data/rank-sources";
 
 /**
  * Status and source filtering, client-side.
@@ -125,10 +127,14 @@ export function LibraryFilters({
  */
 export function LibraryGrid({
   entries,
+  topSources = [],
+  catalog = [],
   emptyUnfiltered,
   emptyFiltered,
 }: {
   entries: LibraryRow[];
+  topSources?: RankedSource[];
+  catalog?: Source[];
   emptyUnfiltered: React.ReactNode;
   emptyFiltered: React.ReactNode;
 }) {
@@ -161,14 +167,21 @@ export function LibraryGrid({
   if (visible.length === 0) {
     // While searching the chips are not applied, so a miss is never "your
     // filters hid it" — it is simply not on the shelf.
-    return <>{!searching && (status || source) ? emptyFiltered : emptyUnfiltered}</>;
+    return (
+      <>{!searching && (status || source) ? emptyFiltered : emptyUnfiltered}</>
+    );
   }
 
   return (
     // Tapas packs ~8 across at desktop width with tight gutters.
     <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
       {ordered.map((entry) => (
-        <EntryCard key={entry.id} entry={entry} />
+        <EntryCard
+          key={entry.id}
+          entry={entry}
+          topSources={topSources}
+          catalog={catalog}
+        />
       ))}
     </div>
   );

@@ -15,7 +15,7 @@ import {
 } from "@/lib/auth/dal";
 import { getLibrary, getStatusCounts } from "@/lib/data/entries";
 import { resolveActiveChip, resolveSort } from "@/lib/data/library-prefs";
-import { getSources } from "@/lib/data/sources";
+import { getSources, getTopSources } from "@/lib/data/sources";
 import { formatLastSynced, isStale } from "@/lib/sync/staleness";
 
 const STATUS_CHIPS = [
@@ -76,10 +76,11 @@ export default async function LibraryPage({
   const activeSource = resolveActiveChip(prefs?.source);
   const activeSort = resolveSort(prefs?.sort);
 
-  const [entries, statusCounts, sources] = await Promise.all([
+  const [entries, statusCounts, sources, topSources] = await Promise.all([
     getLibrary({ q }),
     getStatusCounts(),
     getSources(),
+    getTopSources(),
   ]);
   const stale = isStale(connection.last_synced_at);
 
@@ -144,6 +145,8 @@ export default async function LibraryPage({
 
           <LibraryGrid
             entries={entries}
+            topSources={topSources}
+            catalog={sources}
             emptyFiltered={
               <EmptyState
                 title="No titles match"
