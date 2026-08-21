@@ -11,13 +11,11 @@ import {
 } from "@/app/actions/entry-sources";
 import { createCustomSource } from "@/app/actions/custom-sources";
 import { SubmitButton } from "@/components/auth/submit-button";
+import { SourceFields, type EntrySource } from "@/components/source-fields";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { EntryDetail } from "@/lib/data/entries";
-import type { Source } from "@/lib/data/sources";
-
-type EntrySource = EntryDetail["entry_sources"][number];
+import type { Source } from "@/lib/data/rank-sources";
 
 export function EntrySourceEditor({
   entryId,
@@ -35,10 +33,13 @@ export function EntrySourceEditor({
   const available = catalog.filter((c) => !attachedIds.has(c.id));
 
   return (
-    <section className="grid gap-4">
+    // Anchor kept so /entry/[id]#sources lands on this section.
+    <section id="sources" className="grid gap-4">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h2 className="font-display text-lg font-semibold">Where I read it</h2>
+          <h2 className="font-display text-lg font-semibold">
+            Where I read it
+          </h2>
           <p className="text-sm text-muted-foreground">
             {sources.length === 0
               ? "No source recorded yet."
@@ -125,7 +126,9 @@ export function EntrySourceEditor({
                 ) : null}
 
                 {source.notes ? (
-                  <p className="text-sm text-muted-foreground">{source.notes}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {source.notes}
+                  </p>
                 ) : null}
               </div>
 
@@ -174,7 +177,8 @@ function AddSourceForm({
 
   // Choosing "Other" reveals a name field, so a user-specific source can be
   // created inline instead of bouncing them to settings.
-  const isOther = available.find((s) => String(s.id) === selected)?.slug === "other";
+  const isOther =
+    available.find((s) => String(s.id) === selected)?.slug === "other";
 
   return (
     <div className="grid gap-3 rounded-lg border border-border bg-card p-4">
@@ -323,80 +327,6 @@ function EditSourceForm({
         Save
       </SubmitButton>
     </form>
-  );
-}
-
-/** Fields shared by the add and edit forms. */
-function SourceFields({ source }: { source?: EntrySource }) {
-  return (
-    <>
-      <div className="grid gap-2 sm:grid-cols-2">
-        <div className="grid gap-2">
-          <Label htmlFor={`url-${source?.id ?? "new"}`}>Link (optional)</Label>
-          <Input
-            id={`url-${source?.id ?? "new"}`}
-            name="url"
-            type="url"
-            inputMode="url"
-            defaultValue={source?.url ?? ""}
-            placeholder="https://…"
-          />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor={`chapters-${source?.id ?? "new"}`}>
-            Chapters read here
-          </Label>
-          <Input
-            id={`chapters-${source?.id ?? "new"}`}
-            name="chapters_read"
-            type="number"
-            min={0}
-            defaultValue={source?.chapters_read ?? ""}
-            placeholder="—"
-          />
-        </div>
-      </div>
-
-      <div className="grid gap-2">
-        <Label htmlFor={`notes-${source?.id ?? "new"}`}>Notes</Label>
-        <Input
-          id={`notes-${source?.id ?? "new"}`}
-          name="notes"
-          defaultValue={source?.notes ?? ""}
-          placeholder="e.g. caught up here, waiting on coins"
-        />
-      </div>
-
-      <div className="flex flex-wrap gap-4 text-sm">
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            name="is_primary"
-            defaultChecked={source?.is_primary ?? false}
-            className="size-4 accent-[var(--brand)]"
-          />
-          Primary source
-        </label>
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            name="is_official"
-            defaultChecked={source?.is_official ?? true}
-            className="size-4 accent-[var(--brand)]"
-          />
-          Official
-        </label>
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            name="is_paid"
-            defaultChecked={source?.is_paid ?? false}
-            className="size-4 accent-[var(--brand)]"
-          />
-          Paid
-        </label>
-      </div>
-    </>
   );
 }
 
