@@ -1,0 +1,24 @@
+-- Sticky library sort
+--
+-- The library grid was ordered by `mal_updated_at desc` and nothing else, so
+-- "what did I read most recently" was the only view of the shelf. This adds a
+-- sort control next to the status chips, and remembers the choice the same way
+-- the filters are remembered.
+--
+-- One column, not two. The direction is half of a single choice ("oldest
+-- first" is a sort, not a filter on a sort), and storing it separately would
+-- allow a row where the key is null but the direction is not — a state with no
+-- meaning. The stored value is a `key:direction` pair such as
+-- 'added:desc'; the UI parses it and falls back to its default when the
+-- value is unrecognised.
+--
+-- Nullable, meaning "never chose" — the same convention as status/source.
+-- Unlike those two there is no 'all' equivalent, because there is no such
+-- thing as an unsorted grid: a null here resolves to the default sort rather
+-- than to "show everything".
+--
+-- Not CHECK'd against the known keys, for the same reason the filter columns
+-- are not: a value this app later stops supporting should quietly fall back to
+-- the default, not fail the write or break the page.
+
+alter table public.library_prefs add column sort text;

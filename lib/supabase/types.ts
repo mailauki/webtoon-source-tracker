@@ -108,18 +108,21 @@ export type Database = {
       }
       library_prefs: {
         Row: {
+          sort: string | null
           source: string | null
           status: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          sort?: string | null
           source?: string | null
           status?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          sort?: string | null
           source?: string | null
           status?: string | null
           updated_at?: string

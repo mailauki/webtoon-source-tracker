@@ -5,7 +5,12 @@ import { createContext, useContext, useState, useTransition } from "react";
 
 import { saveLibraryPrefs } from "@/app/actions/library-prefs";
 import { EntryCard } from "@/components/entry-card";
-import { ALL } from "@/lib/data/library-prefs";
+import {
+  ALL,
+  serializeSort,
+  sortEntries,
+  type Sort,
+} from "@/lib/data/library-prefs";
 import type { LibraryRow } from "@/lib/data/entries";
 
 /**
@@ -28,11 +33,13 @@ import type { LibraryRow } from "@/lib/data/entries";
  */
 
 type Filters = { status: string; source: string };
+type State = Filters & { sort: Sort };
 
-type LibraryFilterContext = Filters & {
+type LibraryFilterContext = State & {
   /** Chip values are "" for All; stored as the explicit `all` sentinel. */
   setStatus: (value: string) => void;
   setSource: (value: string) => void;
+  setSort: (value: Sort) => void;
   pending: boolean;
 };
 
@@ -58,7 +65,7 @@ export function LibraryFilters({
   initial,
   children,
 }: {
-  initial: Filters;
+  initial: State;
   children: React.ReactNode;
 }) {
   const [pending, startTransition] = useTransition();
@@ -68,10 +75,10 @@ export function LibraryFilters({
   // a fresh `initial` — so the chip would snap back to the page-load value the
   // moment the write finished. Here the client is the source of truth for the
   // rest of the session, and the server value is only the seed.
-  const [filters, setFilters] = useState(initial);
+  const [state, setState] = useState(initial);
 
   function update(patch: Partial<Filters>) {
-    setFilters((current) => ({ ...current, ...patch }));
+    setState((current) => ({ ...current, ...patch }));
 
     startTransition(async () => {
       // "" is the All chip; store it as the sentinel so "show everything"
@@ -84,12 +91,22 @@ export function LibraryFilters({
     });
   }
 
+  // Separate from `update`: sort is an object rather than a chip string, and
+  // it has no All sentinel to normalise to.
+  function updateSort(sort: Sort) {
+    setState((current) => ({ ...current, sort }));
+    startTransition(async () => {
+      await saveLibraryPrefs({ sort: serializeSort(sort) });
+    });
+  }
+
   return (
     <FilterContext
       value={{
-        ...filters,
+        ...state,
         setStatus: (status) => update({ status }),
         setSource: (source) => update({ source }),
+        setSort: updateSort,
         pending,
       }}
     >
@@ -115,7 +132,7 @@ export function LibraryGrid({
   emptyUnfiltered: React.ReactNode;
   emptyFiltered: React.ReactNode;
 }) {
-  const { status, source } = useLibraryFilters();
+  const { status, source, sort } = useLibraryFilters();
   const searching = (useSearchParams().get("q") ?? "").trim() !== "";
 
   // A search deliberately ignores the chips. The chips are a standing view of
@@ -136,6 +153,11 @@ export function LibraryGrid({
         return true;
       });
 
+  // Sorting applies to search results too. The chips are skipped during a
+  // search because they would hide the match; an order hides nothing, and a
+  // search can still return enough rows to be worth ordering.
+  const ordered = sortEntries(visible, sort);
+
   if (visible.length === 0) {
     // While searching the chips are not applied, so a miss is never "your
     // filters hid it" — it is simply not on the shelf.
@@ -145,7 +167,7 @@ export function LibraryGrid({
   return (
     // Tapas packs ~8 across at desktop width with tight gutters.
     <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-      {visible.map((entry) => (
+      {ordered.map((entry) => (
         <EntryCard key={entry.id} entry={entry} />
       ))}
     </div>
