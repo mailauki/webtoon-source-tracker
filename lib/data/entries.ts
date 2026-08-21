@@ -23,7 +23,9 @@ export type LibraryFilters = {
  * Status and source are deliberately not filtered here. They are stored per
  * user and applied in the browser (see components/library-grid.tsx), because
  * every field they filter on already rides along on these rows — re-querying
- * for a chip click would be a round-trip for data we already sent.
+ * for a chip click would be a round-trip for data we already sent. Sorting
+ * works the same way, for the same reason; the `order` below is only the
+ * order rows arrive in, and the client re-sorts to the stored preference.
  */
 export async function getLibrary(filters: LibraryFilters = {}) {
   const supabase = await createClient();
@@ -39,6 +41,7 @@ export async function getLibrary(filters: LibraryFilters = {}) {
       score,
       is_rereading,
       mal_updated_at,
+      created_at,
       media_titles!inner (
         id, mal_media_id, title, title_en, main_picture_url,
         mal_media_kind, num_chapters, num_volumes, mal_status

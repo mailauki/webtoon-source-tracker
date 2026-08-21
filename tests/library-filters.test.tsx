@@ -32,6 +32,7 @@ vi.mock("@/components/entry-card", () => ({
 import { LibraryFilters, LibraryGrid } from "@/components/library-grid";
 import { SourceFilter } from "@/components/source-filter";
 import { StatusFilter } from "@/components/status-filter";
+import { DEFAULT_SORT } from "@/lib/data/library-prefs";
 import type { LibraryRow } from "@/lib/data/entries";
 
 /** Only the fields the filters actually read. */
@@ -66,7 +67,7 @@ const SOURCES = [
 
 function setup(initial = { status: "", source: "" }) {
   return render(
-    <LibraryFilters initial={initial}>
+    <LibraryFilters initial={{ sort: DEFAULT_SORT, ...initial }}>
       <StatusFilter statuses={STATUSES} />
       <SourceFilter sources={SOURCES} />
       <LibraryGrid
@@ -195,7 +196,9 @@ describe("empty states", () => {
   it("uses the unfiltered empty state during a search", () => {
     withQuery("nonesuch");
     render(
-      <LibraryFilters initial={{ status: "completed", source: "webtoon" }}>
+      <LibraryFilters
+        initial={{ status: "completed", source: "webtoon", sort: DEFAULT_SORT }}
+      >
         <StatusFilter statuses={STATUSES} />
         <SourceFilter sources={SOURCES} />
         <LibraryGrid

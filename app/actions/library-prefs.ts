@@ -26,6 +26,10 @@ const prefSchema = z.string().trim().max(64).nullable();
 const prefsSchema = z.object({
   status: prefSchema.optional(),
   source: prefSchema.optional(),
+  // Stored as a `key:direction` pair. Not validated against the known keys —
+  // resolveSort() falls back to the default for anything it does not
+  // recognise, which is the behaviour we want for a stale preference too.
+  sort: prefSchema.optional(),
 });
 
 export type LibraryPrefsPatch = z.input<typeof prefsSchema>;
@@ -40,7 +44,12 @@ export async function saveLibraryPrefs(patch: LibraryPrefsPatch) {
   // clear the saved source. An empty string is normalised to the explicit
   // `all` sentinel: both mean "show everything", but null already means
   // "never chose", and those must not collapse into each other.
-  const row: { user_id: string; status?: string; source?: string } = {
+  const row: {
+    user_id: string;
+    status?: string;
+    source?: string;
+    sort?: string | null;
+  } = {
     user_id: userId,
   };
   if (parsed.data.status !== undefined) {
@@ -48,6 +57,11 @@ export async function saveLibraryPrefs(patch: LibraryPrefsPatch) {
   }
   if (parsed.data.source !== undefined) {
     row.source = parsed.data.source || ALL;
+  }
+  // Sort takes no `all` sentinel: there is no unsorted grid, so an empty value
+  // is not "show everything" but "no preference", which is exactly null.
+  if (parsed.data.sort !== undefined) {
+    row.sort = parsed.data.sort || null;
   }
 
   if (Object.keys(row).length === 1) return;

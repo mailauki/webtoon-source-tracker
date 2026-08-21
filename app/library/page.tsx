@@ -3,6 +3,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { LibraryFilters, LibraryGrid } from "@/components/library-grid";
 import { MalSearchResults } from "@/components/mal-search-results";
+import { SortFilter } from "@/components/sort-filter";
 import { SourceFilter } from "@/components/source-filter";
 import { StatusFilter } from "@/components/status-filter";
 import { SyncButton } from "@/components/sync-button";
@@ -13,7 +14,7 @@ import {
   verifySession,
 } from "@/lib/auth/dal";
 import { getLibrary, getStatusCounts } from "@/lib/data/entries";
-import { resolveActiveChip } from "@/lib/data/library-prefs";
+import { resolveActiveChip, resolveSort } from "@/lib/data/library-prefs";
 import { getSources } from "@/lib/data/sources";
 import { formatLastSynced, isStale } from "@/lib/sync/staleness";
 
@@ -66,12 +67,14 @@ export default async function LibraryPage({
   const params = await searchParams;
   const q = typeof params.q === "string" ? params.q : undefined;
 
-  // Status and source are per-user stored state, not URL state — the chips
-  // apply them in the browser. Search stays here: `?q=` is a database match,
-  // and it is a one-off lookup rather than a view the user settles into.
+  // Status, source and sort are per-user stored state, not URL state — the
+  // chips and the sort menu apply them in the browser. Search stays here:
+  // `?q=` is a database match, and it is a one-off lookup rather than a view
+  // the user settles into.
   const prefs = await getLibraryPrefs();
   const activeStatus = resolveActiveChip(prefs?.status);
   const activeSource = resolveActiveChip(prefs?.source);
+  const activeSort = resolveSort(prefs?.sort);
 
   const [entries, statusCounts, sources] = await Promise.all([
     getLibrary({ q }),
@@ -93,8 +96,25 @@ export default async function LibraryPage({
   return (
     // Wraps the whole shell: the status chips render into the header slot and
     // the grid into the body, and a click on either has to move the other.
-    <LibraryFilters initial={{ status: activeStatus, source: activeSource }}>
-      <AppShell searchable filters={<StatusFilter statuses={statusChips} />}>
+    <LibraryFilters
+      initial={{
+        status: activeStatus,
+        source: activeSource,
+        sort: activeSort,
+      }}
+    >
+      <AppShell
+        searchable
+        filters={
+          // Both live in the secondary row: the chips narrow the shelf, the
+          // menu orders what is left, and neither is much use without seeing
+          // the other.
+          <div className="flex items-center justify-between gap-2">
+            <StatusFilter statuses={statusChips} />
+            <SortFilter />
+          </div>
+        }
+      >
         <div className="grid gap-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
