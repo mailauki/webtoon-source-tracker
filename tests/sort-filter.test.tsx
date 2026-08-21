@@ -9,8 +9,10 @@ const { saveLibraryPrefs } = vi.hoisted(() => ({
 vi.mock("@/app/actions/library-prefs", () => ({ saveLibraryPrefs }));
 
 // The grid reads `?q=` to decide whether a search is active.
+// The provider mirrors the settled query into `?q=` behind the user; these
+// tests never search, so the router only has to exist.
 vi.mock("next/navigation", () => ({
-  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ replace: vi.fn() }),
 }));
 
 vi.mock("@/components/entry-card", () => ({

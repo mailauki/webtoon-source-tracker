@@ -1,7 +1,14 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
-import { createContext, useContext, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import {
+  createContext,
+  useContext,
+  useDeferredValue,
+  useEffect,
+  useState,
+  useTransition,
+} from "react";
 
 import { saveLibraryPrefs } from "@/app/actions/library-prefs";
 import { EntryCard } from "@/components/entry-card";
@@ -29,9 +36,18 @@ import type { Source } from "@/lib/data/rank-sources";
  * the page fetched, so narrowing them needs no extra query — the click is
  * instant and the save happens behind it.
  *
- * Search stays on the server: `?q=` is an indexed `ilike`, and shipping the
- * whole library to the browser to match text would be worse on every axis.
- * The chips do NOT narrow those results — see LibraryGrid below for why.
+ * Search moved here for a second reason. It used to live in `?q=`, where the
+ * server re-queried with an `ilike` and streamed a new grid — which meant
+ * every debounced keystroke replaced the DOM under a focused input. On mobile
+ * that dismisses the keyboard mid-word. The rows the page already fetched
+ * carry their titles, so matching text needs no round-trip either; the query
+ * is client state now and the grid narrows on the keystroke itself.
+ *
+ * `?q=` is still written, lazily and behind the typing, because it is what
+ * <MalSearchResults> reads to search the MAL catalog and what makes a search
+ * linkable. Nothing the user is looking at waits for it.
+ *
+ * The chips do NOT narrow search results — see LibraryGrid below for why.
  */
 
 type Filters = { status: string; source: string };
@@ -42,6 +58,18 @@ type LibraryFilterContext = State & {
   setStatus: (value: string) => void;
   setSource: (value: string) => void;
   setSort: (value: Sort) => void;
+  /**
+   * What the user has typed, verbatim. The field renders this so the caret
+   * never lags a keystroke behind.
+   */
+  query: string;
+  setQuery: (value: string) => void;
+  /**
+   * The same query, deferred. The grid filters on this: React commits the
+   * keystroke first and re-filters in a later interruptible pass, so a long
+   * shelf cannot stutter the field.
+   */
+  deferredQuery: string;
   pending: boolean;
 };
 
@@ -65,11 +93,15 @@ export function useLibraryFilters(): LibraryFilterContext {
  */
 export function LibraryFilters({
   initial,
+  initialQuery = "",
   children,
 }: {
   initial: State;
+  /** `?q=` at page load, so a shared search URL arrives already applied. */
+  initialQuery?: string;
   children: React.ReactNode;
 }) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   // Real state, not useOptimistic: optimistic state only survives its
   // transition, and it is discarded in favour of the prop when that settles.
@@ -78,6 +110,56 @@ export function LibraryFilters({
   // moment the write finished. Here the client is the source of truth for the
   // rest of the session, and the server value is only the seed.
   const [state, setState] = useState(initial);
+
+  // The query is plain state, deliberately not `useSearchParams()`. Reading it
+  // from the URL would make every keystroke wait on a navigation before the
+  // field could show the character — which is the lag that was interrupting
+  // typing in the first place.
+  const [query, setQuery] = useState(initialQuery);
+
+  // The grid reads the deferred copy. React renders the typed character first
+  // at high priority, then re-filters in a second, interruptible pass — so a
+  // large shelf cannot make the field stutter between keystrokes.
+  const deferredQuery = useDeferredValue(query);
+
+  // Mirror the query into `?q=` so a search stays linkable and survives a
+  // reload. Nothing on screen reads this back — the field and both result
+  // sets run off the state above — so it is pure bookkeeping, debounced and
+  // run from an effect well behind the keystroke.
+  //
+  // `replace` re-renders the page on the server, which is exactly what used
+  // to close the mobile keyboard. It is safe now only because the input is no
+  // longer keyed to the URL and no longer re-created by that render; the
+  // debounce also means it lands in the pause after typing, not during it.
+  //
+  // What is already in the URL is tracked here rather than read back from
+  // `window.location`: the location does not change until Next commits the
+  // navigation, so a second keystroke arriving before then would compare
+  // against a stale value and queue a duplicate write. Seeded with the query
+  // the page was rendered for, so arriving on a shared link writes nothing.
+  const [syncedQuery, setSyncedQuery] = useState(initialQuery);
+
+  useEffect(() => {
+    if (query === syncedQuery) return;
+
+    const timer = setTimeout(() => {
+      setSyncedQuery(query);
+
+      const next = new URLSearchParams(window.location.search);
+      if (query) next.set("q", query);
+      else next.delete("q");
+
+      startTransition(() => {
+        router.replace(next.size ? `/library?${next}` : "/library", {
+          scroll: false,
+        });
+      });
+    }, 500);
+
+    // A keystroke during the delay re-runs this effect and cancels the
+    // pending write, so only the settled term is ever pushed.
+    return () => clearTimeout(timer);
+  }, [query, syncedQuery, router]);
 
   function update(patch: Partial<Filters>) {
     setState((current) => ({ ...current, ...patch }));
@@ -109,6 +191,9 @@ export function LibraryFilters({
         setStatus: (status) => update({ status }),
         setSource: (source) => update({ source }),
         setSort: updateSort,
+        query,
+        setQuery,
+        deferredQuery,
         pending,
       }}
     >
@@ -118,12 +203,31 @@ export function LibraryFilters({
 }
 
 /**
- * Narrows the server's rows by the active chips.
+ * Whether a row's title contains the search term.
  *
- * The two empty states arrive as rendered nodes rather than a render function
+ * Both titles are checked because the shelf shows one and the user may know
+ * the other — a romanised title on the card is no reason for the English name
+ * not to find it. `term` arrives already trimmed and lowercased so this does
+ * not redo that work per row.
+ *
+ * This is a substring match, matching the `ilike '%term%'` the server used to
+ * run, so moving the search into the browser did not change what it finds.
+ */
+function matchesTitle(entry: LibraryRow, term: string): boolean {
+  const { title, title_en } = entry.media_titles ?? {};
+  return (
+    (title?.toLowerCase().includes(term) ?? false) ||
+    (title_en?.toLowerCase().includes(term) ?? false)
+  );
+}
+
+/**
+ * Narrows the server's rows by the active chips and the search term.
+ *
+ * The empty states arrive as rendered nodes rather than a render function
  * taking `filtered`: this is a Client Component, and functions cannot cross
  * the server/client boundary. Only the *choice* between them depends on
- * client state, so the page supplies both and this picks.
+ * client state, so the page supplies all three and this picks.
  */
 export function LibraryGrid({
   entries,
@@ -131,15 +235,21 @@ export function LibraryGrid({
   catalog = [],
   emptyUnfiltered,
   emptyFiltered,
+  emptySearch,
 }: {
   entries: LibraryRow[];
   topSources?: RankedSource[];
   catalog?: Source[];
+  /** Nothing on the shelf at all. */
   emptyUnfiltered: React.ReactNode;
+  /** Chips hid everything. */
   emptyFiltered: React.ReactNode;
+  /** A search matched nothing. Falls back to `emptyUnfiltered` if omitted. */
+  emptySearch?: React.ReactNode;
 }) {
-  const { status, source, sort } = useLibraryFilters();
-  const searching = (useSearchParams().get("q") ?? "").trim() !== "";
+  const { status, source, sort, deferredQuery } = useLibraryFilters();
+  const term = deferredQuery.trim().toLowerCase();
+  const searching = term !== "";
 
   // A search deliberately ignores the chips. The chips are a standing view of
   // the shelf; a search is a one-off lookup of a specific title, and the user
@@ -148,7 +258,7 @@ export function LibraryGrid({
   // view — and worse, the MAL panel below would then offer to add a title the
   // user already owns, because the shelf appeared not to have it.
   const visible = searching
-    ? entries
+    ? entries.filter((entry) => matchesTitle(entry, term))
     : entries.filter((entry) => {
         if (status && entry.list_status !== status) return false;
 
@@ -167,9 +277,8 @@ export function LibraryGrid({
   if (visible.length === 0) {
     // While searching the chips are not applied, so a miss is never "your
     // filters hid it" — it is simply not on the shelf.
-    return (
-      <>{!searching && (status || source) ? emptyFiltered : emptyUnfiltered}</>
-    );
+    if (searching) return <>{emptySearch ?? emptyUnfiltered}</>;
+    return <>{status || source ? emptyFiltered : emptyUnfiltered}</>;
   }
 
   return (

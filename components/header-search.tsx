@@ -1,22 +1,31 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useId, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 
+import { useLibraryFilters } from "@/components/library-grid";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 /**
  * Title search, collapsed to an icon in the header until invoked.
  *
- * Same URL-as-state contract as the chips: the query lives in `?q=`, so
- * results stay linkable and /library stays a Server Component.
+ * The query is client state, held by <LibraryFilters> alongside the chips.
+ * It used to live in `?q=`, with the server re-querying and streaming a new
+ * grid per debounced keystroke. Two things about that broke typing on mobile:
+ * the field carried `key={urlQuery}`, so each URL write remounted the input
+ * and the OS dismissed the keyboard with the element it was attached to; and
+ * the grid swapping underneath moved the page while a word was half typed.
  *
- * One field drives two result sets. The server filters the user's shelf by
- * `?q=`, and <MalSearchResults> reads the same param to search the MAL
- * catalog underneath — so finding a title you have and adding one you don't
- * are the same gesture.
+ * Now a keystroke only sets state. The rows are already in the browser, so
+ * the grid narrows in the same render and this input is never unmounted or
+ * re-created. `?q=` is still written behind the typing — see LibraryFilters —
+ * because <MalSearchResults> reads it and a search stays linkable, but the
+ * field no longer waits on it.
+ *
+ * One field still drives two result sets: the shelf above filters locally,
+ * and the MAL catalog search underneath runs off the URL — so finding a title
+ * you have and adding one you don't are the same gesture.
  *
  * Expanding overlays the nav rather than reflowing it. Laying the field over
  * the row keeps the header exactly one row tall in both states — animating the
@@ -24,52 +33,34 @@ import { cn } from "@/lib/utils";
  * field grows.
  */
 export function HeaderSearch() {
-  const router = useRouter();
-  const params = useSearchParams();
-  const [, startTransition] = useTransition();
+  const { query, setQuery } = useLibraryFilters();
   const inputId = useId();
 
-  const urlQuery = params.get("q") ?? "";
-  const [value, setValue] = useState(urlQuery);
-  // A query already in the URL means search is in play: start open so the
-  // active term stays visible instead of hiding behind an icon.
-  const [open, setOpen] = useState(urlQuery !== "");
+  // A query already in play (a shared `?q=` URL) means search is active: start
+  // open so the term stays visible instead of hiding behind an icon.
+  const [open, setOpen] = useState(query !== "");
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Focus on expand. In an effect rather than in the click handler because the
+  // input does not exist until this render commits — and unlike a rAF, this
+  // runs before the browser paints, which keeps it inside the user gesture
+  // that iOS requires before it will raise the keyboard.
+  const wasOpen = useRef(open);
   useEffect(() => {
-    if (value === urlQuery) return;
-
-    // Debounce: one request per keystroke would hammer the database.
-    const timer = setTimeout(() => {
-      const next = new URLSearchParams(params.toString());
-      if (value) next.set("q", value);
-      else next.delete("q");
-
-      startTransition(() => {
-        router.replace(next.size ? `/library?${next}` : "/library", {
-          scroll: false,
-        });
-      });
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [value, urlQuery, params, router]);
+    if (open && !wasOpen.current) inputRef.current?.focus();
+    wasOpen.current = open;
+  }, [open]);
 
   function close() {
     setOpen(false);
-    setValue("");
-    if (inputRef.current) inputRef.current.value = "";
+    setQuery("");
   }
 
   if (!open) {
     return (
       <button
         type="button"
-        onClick={() => {
-          setOpen(true);
-          // The input mounts this tick; focus it on the next one.
-          requestAnimationFrame(() => inputRef.current?.focus());
-        }}
+        onClick={() => setOpen(true)}
         aria-label="Search titles"
         aria-expanded={false}
         className="inline-flex size-9 shrink-0 items-center justify-center rounded-pill text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
@@ -88,20 +79,22 @@ export function HeaderSearch() {
       </label>
       <div className="relative w-full">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        {/* Controlled, and with no `key`: this element has to survive every
+            keystroke, because unmounting a focused input closes the mobile
+            keyboard. */}
         <Input
           id={inputId}
           ref={inputRef}
-          key={urlQuery}
           type="search"
-          defaultValue={urlQuery}
-          onChange={(e) => setValue(e.target.value)}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Escape") close();
           }}
           onBlur={() => {
             // Collapse only when it would hide nothing: an active query stays
             // on screen so the filtered state is never silently invisible.
-            if (!value) setOpen(false);
+            if (!query) setOpen(false);
           }}
           placeholder="Search titles to find or add…"
           className={cn(
@@ -115,15 +108,14 @@ export function HeaderSearch() {
           // Runs before blur, which would otherwise collapse the field first.
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => {
-            if (value) {
-              setValue("");
-              if (inputRef.current) inputRef.current.value = "";
+            if (query) {
+              setQuery("");
               inputRef.current?.focus();
             } else {
               close();
             }
           }}
-          aria-label={value ? "Clear search" : "Close search"}
+          aria-label={query ? "Clear search" : "Close search"}
           className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
         >
           <X className="size-4" />

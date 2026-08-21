@@ -8,18 +8,20 @@ const { saveLibraryPrefs } = vi.hoisted(() => ({
 }));
 vi.mock("@/app/actions/library-prefs", () => ({ saveLibraryPrefs }));
 
-// The grid reads `?q=` to decide whether a search is active. Backed by a
-// mutable value so a test can put the component "in search" without a router.
-const { searchParams } = vi.hoisted(() => ({
-  searchParams: { current: new URLSearchParams() },
-}));
+// The query is client state now, so nothing here reads `?q=`. The provider
+// still mirrors the settled term into the URL behind the user; that write is
+// what this router stands in for.
+const { replace } = vi.hoisted(() => ({ replace: vi.fn() }));
 vi.mock("next/navigation", () => ({
-  useSearchParams: () => searchParams.current,
+  useRouter: () => ({ replace }),
 }));
+
+/** The query a test starts the provider with, for the render that follows. */
+let query = "";
 
 /** Puts the grid in the searching state for the render that follows. */
 function withQuery(q: string) {
-  searchParams.current = new URLSearchParams(q ? { q } : {});
+  query = q;
 }
 
 // EntryCard pulls in next/image and Link, neither of which is under test here.
@@ -40,14 +42,19 @@ function row(
   id: number,
   list_status: string,
   slugs: (string | null)[] = [],
+  title = `Title ${id}`,
+  title_en: string | null = null,
 ): LibraryRow {
   return {
     id,
     list_status,
+    media_titles: { title, title_en },
     entry_sources: slugs.map((slug) => ({ sources: slug ? { slug } : null })),
   } as unknown as LibraryRow;
 }
 
+// Every row's title contains "title", so a search for it matches the whole
+// shelf — which is what the "search overrides the chips" tests assert on.
 const ROWS = [
   row(1, "reading", ["webtoon"]),
   row(2, "reading", []),
@@ -67,7 +74,7 @@ const SOURCES = [
 
 function setup(initial = { status: "", source: "" }) {
   return render(
-    <LibraryFilters initial={{ sort: DEFAULT_SORT, ...initial }}>
+    <LibraryFilters initial={{ sort: DEFAULT_SORT, ...initial }} initialQuery={query}>
       <StatusFilter statuses={STATUSES} />
       <SourceFilter sources={SOURCES} />
       <LibraryGrid
@@ -105,6 +112,7 @@ function chip(group: "status" | "source", label: string) {
 afterEach(cleanup);
 beforeEach(() => {
   saveLibraryPrefs.mockClear();
+  replace.mockClear();
   withQuery("");
 });
 
@@ -154,14 +162,14 @@ describe("filtering", () => {
  */
 describe("search overrides the chips", () => {
   it("shows a match the active chips would otherwise hide", () => {
-    withQuery("solo");
+    withQuery("title");
     setup({ status: "completed", source: "" });
     // Without the override this would be [3] — only the completed row.
     expect(visibleIds()).toEqual([1, 2, 3, 4]);
   });
 
   it("ignores the source chip too", () => {
-    withQuery("solo");
+    withQuery("title");
     setup({ status: "", source: "webtoon" });
     expect(visibleIds()).toEqual([1, 2, 3, 4]);
   });
@@ -198,6 +206,7 @@ describe("empty states", () => {
     render(
       <LibraryFilters
         initial={{ status: "completed", source: "webtoon", sort: DEFAULT_SORT }}
+        initialQuery={query}
       >
         <StatusFilter statuses={STATUSES} />
         <SourceFilter sources={SOURCES} />

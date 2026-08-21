@@ -67,17 +67,19 @@ export default async function LibraryPage({
   const params = await searchParams;
   const q = typeof params.q === "string" ? params.q : undefined;
 
-  // Status, source and sort are per-user stored state, not URL state — the
-  // chips and the sort menu apply them in the browser. Search stays here:
-  // `?q=` is a database match, and it is a one-off lookup rather than a view
-  // the user settles into.
+  // Status, source, sort and now search are all applied in the browser. The
+  // rows below carry every field they narrow on, so none of them needs a
+  // round-trip — and for search that matters twice over: re-rendering this
+  // page per keystroke was remounting the input and closing the mobile
+  // keyboard mid-word. `?q=` still arrives here to seed the field and to
+  // drive the MAL panel, but it no longer filters the query.
   const prefs = await getLibraryPrefs();
   const activeStatus = resolveActiveChip(prefs?.status);
   const activeSource = resolveActiveChip(prefs?.source);
   const activeSort = resolveSort(prefs?.sort);
 
   const [entries, statusCounts, sources, topSources] = await Promise.all([
-    getLibrary({ q }),
+    getLibrary(),
     getStatusCounts(),
     getSources(),
     getTopSources(),
@@ -103,6 +105,7 @@ export default async function LibraryPage({
         source: activeSource,
         sort: activeSort,
       }}
+      initialQuery={q ?? ""}
     >
       <AppShell
         searchable
@@ -120,6 +123,11 @@ export default async function LibraryPage({
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <h1 className="font-display text-2xl font-bold">Library</h1>
+              {/* The whole shelf, deliberately — this is a standing fact
+                  about the library, and recounting it per keystroke would put
+                  a number that changes under every character next to a field
+                  the user is still typing in. The grid below shows what
+                  matches. */}
               <p className="text-sm text-muted-foreground">
                 {entries.length} {entries.length === 1 ? "title" : "titles"} ·
                 MyAnimeList as {connection.mal_username}
@@ -153,23 +161,24 @@ export default async function LibraryPage({
                 body="Try a different filter or clear the search."
               />
             }
-            // An active search that returned nothing reads the same way as a
-            // filter that matches nothing, even with every chip on "All".
-            // With a search running, the copy stays short: the MAL results
-            // below are the actual next step, so pointing at Sync would be
-            // steering the user away from them.
+            // All three empty states are supplied as rendered nodes and the
+            // grid picks between them: which one applies depends on the live
+            // query, which is client state now, and a node cannot be chosen
+            // here without re-rendering this page per keystroke.
             emptyUnfiltered={
-              q ? (
-                <EmptyState
-                  title="Not in your library"
-                  body="Nothing here matches — check the MyAnimeList results below."
-                />
-              ) : (
-                <EmptyState
-                  title="Nothing synced yet"
-                  body="Hit Sync to pull your list from MyAnimeList."
-                />
-              )
+              <EmptyState
+                title="Nothing synced yet"
+                body="Hit Sync to pull your list from MyAnimeList."
+              />
+            }
+            // A search that matches nothing on the shelf: the copy stays
+            // short, because the MAL results below are the actual next step
+            // and pointing at Sync would steer the user away from them.
+            emptySearch={
+              <EmptyState
+                title="Not in your library"
+                body="Nothing here matches — check the MyAnimeList results below."
+              />
             }
           />
 
