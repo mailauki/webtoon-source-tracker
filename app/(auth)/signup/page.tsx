@@ -3,7 +3,7 @@ import Link from "next/link";
 import { OAuthButtons } from "@/components/auth/oauth-buttons";
 import { SignupForm } from "@/components/auth/signup-form";
 
-export const metadata = { title: "Sign up · Source Tracker" };
+export const metadata = { title: "Sign up" };
 
 export default function SignupPage() {
   return (

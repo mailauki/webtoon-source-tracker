@@ -12,7 +12,7 @@ import {
 } from "@/lib/auth/dal";
 import { getSources } from "@/lib/data/sources";
 
-export const metadata = { title: "Settings · Source Tracker" };
+export const metadata = { title: "Settings" };
 
 export default async function SettingsPage({
   searchParams,

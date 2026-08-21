@@ -15,7 +15,12 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  title: "Webtoon Source Tracker",
+  title: {
+    // Pages set a bare title ("Library"); the template appends the suffix, so
+    // nothing below should spell out the product name itself.
+    template: "%s · Webtoon Source Tracker",
+    default: "Webtoon Source Tracker",
+  },
   description: "Track which app or site you read each manga and webtoon on.",
 };
 

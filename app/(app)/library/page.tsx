@@ -18,7 +18,7 @@ const STATUS_CHIPS = [
   { value: "plan_to_read", label: "Plan to read" },
 ];
 
-export const metadata = { title: "Library · Source Tracker" };
+export const metadata = { title: "Library" };
 
 export default async function LibraryPage({
   searchParams,

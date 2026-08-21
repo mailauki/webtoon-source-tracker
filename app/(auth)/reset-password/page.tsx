@@ -1,7 +1,7 @@
 import { ResetPasswordForm } from "@/components/auth/reset-password-form";
 import { verifySession } from "@/lib/auth/dal";
 
-export const metadata = { title: "New password · Source Tracker" };
+export const metadata = { title: "New password" };
 
 /**
  * Reached via the recovery link, which /auth/confirm has already exchanged for

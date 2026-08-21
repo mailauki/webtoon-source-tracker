@@ -22,9 +22,7 @@ export async function generateMetadata({ params }: PageProps<"/entry/[id]">) {
   const { id } = await params;
   const entry = await getEntry(Number(id));
   return {
-    title: entry
-      ? `${entry.media_titles.title} · Source Tracker`
-      : "Not found · Source Tracker",
+    title: entry ? entry.media_titles.title : "Not found",
   };
 }
 

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { LoginForm } from "@/components/auth/login-form";
 import { OAuthButtons } from "@/components/auth/oauth-buttons";
 
-export const metadata = { title: "Sign in · Source Tracker" };
+export const metadata = { title: "Sign in" };
 
 export default async function LoginPage({
   searchParams,
