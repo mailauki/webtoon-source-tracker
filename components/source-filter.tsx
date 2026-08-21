@@ -8,24 +8,20 @@ import { cn } from "@/lib/utils";
 type Chip = { value: string; label: string; count?: number };
 
 /**
- * Status and source filter chips.
+ * Source filter chips.
+ *
+ * Status filtering moved to the header's secondary row (see StatusFilter);
+ * this covers where a title is read, which is scoped to the grid below it.
  *
  * State lives in the URL rather than component state, so views are linkable
  * and shareable and /library stays a Server Component. This is the only part
  * that needs to be a client component.
  */
-export function SourceFilter({
-  statuses,
-  sources,
-}: {
-  statuses: Chip[];
-  sources: Chip[];
-}) {
+export function SourceFilter({ sources }: { sources: Chip[] }) {
   const router = useRouter();
   const params = useSearchParams();
   const [pending, startTransition] = useTransition();
 
-  const activeStatus = params.get("status") ?? "";
   const activeSource = params.get("source") ?? "";
 
   function apply(key: string, value: string) {
@@ -45,12 +41,6 @@ export function SourceFilter({
 
   return (
     <div className={cn("grid gap-2", pending && "opacity-60")}>
-      <ChipRow
-        label="Status"
-        chips={[{ value: "", label: "All" }, ...statuses]}
-        active={activeStatus}
-        onSelect={(v) => apply("status", v)}
-      />
       <ChipRow
         label="Source"
         chips={[

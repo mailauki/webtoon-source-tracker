@@ -2,8 +2,8 @@ import Link from "next/link";
 
 import { AppShell } from "@/components/app-shell";
 import { EntryCard } from "@/components/entry-card";
-import { LibrarySearch } from "@/components/library-search";
 import { SourceFilter } from "@/components/source-filter";
+import { StatusFilter } from "@/components/status-filter";
 import { SyncButton } from "@/components/sync-button";
 import { Button } from "@/components/ui/button";
 import { getMalConnection, verifySession } from "@/lib/auth/dal";
@@ -81,7 +81,10 @@ export default async function LibraryPage({
     .map((s) => ({ value: s.slug ?? `custom-${s.id}`, label: s.name }));
 
   return (
-    <AppShell>
+    <AppShell
+      searchable
+      filters={<StatusFilter statuses={statusChips} />}
+    >
       <div className="grid gap-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -107,10 +110,7 @@ export default async function LibraryPage({
           </p>
         ) : null}
 
-        <div className="grid gap-3">
-          <LibrarySearch />
-          <SourceFilter statuses={statusChips} sources={sourceChips} />
-        </div>
+        <SourceFilter sources={sourceChips} />
 
         {entries.length === 0 ? (
           <div className="flex min-h-[30vh] flex-col items-center justify-center gap-3 text-center">
