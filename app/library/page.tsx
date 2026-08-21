@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { AppShell } from "@/components/app-shell";
 import { LibraryFilters, LibraryGrid } from "@/components/library-grid";
+import { MalSearchResults } from "@/components/mal-search-results";
 import { SourceFilter } from "@/components/source-filter";
 import { StatusFilter } from "@/components/status-filter";
 import { SyncButton } from "@/components/sync-button";
@@ -131,11 +132,14 @@ export default async function LibraryPage({
             }
             // An active search that returned nothing reads the same way as a
             // filter that matches nothing, even with every chip on "All".
+            // With a search running, the copy stays short: the MAL results
+            // below are the actual next step, so pointing at Sync would be
+            // steering the user away from them.
             emptyUnfiltered={
               q ? (
                 <EmptyState
-                  title="No titles match"
-                  body="Try a different filter or clear the search."
+                  title="Not in your library"
+                  body="Nothing here matches — check the MyAnimeList results below."
                 />
               ) : (
                 <EmptyState
@@ -145,6 +149,10 @@ export default async function LibraryPage({
               )
             }
           />
+
+          {/* Searching is also how a title gets added, so MAL results sit
+              under the shelf whenever a query is active. */}
+          <MalSearchResults />
         </div>
       </AppShell>
     </LibraryFilters>

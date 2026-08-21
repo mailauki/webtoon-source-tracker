@@ -8,6 +8,20 @@ const { saveLibraryPrefs } = vi.hoisted(() => ({
 }));
 vi.mock("@/app/actions/library-prefs", () => ({ saveLibraryPrefs }));
 
+// The grid reads `?q=` to decide whether a search is active. Backed by a
+// mutable value so a test can put the component "in search" without a router.
+const { searchParams } = vi.hoisted(() => ({
+  searchParams: { current: new URLSearchParams() },
+}));
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => searchParams.current,
+}));
+
+/** Puts the grid in the searching state for the render that follows. */
+function withQuery(q: string) {
+  searchParams.current = new URLSearchParams(q ? { q } : {});
+}
+
 // EntryCard pulls in next/image and Link, neither of which is under test here.
 vi.mock("@/components/entry-card", () => ({
   EntryCard: ({ entry }: { entry: { id: number } }) => (
@@ -88,7 +102,10 @@ function chip(group: "status" | "source", label: string) {
 // Vitest does not enable RTL's auto-cleanup, so renders would otherwise
 // accumulate in one document and every query would find duplicates.
 afterEach(cleanup);
-beforeEach(() => saveLibraryPrefs.mockClear());
+beforeEach(() => {
+  saveLibraryPrefs.mockClear();
+  withQuery("");
+});
 
 describe("filtering", () => {
   it("shows everything when no filter is set", () => {
@@ -128,6 +145,39 @@ describe("filtering", () => {
   });
 });
 
+/**
+ * A search is a lookup of one title, not a view of the shelf, so the chips do
+ * not apply to it. If they did, searching for something outside the current
+ * filter would report it missing — and the MAL panel below would then offer to
+ * add a title the user already owns.
+ */
+describe("search overrides the chips", () => {
+  it("shows a match the active chips would otherwise hide", () => {
+    withQuery("solo");
+    setup({ status: "completed", source: "" });
+    // Without the override this would be [3] — only the completed row.
+    expect(visibleIds()).toEqual([1, 2, 3, 4]);
+  });
+
+  it("ignores the source chip too", () => {
+    withQuery("solo");
+    setup({ status: "", source: "webtoon" });
+    expect(visibleIds()).toEqual([1, 2, 3, 4]);
+  });
+
+  it("still applies the chips once the search is cleared", () => {
+    withQuery("");
+    setup({ status: "completed", source: "" });
+    expect(visibleIds()).toEqual([3]);
+  });
+
+  it("treats a whitespace-only query as no search", () => {
+    withQuery("   ");
+    setup({ status: "completed", source: "" });
+    expect(visibleIds()).toEqual([3]);
+  });
+});
+
 describe("empty states", () => {
   it("distinguishes 'nothing synced' from 'nothing matches'", async () => {
     setup();
@@ -138,6 +188,26 @@ describe("empty states", () => {
 
     expect(screen.getByText("No titles match")).toBeInTheDocument();
     expect(screen.queryByText("Nothing synced yet")).not.toBeInTheDocument();
+  });
+
+  // While searching, the chips are not applied — so a miss is never "your
+  // filters hid it". The page renders the search-specific copy in that slot.
+  it("uses the unfiltered empty state during a search", () => {
+    withQuery("nonesuch");
+    render(
+      <LibraryFilters initial={{ status: "completed", source: "webtoon" }}>
+        <StatusFilter statuses={STATUSES} />
+        <SourceFilter sources={SOURCES} />
+        <LibraryGrid
+          entries={[]}
+          emptyFiltered={<p>No titles match</p>}
+          emptyUnfiltered={<p>Nothing synced yet</p>}
+        />
+      </LibraryFilters>,
+    );
+
+    expect(screen.getByText("Nothing synced yet")).toBeInTheDocument();
+    expect(screen.queryByText("No titles match")).not.toBeInTheDocument();
   });
 });
 
