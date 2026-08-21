@@ -50,7 +50,13 @@ export async function linkProvider(formData: FormData) {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.linkIdentity({
     provider,
-    options: { redirectTo: `${siteUrl()}/auth/callback?next=/settings` },
+    options: {
+      // `linked=1` tells the callback this was a LINK, not a sign-in, so a
+      // failure returns to /settings instead of /login. Encode `next` the same
+      // way the sign-in flow does — Supabase round-trips this whole string
+      // through the provider and back.
+      redirectTo: `${siteUrl()}/auth/callback?linked=1&next=${encodeURIComponent("/settings")}`,
+    },
   });
 
   if (error || !data?.url) {

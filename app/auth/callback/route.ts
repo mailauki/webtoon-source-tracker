@@ -19,26 +19,42 @@ export async function GET(request: NextRequest) {
   const next =
     rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/library";
 
-  const oauthError = searchParams.get("error_description") ?? searchParams.get("error");
-  if (oauthError) {
-    return NextResponse.redirect(
-      `${origin}/login?error=${encodeURIComponent(oauthError)}`,
+  // Linking an extra provider (`linkIdentity`) comes back through here too,
+  // but the user is ALREADY signed in. Sending those failures to /login is
+  // worse than useless: proxy.ts sees a valid session cookie, redirects
+  // /login -> /library, and clears `url.search` on the way — so the error
+  // message is silently discarded and the link appears to do nothing.
+  // Link failures belong on /settings, where the button lives.
+  const isLink = searchParams.get("linked") === "1";
+  const errorPage = isLink ? "/settings" : "/login";
+  const fail = (message: string) =>
+    NextResponse.redirect(
+      `${origin}${errorPage}?error=${encodeURIComponent(message)}`,
+    );
+
+  // Providers return `error=access_denied` when someone clicks Cancel on the
+  // consent screen. That is a normal choice, not a fault, so say so plainly
+  // rather than showing the raw OAuth code.
+  const errorCode = searchParams.get("error");
+  if (errorCode) {
+    return fail(
+      errorCode === "access_denied"
+        ? isLink
+          ? "Linking was cancelled. Nothing changed."
+          : "Sign-in was cancelled."
+        : (searchParams.get("error_description") ?? errorCode),
     );
   }
 
   if (!code) {
-    return NextResponse.redirect(
-      `${origin}/login?error=${encodeURIComponent("Missing authorization code.")}`,
-    );
+    return fail("Missing authorization code.");
   }
 
   const supabase = await createClient();
   const { error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
-    return NextResponse.redirect(
-      `${origin}/login?error=${encodeURIComponent(error.message)}`,
-    );
+    return fail(error.message);
   }
 
   return NextResponse.redirect(`${origin}${next}`);
