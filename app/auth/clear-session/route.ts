@@ -25,8 +25,24 @@ export async function GET(request: NextRequest) {
 
   // signOut() is a no-op when the cookie is malformed rather than merely
   // expired (there is no session to end), so delete the cookies outright.
+  //
+  // Session cookies are `sb-<ref>-auth-token`, optionally chunked `.0`/`.1`.
+  // But an in-flight PKCE flow (OAuth sign-in, and `linkIdentity`) also stores
+  // its verifier under that same prefix:
+  //
+  //   sb-<ref>-auth-token-flow-<id>-code-verifier
+  //   sb-<ref>-auth-token-flows-code-verifier
+  //
+  // Deleting those strands the flow: the provider sends the user back with a
+  // code, `exchangeCodeForSession` finds no verifier, and the callback errors
+  // straight back here — a loop that looks like "stuck on the signed-out
+  // page". Keep them; they are short-lived and scoped to the flow.
   for (const cookie of request.cookies.getAll()) {
-    if (cookie.name.startsWith("sb-") && cookie.name.includes("-auth-token")) {
+    const isSupabaseAuth =
+      cookie.name.startsWith("sb-") && cookie.name.includes("-auth-token");
+    const isPkceVerifier = cookie.name.endsWith("-code-verifier");
+
+    if (isSupabaseAuth && !isPkceVerifier) {
       response.cookies.delete(cookie.name);
     }
   }
