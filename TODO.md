@@ -106,6 +106,47 @@ Adding it means a second sync path (`/users/@me/animelist`, which uses
 `num_episodes_watched` rather than `num_chapters_read`), a media-type filter in
 the library, and making that outbound link type-aware.
 
+### Guest demo mode
+
+A signed-out visitor currently sees the landing page and can go no further —
+the only way to look at the app is to create an account. For a portfolio link
+that is a real drop-off: most visitors want to see the library, not sign up
+for one.
+
+A shared demo login is the obvious shortcut and the wrong one. The credentials
+would have to be public, so anyone could edit or wipe the demo library, and
+every visitor would fight over the same `library_prefs` row — one person's
+status filter becomes everyone's. `scripts/seed-demo.ts --reset` makes that
+recoverable, not pleasant.
+
+What this should be instead: a **read-only session** at `/demo`, backed by the
+seeded account, where reads work and every write is refused.
+
+The enforcement point is the DAL, not the UI. `verifySession()` in
+`lib/auth/dal.ts` is called at the top of every server action precisely because
+actions are independently reachable HTTP endpoints — so the guard belongs
+there, as something like `requireWritableSession()` that the demo session
+fails. Hiding the buttons is presentation; it is not the check. Every action in
+`app/actions/` would need to move to the stricter call, and the natural test is
+that hitting one directly as the demo user is rejected.
+
+Open questions worth settling before building it:
+
+- **How the session is issued.** A Supabase anonymous sign-in whose rows are
+  read from the demo user is one option; a signed cookie carrying no Supabase
+  identity at all, with reads served server-side, is simpler and cannot write
+  by construction.
+- **Whether the library is per-visitor or shared.** Shared is far less work and
+  is fine as long as nothing can be written. Per-visitor means cloning ~12
+  entries plus their sources on arrival, and reaping them later.
+- **What write attempts do.** Silently refusing is confusing; the honest
+  version is a toast — "Sign up to save changes" — that doubles as the
+  conversion prompt, which is the whole point of the demo.
+
+Worth doing when the live link starts getting traffic from people who are not
+already signed in. Until then the seeded account plus the screenshots in
+`docs/screenshots/` cover the same ground for a portfolio reader.
+
 ### Offline support / service worker
 
 `app/manifest.ts` makes the app installable, which per Next's PWA guide needs

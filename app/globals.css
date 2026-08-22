@@ -163,3 +163,34 @@
     @apply font-sans;
   }
 }
+/**
+ * Typography for the legal pages.
+ *
+ * These are the only long-form prose in the app — every other surface is
+ * component-driven — so rather than pull in a typography plugin for two
+ * routes, the handful of elements they use are styled here.
+ *
+ * Scoped to `.prose-legal` so it cannot leak into app UI.
+ */
+@layer components {
+  .prose-legal h2 {
+    @apply font-display mt-8 mb-2 text-lg font-semibold;
+  }
+
+  .prose-legal h3 {
+    @apply mt-5 mb-1 font-medium;
+  }
+
+  .prose-legal p {
+    @apply mt-3 text-sm leading-relaxed text-muted-foreground;
+  }
+
+  .prose-legal ul {
+    @apply mt-3 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-muted-foreground;
+  }
+
+  /* Inline emphasis reads as foreground against the muted body text. */
+  .prose-legal strong {
+    @apply font-medium text-foreground;
+  }
+}
