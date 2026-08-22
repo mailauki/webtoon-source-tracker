@@ -26,6 +26,18 @@ yarn dev
 `.env.example` documents every variable plus the Supabase dashboard settings a
 deploy needs.
 
+To populate a demo account with a sample library (12 titles and their source
+assignments), set `TEST_USER_EMAIL` / `TEST_USER_PASSWORD` and run:
+
+```bash
+yarn seed:demo           # upsert; safe to re-run
+yarn seed:demo --reset   # clear that user's entries first
+```
+
+It is scoped to that one user and writes a token-less `mal_connections` row so
+`/library` renders the grid rather than the connect CTA. See the header comment
+in `scripts/seed-demo.ts` for why that row cannot trigger a destructive sync.
+
 Database migrations live in `supabase/migrations/` and are applied with the
 Supabase CLI:
 

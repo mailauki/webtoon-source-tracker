@@ -137,9 +137,17 @@ export async function AppShell({
       </main>
 
       <footer className="border-t border-border px-4 py-4">
-        <p className="mx-auto max-w-6xl text-xs text-muted-foreground">
-          Signed in as {profile?.display_name ?? "your account"}
-        </p>
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-muted-foreground">
+          <p>Signed in as {profile?.display_name ?? "your account"}</p>
+          <nav className="flex gap-4">
+            <Link href="/privacy-policy" className="hover:text-foreground">
+              Privacy
+            </Link>
+            <Link href="/terms-of-service" className="hover:text-foreground">
+              Terms
+            </Link>
+          </nav>
+        </div>
       </footer>
     </div>
   );

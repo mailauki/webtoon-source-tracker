@@ -15,7 +15,22 @@ const poppins = Poppins({
   weight: ["400", "500", "600", "700"],
 });
 
+/**
+ * Absolute URLs for the social card.
+ *
+ * `metadataBase` is what turns the generated /opengraph-image into an absolute
+ * URL — crawlers reject relative ones, so without this the card silently does
+ * not render. Vercel exposes the deploy host as VERCEL_PROJECT_PRODUCTION_URL
+ * without a scheme; the explicit env var wins so previews can point elsewhere.
+ */
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : "http://localhost:3000");
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: {
     // Pages set a bare title ("Library"); the template appends the suffix, so
     // nothing below should spell out the product name itself.
@@ -23,6 +38,21 @@ export const metadata: Metadata = {
     default: "Webtoon Source Tracker",
   },
   description: "Track which app or site you read each manga and webtoon on.",
+  // The image itself comes from app/opengraph-image.tsx, which Next appends
+  // to both the OG and Twitter tag sets automatically.
+  openGraph: {
+    type: "website",
+    siteName: "Webtoon Source Tracker",
+    title: "Webtoon Source Tracker",
+    description: "Track which app or site you read each manga and webtoon on.",
+    url: "/",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Webtoon Source Tracker",
+    description: "Track which app or site you read each manga and webtoon on.",
+  },
   icons: {
     icon: [
       "/wst-logo.png",
