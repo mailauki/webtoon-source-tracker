@@ -16,8 +16,15 @@ import { createClient } from "@/lib/supabase/server";
  * handlers have no such serialization, and `AbortController` on the client can
  * cancel a superseded request outright.
  *
- * Results are annotated with `in_library`, so the UI can show "Added" instead
- * of an add button for titles the user already has.
+ * Titles the user already has are dropped from the response outright. This
+ * panel exists to add what the library is missing, and the shelf directly
+ * above it is already showing the ones they own — listing them again here just
+ * pads the results with rows that have no action on them.
+ *
+ * The trade-off is that a page of `LIMIT` can come back well short of `LIMIT`
+ * when the user owns most of the matches. That is accepted: the alternative is
+ * over-fetching and trimming, which spends a bigger MAL request on every
+ * search to fill a panel that is already the secondary result set.
  */
 
 /** MAL's own minimum; shorter queries return noise. */
@@ -83,19 +90,19 @@ export async function GET(request: Request) {
     );
   }
 
-  const nodes = found.data.map((item) => item.node);
+  const candidates = found.data.map((item) => item.node);
 
-  // Flag the ones already in the library so the UI never offers to add a
-  // duplicate. RLS scopes this to the caller, so a hit really is *their* entry.
+  // Which of these the user already has. RLS scopes this to the caller, so a
+  // hit really is *their* entry.
   const owned = new Set<number>();
-  if (nodes.length > 0) {
+  if (candidates.length > 0) {
     const supabase = await createClient();
     const { data } = await supabase
       .from("user_entries")
       .select("media_titles!inner (mal_media_id)")
       .in(
         "media_titles.mal_media_id",
-        nodes.map((n) => n.id),
+        candidates.map((n) => n.id),
       );
 
     for (const row of data ?? []) {
@@ -103,6 +110,10 @@ export async function GET(request: Request) {
       if (title) owned.add(title.mal_media_id);
     }
   }
+
+  // Dropped rather than flagged: everything left is something the user can
+  // actually add.
+  const nodes = candidates.filter((node) => !owned.has(node.id));
 
   return NextResponse.json({
     results: nodes.map((node) => ({
@@ -115,7 +126,6 @@ export async function GET(request: Request) {
       num_chapters: node.num_chapters ?? null,
       num_volumes: node.num_volumes ?? null,
       mal_status: node.status ?? null,
-      in_library: owned.has(node.id),
     })),
   });
 }
