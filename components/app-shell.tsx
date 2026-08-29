@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { HeaderSearch } from "@/components/header-search";
+import { PullToRefresh } from "@/components/pull-to-refresh";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { getProfile } from "@/lib/auth/dal";
@@ -121,12 +122,17 @@ export async function AppShell({
 					</div>
         </div>
       </header>
-			<div className="sticky top-15 z-40">
+			<div data-app-chrome className="sticky top-15 z-40">
         {/* Secondary row, only on pages that supply filters. */}
         {filters && (
           <div className="mx-auto max-w-6xl px-4 py-2">{filters}</div>
         )}
 			</div>
+
+      {/* The indicator hangs below the chrome. How much chrome there is
+          varies — the filter row wraps to two lines on a narrow screen — so
+          PullToRefresh measures the sticky row rather than taking an offset. */}
+      <PullToRefresh />
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 mt-15">
         {children}
