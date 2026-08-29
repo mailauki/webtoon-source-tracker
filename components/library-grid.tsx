@@ -12,6 +12,7 @@ import {
 
 import { saveLibraryPrefs } from "@/app/actions/library-prefs";
 import { EntryCard } from "@/components/entry-card";
+import { selectCandidates } from "@/lib/data/pick-random";
 import {
   ALL,
   serializeSort,
@@ -71,6 +72,13 @@ type LibraryFilterContext = State & {
    */
   deferredQuery: string;
   pending: boolean;
+  /**
+   * The shelf the page fetched. Held here rather than passed to each consumer
+   * so the filters and the rows they narrow travel together — the dice needs
+   * both, and handing it a second copy of the array would leave two things to
+   * keep in step.
+   */
+  entries: LibraryRow[];
 };
 
 const FilterContext = createContext<LibraryFilterContext | null>(null);
@@ -94,11 +102,14 @@ export function useLibraryFilters(): LibraryFilterContext {
 export function LibraryFilters({
   initial,
   initialQuery = "",
+  entries = [],
   children,
 }: {
   initial: State;
   /** `?q=` at page load, so a shared search URL arrives already applied. */
   initialQuery?: string;
+  /** The shelf, shared with every consumer of the filters. */
+  entries?: LibraryRow[];
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -195,6 +206,7 @@ export function LibraryFilters({
         setQuery,
         deferredQuery,
         pending,
+        entries,
       }}
     >
       {children}
@@ -259,15 +271,9 @@ export function LibraryGrid({
   // user already owns, because the shelf appeared not to have it.
   const visible = searching
     ? entries.filter((entry) => matchesTitle(entry, term))
-    : entries.filter((entry) => {
-        if (status && entry.list_status !== status) return false;
-
-        if (source === "none") return entry.entry_sources.length === 0;
-        if (source) {
-          return entry.entry_sources.some((es) => es.sources?.slug === source);
-        }
-        return true;
-      });
+    : // The same function the dice draws from, so the shelf and the roll can
+      // never disagree about which titles a chip selection covers.
+      selectCandidates(entries, { status, source });
 
   // Sorting applies to search results too. The chips are skipped during a
   // search because they would hide the match; an order hides nothing, and a
