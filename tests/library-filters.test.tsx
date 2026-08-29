@@ -8,21 +8,12 @@ const { saveLibraryPrefs } = vi.hoisted(() => ({
 }));
 vi.mock("@/app/actions/library-prefs", () => ({ saveLibraryPrefs }));
 
-// The query is client state now, so nothing here reads `?q=`. The provider
-// still mirrors the settled term into the URL behind the user; that write is
-// what this router stands in for.
-const { replace } = vi.hoisted(() => ({ replace: vi.fn() }));
+// The query is client state and the URL is out of it entirely — nothing here
+// reads or writes `?q=`. next/navigation is still mocked because the tree
+// pulls it in; nothing under test calls it.
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace }),
+  useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }),
 }));
-
-/** The query a test starts the provider with, for the render that follows. */
-let query = "";
-
-/** Puts the grid in the searching state for the render that follows. */
-function withQuery(q: string) {
-  query = q;
-}
 
 // EntryCard pulls in next/image and Link, neither of which is under test here.
 vi.mock("@/components/entry-card", () => ({
@@ -31,6 +22,7 @@ vi.mock("@/components/entry-card", () => ({
   ),
 }));
 
+import { HeaderSearch } from "@/components/header-search";
 import { LibraryFilters, LibraryGrid } from "@/components/library-grid";
 import { SourceFilter } from "@/components/source-filter";
 import { StatusFilter } from "@/components/status-filter";
@@ -74,7 +66,8 @@ const SOURCES = [
 
 function setup(initial = { status: "", source: "" }) {
   return render(
-    <LibraryFilters initial={{ sort: DEFAULT_SORT, ...initial }} initialQuery={query}>
+    <LibraryFilters initial={{ sort: DEFAULT_SORT, ...initial }}>
+      <HeaderSearch />
       <StatusFilter statuses={STATUSES} />
       <SourceFilter sources={SOURCES} />
       <LibraryGrid
@@ -88,6 +81,18 @@ function setup(initial = { status: "", source: "" }) {
 
 const visibleIds = () =>
   screen.queryAllByTestId("entry").map((n) => Number(n.textContent));
+
+/**
+ * Puts the grid in the searching state by typing, which is now the only way
+ * in — the query has no seed, so it cannot be handed to the provider.
+ */
+async function search(q: string) {
+  await userEvent.click(screen.getByRole("button", { name: "Search titles" }));
+  await userEvent.type(
+    screen.getByRole("searchbox", { name: "Search titles" }),
+    q,
+  );
+}
 
 /**
  * The chip a user would click.
@@ -112,8 +117,6 @@ function chip(group: "status" | "source", label: string) {
 afterEach(cleanup);
 beforeEach(() => {
   saveLibraryPrefs.mockClear();
-  replace.mockClear();
-  withQuery("");
 });
 
 describe("filtering", () => {
@@ -161,28 +164,33 @@ describe("filtering", () => {
  * add a title the user already owns.
  */
 describe("search overrides the chips", () => {
-  it("shows a match the active chips would otherwise hide", () => {
-    withQuery("title");
+  it("shows a match the active chips would otherwise hide", async () => {
     setup({ status: "completed", source: "" });
+    await search("title");
     // Without the override this would be [3] — only the completed row.
     expect(visibleIds()).toEqual([1, 2, 3, 4]);
   });
 
-  it("ignores the source chip too", () => {
-    withQuery("title");
+  it("ignores the source chip too", async () => {
     setup({ status: "", source: "webtoon" });
+    await search("title");
     expect(visibleIds()).toEqual([1, 2, 3, 4]);
   });
 
-  it("still applies the chips once the search is cleared", () => {
-    withQuery("");
+  it("still applies the chips once the search is cleared", async () => {
     setup({ status: "completed", source: "" });
+    await search("title");
+    expect(visibleIds()).toEqual([1, 2, 3, 4]);
+
+    await userEvent.clear(
+      screen.getByRole("searchbox", { name: "Search titles" }),
+    );
     expect(visibleIds()).toEqual([3]);
   });
 
-  it("treats a whitespace-only query as no search", () => {
-    withQuery("   ");
+  it("treats a whitespace-only query as no search", async () => {
     setup({ status: "completed", source: "" });
+    await search("   ");
     expect(visibleIds()).toEqual([3]);
   });
 });
@@ -201,13 +209,12 @@ describe("empty states", () => {
 
   // While searching, the chips are not applied — so a miss is never "your
   // filters hid it". The page renders the search-specific copy in that slot.
-  it("uses the unfiltered empty state during a search", () => {
-    withQuery("nonesuch");
+  it("uses the unfiltered empty state during a search", async () => {
     render(
       <LibraryFilters
         initial={{ status: "completed", source: "webtoon", sort: DEFAULT_SORT }}
-        initialQuery={query}
       >
+        <HeaderSearch />
         <StatusFilter statuses={STATUSES} />
         <SourceFilter sources={SOURCES} />
         <LibraryGrid
@@ -217,6 +224,7 @@ describe("empty states", () => {
         />
       </LibraryFilters>,
     );
+    await search("nonesuch");
 
     expect(screen.getByText("Nothing synced yet")).toBeInTheDocument();
     expect(screen.queryByText("No titles match")).not.toBeInTheDocument();

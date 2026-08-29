@@ -8,9 +8,9 @@ const { saveLibraryPrefs } = vi.hoisted(() => ({
 }));
 vi.mock("@/app/actions/library-prefs", () => ({ saveLibraryPrefs }));
 
-// The grid reads `?q=` to decide whether a search is active.
-// The provider mirrors the settled query into `?q=` behind the user; these
-// tests never search, so the router only has to exist.
+// Nothing in this tree touches the URL — the query is client state and `?q=`
+// is gone — but the provider's imports still reach next/navigation, so the
+// router only has to exist.
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn() }),
 }));

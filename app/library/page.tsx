@@ -29,9 +29,7 @@ const STATUS_CHIPS = [
 
 export const metadata = { title: "Library" };
 
-export default async function LibraryPage({
-  searchParams,
-}: PageProps<"/library">) {
+export default async function LibraryPage() {
   await verifySession();
   const connection = await getMalConnection();
 
@@ -65,15 +63,12 @@ export default async function LibraryPage({
     );
   }
 
-  const params = await searchParams;
-  const q = typeof params.q === "string" ? params.q : undefined;
-
   // Status, source, sort and now search are all applied in the browser. The
   // rows below carry every field they narrow on, so none of them needs a
   // round-trip — and for search that matters twice over: re-rendering this
   // page per keystroke was remounting the input and closing the mobile
-  // keyboard mid-word. `?q=` still arrives here to seed the field and to
-  // drive the MAL panel, but it no longer filters the query.
+  // keyboard mid-word. This page takes no search params at all now; the term
+  // lives and dies in <LibraryFilters>.
   const prefs = await getLibraryPrefs();
   const activeStatus = resolveActiveChip(prefs?.status);
   const activeSource = resolveActiveChip(prefs?.source);
@@ -106,7 +101,6 @@ export default async function LibraryPage({
         source: activeSource,
         sort: activeSort,
       }}
-      initialQuery={q ?? ""}
       entries={entries}
     >
       <AppShell

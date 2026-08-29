@@ -23,8 +23,8 @@ import { getProfile } from "@/lib/auth/dal";
  * provides the row and the page fills it, rather than the shell fetching data
  * that two of its three pages would throw away.
  *
- * `searchable` gates the search control for the same reason: `?q=` only means
- * something on /library.
+ * `searchable` gates the search control for the same reason: it filters the
+ * library shelf, which only /library renders.
  */
 export async function AppShell({
   children,
@@ -44,17 +44,22 @@ export async function AppShell({
         <div className="relative h-[60px] mx-auto flex max-w-6xl items-center justify-between gap-4 py-3">
 					<div className="flex items-center gap-3 sm:gap-6">
 						{/* The logo always shows; the wordmark rejoins it once there is
-						    room. Both files bake in their own opaque background (amber on
-						    light, black on dark), so they are swapped by theme rather than
-						    tinted — and rounded, since a hard square tile would fight the
-						    pill shapes across the rest of the row.
+						    room. One icon serves both themes: it is an amber tile with
+						    its own rounded corners baked into the artwork, so it needs no
+						    per-theme variant and no tinting. `rounded-md` only matches
+						    that existing curve — the art already sits on transparency
+						    outside it — and keeps the tile from fighting the pill shapes
+						    across the rest of the row.
 
-						    It returns at `sm`, alongside the nav labels. Note that the
-						    expanded search overlays from the right at up to max-w-md, so
-						    at exactly `sm` it can reach back over the wordmark; from `md`
-						    up the field clears it.
+						    The wordmark returns at `sm`, alongside the nav labels. Note
+						    that the expanded search overlays from the right at up to
+						    max-w-md, so at exactly `sm` it can reach back over the
+						    wordmark; from `md` up the field clears it. Below `sm` it
+						    covers this icon — see HeaderSearch, which paints an opaque
+						    strip there so neither the tile nor the header showing through
+						    its transparent corners peeks around the field's pill.
 
-						    The images stay `alt=""` and the text carries the link's
+						    The image stays `alt=""` and the text carries the link's
 						    accessible name at every width — it only toggles between
 						    sr-only and visible, so the name never doubles up. */}
 						<Link href="/library" className="flex shrink-0 items-center gap-2">

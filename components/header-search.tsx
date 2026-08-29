@@ -17,15 +17,14 @@ import { cn } from "@/lib/utils";
  * and the OS dismissed the keyboard with the element it was attached to; and
  * the grid swapping underneath moved the page while a word was half typed.
  *
- * Now a keystroke only sets state. The rows are already in the browser, so
+ * Now a keystroke only sets state, and the URL is out of the loop entirely —
+ * `?q=` is neither read nor written. The rows are already in the browser, so
  * the grid narrows in the same render and this input is never unmounted or
- * re-created. `?q=` is still written behind the typing — see LibraryFilters —
- * because <MalSearchResults> reads it and a search stays linkable, but the
- * field no longer waits on it.
+ * re-created.
  *
- * One field still drives two result sets: the shelf above filters locally,
- * and the MAL catalog search underneath runs off the URL — so finding a title
- * you have and adding one you don't are the same gesture.
+ * One field still drives two result sets: the shelf above filters locally and
+ * the MAL catalog search underneath runs off the same state — so finding a
+ * title you have and adding one you don't are the same gesture.
  *
  * Expanding overlays the nav rather than reflowing it. Laying the field over
  * the row keeps the header exactly one row tall in both states — animating the
@@ -36,9 +35,9 @@ export function HeaderSearch() {
   const { query, setQuery } = useLibraryFilters();
   const inputId = useId();
 
-  // A query already in play (a shared `?q=` URL) means search is active: start
-  // open so the term stays visible instead of hiding behind an icon.
-  const [open, setOpen] = useState(query !== "");
+  // Always starts collapsed. The query is session state that begins empty on
+  // every load, so there is never a term waiting to be shown at mount.
+  const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Focus on expand. In an effect rather than in the click handler because the
@@ -73,7 +72,16 @@ export function HeaderSearch() {
   return (
     // Overlays the nav. `inset-y-0 right-0` anchors it to the row, and the
     // max-width keeps it from swallowing the wordmark on narrow screens.
-    <div className="absolute inset-y-0 right-0 z-10 flex w-full max-w-md items-center pl-2">
+    //
+    // Below `sm` the field spans the whole row and lands on top of the logo
+    // tile, which is an amber rounded square while this is a pill — so its
+    // corners used to show through the gaps around the field as clipped
+    // slivers of amber. The strip carries its own opaque background there to
+    // cover the tile outright, rather than leaving a partly-hidden icon
+    // behind a shape that does not match it. The header's own ground is
+    // translucent (`bg-background/80`), so this has to be a solid
+    // `bg-background` — inheriting would let the tile show straight through.
+    <div className="absolute inset-y-0 right-0 z-10 flex w-full max-w-md items-center bg-background pl-2 sm:bg-transparent">
       <label htmlFor={inputId} className="sr-only">
         Search titles
       </label>
@@ -98,7 +106,12 @@ export function HeaderSearch() {
           }}
           placeholder="Search titles to find or add…"
           className={cn(
-            "rounded-pill border-border bg-background pl-9 pr-9",
+            // `bg-muted` in dark rather than the base ground: against a
+            // near-black header a background-coloured field reads as a hole
+            // with a hairline border, and the lifted fill is what makes it
+            // legible as an input. Light mode keeps the plain ground, where
+            // the border already carries that job.
+            "rounded-pill border-border bg-background pl-9 pr-9 dark:bg-muted",
             // Hide the WebKit affordance; the X below is the clear control.
             "[&::-webkit-search-cancel-button]:appearance-none",
           )}
