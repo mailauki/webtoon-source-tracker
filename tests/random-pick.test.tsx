@@ -28,6 +28,7 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+import { HeaderSearch } from "@/components/header-search";
 import { LibraryFilters } from "@/components/library-grid";
 import { RandomPick } from "@/components/random-pick";
 import { DEFAULT_SORT } from "@/lib/data/library-prefs";
@@ -61,20 +62,25 @@ const ROWS = [
   row(3, "completed", ["tapas"], "Lore Olympus"),
 ];
 
-function setup({
-  entries = ROWS,
-  status = "",
-  source = "",
-  query = "",
-} = {}) {
+function setup({ entries = ROWS, status = "", source = "" } = {}) {
   return render(
     <LibraryFilters
       initial={{ status, source, sort: DEFAULT_SORT }}
-      initialQuery={query}
       entries={entries}
     >
+      {/* The query has no seed — it is typed, so the field has to be here. */}
+      <HeaderSearch />
       <RandomPick />
     </LibraryFilters>,
+  );
+}
+
+/** Puts the provider in the searching state the only way a user can. */
+async function search(q: string) {
+  await userEvent.click(screen.getByRole("button", { name: "Search titles" }));
+  await userEvent.type(
+    screen.getByRole("searchbox", { name: "Search titles" }),
+    q,
   );
 }
 
@@ -172,8 +178,9 @@ describe("RandomPick", () => {
 
   // A search already bypasses the chips, and rolling a die against a title the
   // user just typed by name is incoherent.
-  it("is not offered while a search is active", () => {
-    setup({ query: "solo" });
+  it("is not offered while a search is active", async () => {
+    setup();
+    await search("solo");
 
     expect(
       screen.queryByRole("button", { name: /pick something to read/i }),

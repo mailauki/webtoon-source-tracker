@@ -1,11 +1,9 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import {
   createContext,
   useContext,
   useDeferredValue,
-  useEffect,
   useState,
   useTransition,
 } from "react";
@@ -44,9 +42,13 @@ import type { Source } from "@/lib/data/rank-sources";
  * carry their titles, so matching text needs no round-trip either; the query
  * is client state now and the grid narrows on the keystroke itself.
  *
- * `?q=` is still written, lazily and behind the typing, because it is what
- * <MalSearchResults> reads to search the MAL catalog and what makes a search
- * linkable. Nothing the user is looking at waits for it.
+ * The URL is out of it entirely: `?q=` is not read and no longer written.
+ * Mirroring the term back into the URL kept a navigation on the typing path
+ * for no one's benefit — nothing on screen read it back, both result sets run
+ * off the state here, and a `router.replace` per settled term re-rendered the
+ * page under a focused input for the sake of a link nobody follows. A search
+ * is a transient lookup, not a location; dropping the write leaves the field
+ * as the only thing that owns the term.
  *
  * The chips do NOT narrow search results — see LibraryGrid below for why.
  */
@@ -101,18 +103,14 @@ export function useLibraryFilters(): LibraryFilterContext {
  */
 export function LibraryFilters({
   initial,
-  initialQuery = "",
   entries = [],
   children,
 }: {
   initial: State;
-  /** `?q=` at page load, so a shared search URL arrives already applied. */
-  initialQuery?: string;
   /** The shelf, shared with every consumer of the filters. */
   entries?: LibraryRow[];
   children: React.ReactNode;
 }) {
-  const router = useRouter();
   const [pending, startTransition] = useTransition();
   // Real state, not useOptimistic: optimistic state only survives its
   // transition, and it is discarded in favour of the prop when that settles.
@@ -125,52 +123,14 @@ export function LibraryFilters({
   // The query is plain state, deliberately not `useSearchParams()`. Reading it
   // from the URL would make every keystroke wait on a navigation before the
   // field could show the character — which is the lag that was interrupting
-  // typing in the first place.
-  const [query, setQuery] = useState(initialQuery);
+  // typing in the first place. It starts empty every time: a search is a
+  // gesture, not a place, so there is nothing to restore from a URL.
+  const [query, setQuery] = useState("");
 
   // The grid reads the deferred copy. React renders the typed character first
   // at high priority, then re-filters in a second, interruptible pass — so a
   // large shelf cannot make the field stutter between keystrokes.
   const deferredQuery = useDeferredValue(query);
-
-  // Mirror the query into `?q=` so a search stays linkable and survives a
-  // reload. Nothing on screen reads this back — the field and both result
-  // sets run off the state above — so it is pure bookkeeping, debounced and
-  // run from an effect well behind the keystroke.
-  //
-  // `replace` re-renders the page on the server, which is exactly what used
-  // to close the mobile keyboard. It is safe now only because the input is no
-  // longer keyed to the URL and no longer re-created by that render; the
-  // debounce also means it lands in the pause after typing, not during it.
-  //
-  // What is already in the URL is tracked here rather than read back from
-  // `window.location`: the location does not change until Next commits the
-  // navigation, so a second keystroke arriving before then would compare
-  // against a stale value and queue a duplicate write. Seeded with the query
-  // the page was rendered for, so arriving on a shared link writes nothing.
-  const [syncedQuery, setSyncedQuery] = useState(initialQuery);
-
-  useEffect(() => {
-    if (query === syncedQuery) return;
-
-    const timer = setTimeout(() => {
-      setSyncedQuery(query);
-
-      const next = new URLSearchParams(window.location.search);
-      if (query) next.set("q", query);
-      else next.delete("q");
-
-      startTransition(() => {
-        router.replace(next.size ? `/library?${next}` : "/library", {
-          scroll: false,
-        });
-      });
-    }, 500);
-
-    // A keystroke during the delay re-runs this effect and cancels the
-    // pending write, so only the settled term is ever pushed.
-    return () => clearTimeout(timer);
-  }, [query, syncedQuery, router]);
 
   function update(patch: Partial<Filters>) {
     setState((current) => ({ ...current, ...patch }));

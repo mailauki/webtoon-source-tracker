@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,6 +13,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * Nothing static catches that. `key` is valid on any element and the remount
  * is correct React; only driving the field through real keystrokes and
  * checking the element survives will show it. That is what these do.
+ *
+ * The URL is now out of the picture entirely — the term is neither read from
+ * nor written to `?q=` — so `replace` below is a spy that must never fire.
+ * That is the strongest form of the guarantee: no navigation means nothing
+ * can re-render the page under the field at all.
  */
 
 vi.mock("@/app/actions/library-prefs", () => ({
@@ -50,12 +55,9 @@ const ROWS = [
   row(3, "Tower of God"),
 ];
 
-function setup(initialQuery = "") {
+function setup() {
   return render(
-    <LibraryFilters
-      initial={{ status: "", source: "", sort: DEFAULT_SORT }}
-      initialQuery={initialQuery}
-    >
+    <LibraryFilters initial={{ status: "", source: "", sort: DEFAULT_SORT }}>
       <HeaderSearch />
       <LibraryGrid
         entries={ROWS}
@@ -108,32 +110,18 @@ describe("typing is never interrupted", () => {
     expect(field()).toHaveFocus();
   });
 
-  it("does not navigate while the user is still typing", async () => {
+  it("never navigates, during typing or after it settles", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     setup();
     await open();
     await userEvent.type(field(), "solo");
 
-    // The URL write is debounced well behind the keystrokes. If this fires
-    // during typing, the page re-renders under a focused input again.
     expect(replace).not.toHaveBeenCalled();
-  });
 
-  it("still reaches the URL once typing settles", async () => {
-    setup();
-    await open();
-    await userEvent.type(field(), "solo");
-
-    // Debounced, not dropped: `?q=` still has to land, or a search would stop
-    // being linkable and would not survive a reload.
-    await waitFor(
-      () =>
-        expect(replace).toHaveBeenCalledWith("/library?q=solo", {
-          scroll: false,
-        }),
-      { timeout: 2000 },
-    );
-    // And exactly once — one settled write, not one per character.
-    expect(replace).toHaveBeenCalledTimes(1);
+    // And nothing lands late either: the debounced `?q=` write is gone, not
+    // merely deferred, so waiting past any old delay still finds no call.
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(replace).not.toHaveBeenCalled();
   });
 });
 
@@ -183,20 +171,16 @@ describe("filtering", () => {
   });
 });
 
-describe("a shared search URL", () => {
-  it("opens already expanded, with the term applied", () => {
-    setup("tower");
+describe("the field starts clean", () => {
+  // The term has no seed any more: no `?q=` to restore it from, so a fresh
+  // load is always the collapsed icon over the full shelf.
+  it("mounts collapsed, with nothing filtered", () => {
+    setup();
 
-    expect(field()).toHaveValue("tower");
-    expect(visibleIds()).toEqual([3]);
-  });
-
-  it("does not re-write the URL it just arrived from", async () => {
-    vi.useFakeTimers();
-    setup("tower");
-    // The effect bails when the URL already matches, so a shared link does not
-    // immediately navigate to itself.
-    await vi.advanceTimersByTimeAsync(1000);
-    expect(replace).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: "Search titles" }),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("searchbox")).toBeNull();
+    expect(visibleIds()).toEqual([1, 2, 3]);
   });
 });

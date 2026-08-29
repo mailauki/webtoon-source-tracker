@@ -29,11 +29,12 @@ vi.mock("@/app/actions/library-prefs", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ refresh, replace: vi.fn() }),
+  useRouter: () => ({ refresh }),
 }));
 
-// The panel takes its term from <LibraryFilters> state now, not from `?q=`,
-// so these render it inside the real provider and seed the query there.
+// The panel takes its term from <LibraryFilters> state, not from `?q=` — and
+// that state has no seed any more, so these render the real header field
+// alongside the panel and type the term in, the way a user sets it.
 vi.mock("@/components/entry-card", () => ({
   EntryCard: () => null,
 }));
@@ -46,20 +47,32 @@ vi.mock("next/image", () => ({
   },
 }));
 
+import { HeaderSearch } from "@/components/header-search";
 import { LibraryFilters } from "@/components/library-grid";
 import { MalSearchResults } from "@/components/mal-search-results";
 import { DEFAULT_SORT } from "@/lib/data/library-prefs";
 
-/** Renders the panel with `q` as the active search term. */
-function renderPanel(q = "solo leveling") {
-  return render(
-    <LibraryFilters
-      initial={{ status: "", source: "", sort: DEFAULT_SORT }}
-      initialQuery={q}
-    >
+/**
+ * Renders the panel and types `q` into the header field.
+ *
+ * Async because the term only exists once the keystrokes land — there is no
+ * initial query to render with. The panel mounts empty and appears when the
+ * query passes the minimum length, exactly as it does in the app.
+ */
+async function renderPanel(q = "solo leveling") {
+  const result = render(
+    <LibraryFilters initial={{ status: "", source: "", sort: DEFAULT_SORT }}>
+      <HeaderSearch />
       <MalSearchResults />
     </LibraryFilters>,
   );
+
+  await userEvent.click(screen.getByRole("button", { name: "Search titles" }));
+  await userEvent.type(
+    screen.getByRole("searchbox", { name: "Search titles" }),
+    q,
+  );
+  return result;
 }
 
 const RESULT = {
@@ -92,7 +105,7 @@ beforeEach(() => {
 describe("MAL search panel", () => {
   it("lists results for the active query", async () => {
     mockSearch([RESULT]);
-    renderPanel();
+    await renderPanel();
 
     expect(
       await screen.findByRole("heading", { name: "Solo Leveling" }),
@@ -100,16 +113,20 @@ describe("MAL search panel", () => {
     expect(screen.getByRole("button", { name: /add/i })).toBeInTheDocument();
   });
 
-  it("renders nothing until the query is long enough", () => {
+  it("renders nothing until the query is long enough", async () => {
     mockSearch([RESULT]);
-    const { container } = renderPanel("so");
+    await renderPanel("so");
 
-    expect(container).toBeEmptyDOMElement();
+    // The header field is on screen, but the panel below it is not: two
+    // characters is under the minimum, so no search is issued.
+    expect(
+      screen.queryByRole("heading", { name: "Add from MyAnimeList" }),
+    ).toBeNull();
   });
 
   it("offers no add button for a title already in the library", async () => {
     mockSearch([{ ...RESULT, in_library: true }]);
-    renderPanel();
+    await renderPanel();
 
     expect(await screen.findByText("In library")).toBeInTheDocument();
     expect(
@@ -120,7 +137,7 @@ describe("MAL search panel", () => {
 
   it("surfaces a server error instead of failing silently", async () => {
     mockSearch([], false, 500);
-    renderPanel();
+    await renderPanel();
 
     expect(await screen.findByRole("alert")).toHaveTextContent("boom");
   });
@@ -138,7 +155,7 @@ describe("MAL search panel", () => {
       message: "Added Solo Leveling to your list.",
     });
 
-    renderPanel();
+    await renderPanel();
     await userEvent.click(await screen.findByRole("button", { name: /add/i }));
 
     // The card flips to "In library" once the add succeeds.
