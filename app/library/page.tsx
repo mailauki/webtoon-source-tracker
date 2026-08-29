@@ -3,6 +3,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { LibraryFilters, LibraryGrid } from "@/components/library-grid";
 import { MalSearchResults } from "@/components/mal-search-results";
+import { RandomPick } from "@/components/random-pick";
 import { SortFilter } from "@/components/sort-filter";
 import { SourceFilter } from "@/components/source-filter";
 import { StatusFilter } from "@/components/status-filter";
@@ -106,6 +107,7 @@ export default async function LibraryPage({
         sort: activeSort,
       }}
       initialQuery={q ?? ""}
+      entries={entries}
     >
       <AppShell
         searchable
@@ -115,7 +117,12 @@ export default async function LibraryPage({
           // the other.
           <div className="flex items-center justify-between gap-2">
             <StatusFilter statuses={statusChips} />
-            <SortFilter />
+            {/* Both act on the shelf the chips have narrowed: one orders it,
+                the other picks out of it. */}
+            <div className="flex shrink-0 items-center gap-1.5">
+              <RandomPick />
+              <SortFilter />
+            </div>
           </div>
         }
       >
