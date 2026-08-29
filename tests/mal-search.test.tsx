@@ -58,6 +58,10 @@ import { DEFAULT_SORT } from "@/lib/data/library-prefs";
  * Async because the term only exists once the keystrokes land — there is no
  * initial query to render with. The panel mounts empty and appears when the
  * query passes the minimum length, exactly as it does in the app.
+ *
+ * Stops at the button: the catalog is opt-in now, so typing alone gets you the
+ * offer to search MAL, not the results. Use `openPanel` to go the rest of the
+ * way.
  */
 async function renderPanel(q = "solo leveling") {
   const result = render(
@@ -75,6 +79,20 @@ async function renderPanel(q = "solo leveling") {
   return result;
 }
 
+/** Presses the opt-in button, which is what actually issues the MAL request. */
+async function openPanel() {
+  await userEvent.click(
+    screen.getByRole("button", { name: /search myanimelist/i }),
+  );
+}
+
+/** Renders, types, and opens the catalog panel — the full path to results. */
+async function renderOpenPanel(q = "solo leveling") {
+  const result = await renderPanel(q);
+  await openPanel();
+  return result;
+}
+
 const RESULT = {
   mal_media_id: 1,
   title: "Solo Leveling",
@@ -82,7 +100,6 @@ const RESULT = {
   main_picture_url: null,
   media_kind: "manhwa",
   num_chapters: 179,
-  in_library: false,
 };
 
 function mockSearch(results: unknown[], ok = true, status = 200) {
@@ -103,41 +120,88 @@ beforeEach(() => {
 });
 
 describe("MAL search panel", () => {
-  it("lists results for the active query", async () => {
+  it("lists results once the catalog search is asked for", async () => {
     mockSearch([RESULT]);
-    await renderPanel();
+    await renderOpenPanel();
 
     expect(
       await screen.findByRole("heading", { name: "Solo Leveling" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /add/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^add$/i })).toBeInTheDocument();
+  });
+
+  /**
+   * The point of the button: typing narrows the shelf and nothing else. A
+   * search that never leaves the library must not spend a MAL request.
+   */
+  it("searches nothing until the button is pressed", async () => {
+    mockSearch([RESULT]);
+    await renderPanel();
+
+    expect(
+      screen.getByRole("button", { name: /search myanimelist/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Add from MyAnimeList" }),
+    ).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("renders nothing until the query is long enough", async () => {
     mockSearch([RESULT]);
     await renderPanel("so");
 
-    // The header field is on screen, but the panel below it is not: two
-    // characters is under the minimum, so no search is issued.
+    // The header field is on screen, but not even the button below it: two
+    // characters is under the minimum, so there is nothing to offer to search.
+    expect(
+      screen.queryByRole("button", { name: /search myanimelist/i }),
+    ).toBeNull();
     expect(
       screen.queryByRole("heading", { name: "Add from MyAnimeList" }),
     ).toBeNull();
   });
 
-  it("offers no add button for a title already in the library", async () => {
-    mockSearch([{ ...RESULT, in_library: true }]);
-    await renderPanel();
-
-    expect(await screen.findByText("In library")).toBeInTheDocument();
+  /**
+   * Editing the term drops back to the button. Results belong to the term they
+   * were fetched for, so they must not sit under a different one.
+   */
+  it("closes the panel again when the query changes", async () => {
+    mockSearch([RESULT]);
+    await renderOpenPanel();
     expect(
-      screen.getByRole("heading", { name: "Solo Leveling" }),
+      await screen.findByRole("heading", { name: "Solo Leveling" }),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /add/i })).toBeNull();
+
+    await userEvent.type(
+      screen.getByRole("searchbox", { name: "Search titles" }),
+      " x",
+    );
+
+    expect(
+      screen.queryByRole("heading", { name: "Add from MyAnimeList" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: /search myanimelist/i }),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * The route drops owned titles from the response, so the panel never has an
+   * "in library" row to render — an empty result set is the whole signal.
+   */
+  it("says so when the catalog has nothing new to add", async () => {
+    mockSearch([]);
+    await renderOpenPanel();
+
+    expect(
+      await screen.findByText(/nothing new on myanimelist matches/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^add$/i })).toBeNull();
   });
 
   it("surfaces a server error instead of failing silently", async () => {
     mockSearch([], false, 500);
-    await renderPanel();
+    await renderOpenPanel();
 
     expect(await screen.findByRole("alert")).toHaveTextContent("boom");
   });
@@ -155,11 +219,13 @@ describe("MAL search panel", () => {
       message: "Added Solo Leveling to your list.",
     });
 
-    await renderPanel();
-    await userEvent.click(await screen.findByRole("button", { name: /add/i }));
+    await renderOpenPanel();
+    await userEvent.click(
+      await screen.findByRole("button", { name: /^add$/i }),
+    );
 
-    // The card flips to "In library" once the add succeeds.
-    expect(await screen.findByText("In library")).toBeInTheDocument();
+    // The card flips to "Added" once the add succeeds.
+    expect(await screen.findByText("Added")).toBeInTheDocument();
 
     // The real assertion: the success effect runs exactly once. A re-render
     // loop shows up here as a rapidly climbing call count.

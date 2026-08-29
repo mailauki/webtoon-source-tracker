@@ -181,18 +181,21 @@ export default async function LibraryPage() {
               />
             }
             // A search that matches nothing on the shelf: the copy stays
-            // short, because the MAL results below are the actual next step
-            // and pointing at Sync would steer the user away from them.
+            // short, because the MAL button below is the actual next step and
+            // pointing at Sync would steer the user away from it. It names no
+            // results, since none have been fetched until that button is
+            // pressed.
             emptySearch={
               <EmptyState
                 title="Not in your library"
-                body="Nothing here matches — check the MyAnimeList results below."
+                body="Nothing here matches. Search MyAnimeList below to add it."
               />
             }
           />
 
-          {/* Searching is also how a title gets added, so MAL results sit
-              under the shelf whenever a query is active. */}
+          {/* Searching is also how a title gets added, so the offer to search
+              MyAnimeList sits under the shelf whenever a query is active. The
+              catalog itself is only queried once that button is pressed. */}
           <MalSearchResults />
         </div>
       </AppShell>
@@ -204,7 +207,7 @@ function EmptyState({ title, body }: { title: string; body: string }) {
   return (
     <div className="flex min-h-[30vh] flex-col items-center justify-center gap-3 text-center">
       <p className="font-display text-lg font-semibold">{title}</p>
-      <p className="max-w-sm text-sm text-muted-foreground">{body}</p>
+      <p className="max-w-sm text-sm text-pretty text-muted-foreground">{body}</p>
     </div>
   );
 }
