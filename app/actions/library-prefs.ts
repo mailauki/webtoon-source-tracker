@@ -30,6 +30,9 @@ const prefsSchema = z.object({
   // resolveSort() falls back to the default for anything it does not
   // recognise, which is the behaviour we want for a stale preference too.
   sort: prefSchema.optional(),
+  // A plain boolean, not the text-with-sentinel the chips use: the toggle has
+  // only two meaningful states, so there is no "never chose" to preserve.
+  hideHiatus: z.boolean().optional(),
 });
 
 export type LibraryPrefsPatch = z.input<typeof prefsSchema>;
@@ -49,6 +52,7 @@ export async function saveLibraryPrefs(patch: LibraryPrefsPatch) {
     status?: string;
     source?: string;
     sort?: string | null;
+    hide_hiatus?: boolean;
   } = {
     user_id: userId,
   };
@@ -62,6 +66,11 @@ export async function saveLibraryPrefs(patch: LibraryPrefsPatch) {
   // is not "show everything" but "no preference", which is exactly null.
   if (parsed.data.sort !== undefined) {
     row.sort = parsed.data.sort || null;
+  }
+  // Written straight through — false is a real choice ("show them again"), not
+  // an empty value to normalise away.
+  if (parsed.data.hideHiatus !== undefined) {
+    row.hide_hiatus = parsed.data.hideHiatus;
   }
 
   if (Object.keys(row).length === 1) return;

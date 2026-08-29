@@ -17,6 +17,7 @@ export type EntrySource = {
   is_primary: boolean;
   is_official: boolean;
   is_paid: boolean;
+  is_hiatus: boolean;
   sources: { id: number; name: string } | null;
 };
 
@@ -94,6 +95,17 @@ export function SourceFields({ source }: { source?: EntrySource }) {
             className="size-4 accent-[var(--brand)]"
           />
           Paid
+        </label>
+        {/* Per source, not per title: a series can pause on one site and keep
+            updating on another. */}
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            name="is_hiatus"
+            defaultChecked={source?.is_hiatus ?? false}
+            className="size-4 accent-[var(--brand)]"
+          />
+          On hiatus
         </label>
       </div>
     </>

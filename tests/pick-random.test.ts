@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { LibraryRow } from "@/lib/data/entries";
-import { pickNext, selectCandidates } from "@/lib/data/pick-random";
+import { isOnHiatus, pickNext, selectCandidates } from "@/lib/data/pick-random";
 
 /** Only the fields the candidate filter actually reads. */
 function row(
@@ -150,5 +150,78 @@ describe("pickNext reset signalling", () => {
 
     expect(cycles[0]).toEqual([1, 2, 3, 4]);
     expect(cycles[1]).toEqual([1, 2, 3, 4]);
+  });
+});
+
+/**
+ * A row whose sources carry hiatus flags, one boolean per attached source.
+ * Separate from `row` above, which predates the flag and leaves it undefined.
+ */
+function hiatusRow(id: number, flags: boolean[]): LibraryRow {
+  return {
+    id,
+    list_status: "reading",
+    entry_sources: flags.map((is_hiatus, i) => ({
+      is_hiatus,
+      sources: { slug: `s${i}` },
+    })),
+  } as unknown as LibraryRow;
+}
+
+describe("isOnHiatus", () => {
+  it("is true when every source has paused", () => {
+    expect(isOnHiatus(hiatusRow(1, [true, true]))).toBe(true);
+  });
+
+  it("is false when any source is still updating", () => {
+    // The point of the per-source flag: one site pausing is not the title
+    // pausing, so this must not badge or hide.
+    expect(isOnHiatus(hiatusRow(1, [true, false]))).toBe(false);
+  });
+
+  it("is false for a title with no sources", () => {
+    // [].every() is true, so this guards the empty case explicitly — an entry
+    // with nowhere recorded is a "No source" card, not a paused one.
+    expect(isOnHiatus(hiatusRow(1, []))).toBe(false);
+  });
+});
+
+describe("selectCandidates — hiatus", () => {
+  const SHELF = [
+    hiatusRow(1, [true]),
+    hiatusRow(2, [false]),
+    hiatusRow(3, [true, false]),
+    hiatusRow(4, []),
+  ];
+
+  it("keeps hiatus titles when the toggle is off", () => {
+    expect(ids(selectCandidates(SHELF, { status: "", source: "" }))).toEqual([
+      1, 2, 3, 4,
+    ]);
+  });
+
+  it("defaults to showing them when hideHiatus is not passed at all", () => {
+    // Off-by-default is the contract the page and the provider both rely on.
+    const filters = { status: "", source: "" };
+    expect(ids(selectCandidates(SHELF, filters))).toHaveLength(4);
+  });
+
+  it("drops only fully-paused titles when the toggle is on", () => {
+    expect(
+      ids(selectCandidates(SHELF, { status: "", source: "", hideHiatus: true })),
+    ).toEqual([2, 3, 4]);
+  });
+
+  it("combines with a source chip rather than replacing it", () => {
+    // "on s0, and not fully paused" — both narrowings apply.
+    expect(
+      ids(
+        selectCandidates(SHELF, {
+          status: "",
+          source: "s0",
+          hideHiatus: true,
+        }),
+      ),
+    ).toEqual([2, 3]);
   });
 });

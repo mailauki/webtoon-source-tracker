@@ -32,6 +32,12 @@ const badgeVariants = cva(
           "bg-alert text-alert-foreground rounded-badge px-1.5 text-[10px] font-bold",
         source:
           "bg-secondary text-secondary-foreground rounded-pill px-2 text-[11px] font-semibold",
+        // hiatus: the "paused everywhere" marker. Deliberately NOT `alert` —
+        // a paused series is a normal state, not the missing-data gap that
+        // red is reserved for. But it still needs a solid ground: the frosted
+        // treatment vanished against pale cover art.
+        hiatus:
+          "bg-slate-900/85 text-white rounded-badge px-1.5 text-[10px] font-bold backdrop-blur-sm",
       },
     },
     defaultVariants: {

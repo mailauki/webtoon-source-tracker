@@ -10,7 +10,31 @@ import type { LibraryRow } from "@/lib/data/entries";
  */
 
 /** The chip selections, as LibraryFilters holds them ("" is the All chip). */
-export type CandidateFilters = { status: string; source: string };
+export type CandidateFilters = {
+  status: string;
+  source: string;
+  /** The hiatus toggle. Off by default, so nothing vanishes unasked. */
+  hideHiatus?: boolean;
+};
+
+/**
+ * Whether this title has paused everywhere it is read.
+ *
+ * `every`, not `some`: a series still updating on one site is not on hiatus to
+ * the person reading it there, and badging it as paused would be wrong on the
+ * card and would hide it from the shelf when the toggle is on.
+ *
+ * An entry with no sources is not on hiatus — it has nowhere to have paused,
+ * and `NoSourceBadge` is already the right thing to say about it. Note that
+ * `[].every()` is true, so this needs the explicit length check.
+ *
+ * Lives here rather than on the card because three things depend on the same
+ * answer: the badge, the grid's filtering, and the dice.
+ */
+export function isOnHiatus(entry: LibraryRow): boolean {
+  const sources = entry.entry_sources;
+  return sources.length > 0 && sources.every((es) => es.is_hiatus);
+}
 
 /**
  * The rows the active chips leave visible.
@@ -26,10 +50,14 @@ export type CandidateFilters = { status: string; source: string };
  */
 export function selectCandidates(
   entries: LibraryRow[],
-  { status, source }: CandidateFilters,
+  { status, source, hideHiatus = false }: CandidateFilters,
 ): LibraryRow[] {
   return entries.filter((entry) => {
     if (status && entry.list_status !== status) return false;
+
+    // Applied before the source chip, so "Webtoon" and "hide hiatus" together
+    // mean titles on Webtoon that are still updating somewhere.
+    if (hideHiatus && isOnHiatus(entry)) return false;
 
     if (source === "none") return entry.entry_sources.length === 0;
     if (source) {
