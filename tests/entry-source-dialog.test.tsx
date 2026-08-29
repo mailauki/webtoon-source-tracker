@@ -51,6 +51,7 @@ const ATTACHED: EntrySource[] = [
     is_primary: true,
     is_official: true,
     is_paid: false,
+    is_hiatus: false,
     sources: { id: 1, name: "Tapas" },
   },
 ];

@@ -9,9 +9,14 @@ import {
   type SourceDialogRequest,
 } from "@/components/entry-card-menu";
 import { EntrySourceDialog } from "@/components/entry-source-dialog";
-import { NoSourceBadge, SourceBadge } from "@/components/source-badge";
+import {
+  HiatusBadge,
+  NoSourceBadge,
+  SourceBadge,
+} from "@/components/source-badge";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import type { LibraryRow } from "@/lib/data/entries";
+import { isOnHiatus } from "@/lib/data/pick-random";
 import type { RankedSource } from "@/lib/data/rank-sources";
 import type { Source } from "@/lib/data/rank-sources";
 
@@ -51,6 +56,9 @@ export function EntryCard({
   const visible = ordered.slice(0, 2);
   const overflow = ordered.length - visible.length;
 
+  // Only when every source has paused — see isOnHiatus.
+  const onHiatus = isOnHiatus(entry);
+
   const total = title.num_chapters;
   const pct =
     total && total > 0
@@ -88,6 +96,7 @@ export function EntryCard({
 
             <div className="absolute inset-x-0 top-0 flex flex-wrap gap-1 p-1.5">
               {sources.length === 0 ? <NoSourceBadge overlay /> : null}
+              {onHiatus ? <HiatusBadge overlay /> : null}
             </div>
 
             <div className="absolute inset-x-0 bottom-0 flex flex-col gap-1 p-2">
@@ -106,6 +115,7 @@ export function EntryCard({
                         isPrimary: es.is_primary,
                         isPaid: es.is_paid,
                         isOfficial: es.is_official,
+                        isHiatus: es.is_hiatus,
                       }}
                     />
                   ) : null,

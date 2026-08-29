@@ -23,6 +23,7 @@ vi.mock("@/components/entry-card", () => ({
 }));
 
 import { HeaderSearch } from "@/components/header-search";
+import { HiatusFilter } from "@/components/hiatus-filter";
 import { LibraryFilters, LibraryGrid } from "@/components/library-grid";
 import { SourceFilter } from "@/components/source-filter";
 import { StatusFilter } from "@/components/status-filter";
@@ -36,12 +37,17 @@ function row(
   slugs: (string | null)[] = [],
   title = `Title ${id}`,
   title_en: string | null = null,
+  /** Per-source hiatus flags, positional. Defaults to none paused. */
+  hiatus: boolean[] = [],
 ): LibraryRow {
   return {
     id,
     list_status,
     media_titles: { title, title_en },
-    entry_sources: slugs.map((slug) => ({ sources: slug ? { slug } : null })),
+    entry_sources: slugs.map((slug, i) => ({
+      is_hiatus: hiatus[i] ?? false,
+      sources: slug ? { slug } : null,
+    })),
   } as unknown as LibraryRow;
 }
 
@@ -253,5 +259,108 @@ describe("persistence", () => {
     await userEvent.click(chip("source", "Tapas"));
     // A source click must not overwrite the saved status.
     expect(saveLibraryPrefs).toHaveBeenCalledWith({ source: "tapas" });
+  });
+});
+
+describe("hide hiatus toggle", () => {
+  // 5 is paused everywhere; 6 is paused on one of two sites and so is still
+  // readable. Appended to the shared shelf so the existing rows keep their ids.
+  const SHELF = [
+    ...ROWS,
+    row(5, "reading", ["webtoon"], "Title 5", null, [true]),
+    row(6, "reading", ["webtoon", "tapas"], "Title 6", null, [true, false]),
+  ];
+
+  function setupShelf(initial = { status: "", source: "" }) {
+    return render(
+      <LibraryFilters initial={{ sort: DEFAULT_SORT, ...initial }}>
+        <HiatusFilter />
+        <SourceFilter sources={SOURCES} />
+        <LibraryGrid
+          entries={SHELF}
+          emptyFiltered={<p>No titles match</p>}
+          emptyUnfiltered={<p>Nothing synced yet</p>}
+        />
+      </LibraryFilters>,
+    );
+  }
+
+  const toggle = () => screen.getByRole("button", { name: /Hide hiatus/ });
+
+  it("shows hiatus titles by default", () => {
+    setupShelf();
+    expect(visibleIds()).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(toggle()).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("hides only fully-paused titles when pressed", async () => {
+    setupShelf();
+    await userEvent.click(toggle());
+
+    // 5 goes; 6 stays, because it still updates on Tapas.
+    expect(visibleIds()).toEqual([1, 2, 3, 4, 6]);
+    expect(toggle()).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("brings them back when pressed again", async () => {
+    setupShelf();
+    await userEvent.click(toggle());
+    await userEvent.click(toggle());
+    expect(visibleIds()).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  it("persists the choice as a boolean, not a sentinel", async () => {
+    setupShelf();
+    await userEvent.click(toggle());
+    expect(saveLibraryPrefs).toHaveBeenCalledWith({ hideHiatus: true });
+
+    await userEvent.click(toggle());
+    // false must survive as false — it is "show them again", not an empty
+    // value to be normalised to the `all` sentinel.
+    expect(saveLibraryPrefs).toHaveBeenLastCalledWith({ hideHiatus: false });
+  });
+
+  it("starts pressed when the stored preference says so", () => {
+    render(
+      <LibraryFilters
+        initial={{ status: "", source: "", hideHiatus: true, sort: DEFAULT_SORT }}
+      >
+        <HiatusFilter />
+        <SourceFilter sources={SOURCES} />
+        <LibraryGrid
+          entries={SHELF}
+          emptyFiltered={<p>No titles match</p>}
+          emptyUnfiltered={<p>Nothing synced yet</p>}
+        />
+      </LibraryFilters>,
+    );
+
+    expect(toggle()).toHaveAttribute("aria-pressed", "true");
+    expect(visibleIds()).toEqual([1, 2, 3, 4, 6]);
+  });
+
+  it("narrows alongside a source chip rather than replacing it", async () => {
+    setupShelf({ status: "", source: "tapas" });
+    await userEvent.click(toggle());
+    // On Tapas: 3, 4 and 6 — none of which is paused everywhere.
+    expect(visibleIds()).toEqual([3, 4, 6]);
+  });
+
+  it("shows the filtered empty state when it hides the last title", async () => {
+    render(
+      <LibraryFilters initial={{ status: "", source: "", sort: DEFAULT_SORT }}>
+        <HiatusFilter />
+        <SourceFilter sources={SOURCES} />
+        <LibraryGrid
+          entries={[row(9, "reading", ["webtoon"], "Title 9", null, [true])]}
+          emptyFiltered={<p>No titles match</p>}
+          emptyUnfiltered={<p>Nothing synced yet</p>}
+        />
+      </LibraryFilters>,
+    );
+
+    await userEvent.click(toggle());
+    // "your filters hid it", not "nothing synced yet" — the shelf is not empty.
+    expect(screen.getByText("No titles match")).toBeInTheDocument();
   });
 });

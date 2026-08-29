@@ -47,7 +47,7 @@ export async function getLibrary(filters: LibraryFilters = {}) {
         mal_media_kind, num_chapters, num_volumes, mal_status
       ),
       entry_sources (
-        id, url, chapters_read, is_primary, is_official, is_paid, notes,
+        id, url, chapters_read, is_primary, is_official, is_paid, is_hiatus, notes,
         sources ( id, slug, name, logo_url, owner_id )
       )
     `,
@@ -112,7 +112,7 @@ export async function getEntry(entryId: number) {
         mal_media_kind, num_chapters, num_volumes, mal_status
       ),
       entry_sources (
-        id, url, chapters_read, is_primary, is_official, is_paid, notes,
+        id, url, chapters_read, is_primary, is_official, is_paid, is_hiatus, notes,
         sources ( id, slug, name, logo_url, base_url, owner_id )
       )
     `,

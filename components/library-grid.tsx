@@ -53,13 +53,22 @@ import type { Source } from "@/lib/data/rank-sources";
  * The chips do NOT narrow search results — see LibraryGrid below for why.
  */
 
-type Filters = { status: string; source: string };
+type Filters = { status: string; source: string; hideHiatus: boolean };
 type State = Filters & { sort: Sort };
+
+/**
+ * What the provider is seeded with. `hideHiatus` is optional because off is
+ * the default everywhere: a caller that has no stored preference — and every
+ * caller that predates the toggle — should show the whole shelf.
+ */
+type InitialState = Omit<State, "hideHiatus"> & { hideHiatus?: boolean };
 
 type LibraryFilterContext = State & {
   /** Chip values are "" for All; stored as the explicit `all` sentinel. */
   setStatus: (value: string) => void;
   setSource: (value: string) => void;
+  /** The hiatus toggle. Unlike the chips this is a boolean, not a sentinel. */
+  setHideHiatus: (value: boolean) => void;
   setSort: (value: Sort) => void;
   /**
    * What the user has typed, verbatim. The field renders this so the caret
@@ -106,7 +115,7 @@ export function LibraryFilters({
   entries = [],
   children,
 }: {
-  initial: State;
+  initial: InitialState;
   /** The shelf, shared with every consumer of the filters. */
   entries?: LibraryRow[];
   children: React.ReactNode;
@@ -118,7 +127,10 @@ export function LibraryFilters({
   // a fresh `initial` — so the chip would snap back to the page-load value the
   // moment the write finished. Here the client is the source of truth for the
   // rest of the session, and the server value is only the seed.
-  const [state, setState] = useState(initial);
+  const [state, setState] = useState<State>({
+    hideHiatus: false,
+    ...initial,
+  });
 
   // The query is plain state, deliberately not `useSearchParams()`. Reading it
   // from the URL would make every keystroke wait on a navigation before the
@@ -137,10 +149,13 @@ export function LibraryFilters({
 
     startTransition(async () => {
       // "" is the All chip; store it as the sentinel so "show everything"
-      // stays distinct from "never chose".
+      // stays distinct from "never chose". Booleans are stored as-is: the
+      // toggle has only two states, so it needs no third sentinel.
       await saveLibraryPrefs(
         Object.fromEntries(
-          Object.entries(patch).map(([k, v]) => [k, v || ALL]),
+          Object.entries(patch).map(([k, v]) =>
+            typeof v === "boolean" ? [k, v] : [k, v || ALL],
+          ),
         ),
       );
     });
@@ -161,6 +176,7 @@ export function LibraryFilters({
         ...state,
         setStatus: (status) => update({ status }),
         setSource: (source) => update({ source }),
+        setHideHiatus: (hideHiatus) => update({ hideHiatus }),
         setSort: updateSort,
         query,
         setQuery,
@@ -219,7 +235,8 @@ export function LibraryGrid({
   /** A search matched nothing. Falls back to `emptyUnfiltered` if omitted. */
   emptySearch?: React.ReactNode;
 }) {
-  const { status, source, sort, deferredQuery } = useLibraryFilters();
+  const { status, source, hideHiatus, sort, deferredQuery } =
+    useLibraryFilters();
   const term = deferredQuery.trim().toLowerCase();
   const searching = term !== "";
 
@@ -233,7 +250,7 @@ export function LibraryGrid({
     ? entries.filter((entry) => matchesTitle(entry, term))
     : // The same function the dice draws from, so the shelf and the roll can
       // never disagree about which titles a chip selection covers.
-      selectCandidates(entries, { status, source });
+      selectCandidates(entries, { status, source, hideHiatus });
 
   // Sorting applies to search results too. The chips are skipped during a
   // search because they would hide the match; an order hides nothing, and a
@@ -244,7 +261,7 @@ export function LibraryGrid({
     // While searching the chips are not applied, so a miss is never "your
     // filters hid it" — it is simply not on the shelf.
     if (searching) return <>{emptySearch ?? emptyUnfiltered}</>;
-    return <>{status || source ? emptyFiltered : emptyUnfiltered}</>;
+    return <>{status || source || hideHiatus ? emptyFiltered : emptyUnfiltered}</>;
   }
 
   return (

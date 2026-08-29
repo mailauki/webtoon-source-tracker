@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { AppShell } from "@/components/app-shell";
+import { HiatusFilter } from "@/components/hiatus-filter";
 import { LibraryFilters, LibraryGrid } from "@/components/library-grid";
 import { MalSearchResults } from "@/components/mal-search-results";
 import { RandomPick } from "@/components/random-pick";
@@ -73,6 +74,9 @@ export default async function LibraryPage() {
   const activeStatus = resolveActiveChip(prefs?.status);
   const activeSource = resolveActiveChip(prefs?.source);
   const activeSort = resolveSort(prefs?.sort);
+  // Defaults to off: a title should never disappear from the shelf on a visit
+  // where the user did not ask for it.
+  const hideHiatus = prefs?.hide_hiatus ?? false;
 
   const [entries, statusCounts, sources, topSources] = await Promise.all([
     getLibrary(),
@@ -99,6 +103,7 @@ export default async function LibraryPage() {
       initial={{
         status: activeStatus,
         source: activeSource,
+        hideHiatus,
         sort: activeSort,
       }}
       entries={entries}
@@ -106,14 +111,17 @@ export default async function LibraryPage() {
       <AppShell
         searchable
         filters={
-          // Both live in the secondary row: the chips narrow the shelf, the
-          // menu orders what is left, and neither is much use without seeing
-          // the other.
-          <div className="flex items-center justify-between gap-2">
+          // All of these live in the secondary row: the chips narrow the
+          // shelf and the controls opposite act on what is left, and none is
+          // much use without seeing the others.
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <StatusFilter statuses={statusChips} />
-            {/* Both act on the shelf the chips have narrowed: one orders it,
-                the other picks out of it. */}
+            {/* All three act on the shelf the chips have narrowed: one hides
+                the paused titles, one orders what is left, and one picks out
+                of it. `flex-wrap` on the parent lets this group drop to its
+                own line rather than squeezing the status row on a phone. */}
             <div className="flex shrink-0 items-center gap-1.5">
+              <HiatusFilter />
               <RandomPick />
               <SortFilter />
             </div>

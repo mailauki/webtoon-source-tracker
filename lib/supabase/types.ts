@@ -45,6 +45,7 @@ export type Database = {
           created_at: string
           entry_id: number
           id: number
+          is_hiatus: boolean
           is_official: boolean
           is_paid: boolean
           is_primary: boolean
@@ -59,6 +60,7 @@ export type Database = {
           created_at?: string
           entry_id: number
           id?: never
+          is_hiatus?: boolean
           is_official?: boolean
           is_paid?: boolean
           is_primary?: boolean
@@ -73,6 +75,7 @@ export type Database = {
           created_at?: string
           entry_id?: number
           id?: never
+          is_hiatus?: boolean
           is_official?: boolean
           is_paid?: boolean
           is_primary?: boolean
@@ -108,6 +111,7 @@ export type Database = {
       }
       library_prefs: {
         Row: {
+          hide_hiatus: boolean
           sort: string | null
           source: string | null
           status: string | null
@@ -115,6 +119,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          hide_hiatus?: boolean
           sort?: string | null
           source?: string | null
           status?: string | null
@@ -122,6 +127,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          hide_hiatus?: boolean
           sort?: string | null
           source?: string | null
           status?: string | null

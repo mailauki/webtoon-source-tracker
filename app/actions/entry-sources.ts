@@ -32,6 +32,7 @@ const addSchema = z.object({
   isPrimary: z.coerce.boolean().optional(),
   isOfficial: z.coerce.boolean().optional(),
   isPaid: z.coerce.boolean().optional(),
+  isHiatus: z.coerce.boolean().optional(),
 });
 
 function readFlags(formData: FormData) {
@@ -39,6 +40,7 @@ function readFlags(formData: FormData) {
     isPrimary: formData.get("is_primary") === "on",
     isOfficial: formData.get("is_official") === "on",
     isPaid: formData.get("is_paid") === "on",
+    isHiatus: formData.get("is_hiatus") === "on",
   };
 }
 
@@ -82,8 +84,17 @@ export async function addEntrySource(
     return { error: parsed.error.issues[0].message };
   }
 
-  const { entryId, sourceId, url, chaptersRead, notes, isPrimary, isOfficial, isPaid } =
-    parsed.data;
+  const {
+    entryId,
+    sourceId,
+    url,
+    chaptersRead,
+    notes,
+    isPrimary,
+    isOfficial,
+    isPaid,
+    isHiatus,
+  } = parsed.data;
 
   const supabase = await createClient();
 
@@ -101,6 +112,7 @@ export async function addEntrySource(
     is_primary: isPrimary ?? false,
     is_official: isOfficial ?? true,
     is_paid: isPaid ?? false,
+    is_hiatus: isHiatus ?? false,
   });
 
   if (error) {
@@ -133,6 +145,7 @@ export async function updateEntrySource(
       isPrimary: z.coerce.boolean().optional(),
       isOfficial: z.coerce.boolean().optional(),
       isPaid: z.coerce.boolean().optional(),
+      isHiatus: z.coerce.boolean().optional(),
     })
     .safeParse({
       id: formData.get("id"),
@@ -147,8 +160,17 @@ export async function updateEntrySource(
     return { error: parsed.error.issues[0].message };
   }
 
-  const { id, entryId, url, chaptersRead, notes, isPrimary, isOfficial, isPaid } =
-    parsed.data;
+  const {
+    id,
+    entryId,
+    url,
+    chaptersRead,
+    notes,
+    isPrimary,
+    isOfficial,
+    isPaid,
+    isHiatus,
+  } = parsed.data;
 
   const supabase = await createClient();
 
@@ -163,6 +185,7 @@ export async function updateEntrySource(
       is_primary: isPrimary ?? false,
       is_official: isOfficial ?? true,
       is_paid: isPaid ?? false,
+      is_hiatus: isHiatus ?? false,
     })
     .eq("id", id);
 

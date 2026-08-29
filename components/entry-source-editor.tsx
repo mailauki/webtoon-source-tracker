@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { Crown, Lock, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Crown, Lock, PauseCircle, Pencil, Plus, Trash2, X } from "lucide-react";
 
 import {
   addEntrySource,
@@ -104,6 +104,11 @@ export function EntrySourceEditor({
                   {source.is_official === false ? (
                     <span className="text-[11px] text-muted-foreground">
                       Unofficial
+                    </span>
+                  ) : null}
+                  {source.is_hiatus ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                      <PauseCircle className="size-3" /> On hiatus
                     </span>
                   ) : null}
                 </div>
