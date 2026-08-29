@@ -32,8 +32,12 @@ vi.mock("sonner", () => ({
 
 import type { ProgressState } from "@/app/actions/progress";
 import { EntryCard } from "@/components/entry-card";
-import { addableSources, quickAddSource } from "@/components/entry-card-menu";
-import { submitStatus } from "@/components/entry-card-menu";
+import {
+  addableSources,
+  linkableSources,
+  nextStatus,
+  quickAddSource,
+} from "@/components/entry-card-menu";
 import type { LibraryRow } from "@/lib/data/entries";
 
 function row(overrides: Partial<LibraryRow> = {}): LibraryRow {
@@ -122,30 +126,35 @@ describe("entry card quick-access menu", () => {
     ).not.toHaveAttribute("aria-disabled", "true");
   });
 
-  it("marks the entry's current status as the checked one", async () => {
+  it("offers completing a title that is being read", async () => {
     const user = await openMenu();
-    await user.click(await screen.findByRole("menuitem", { name: /Status/ }));
-
-    expect(
-      await screen.findByRole("menuitemradio", { name: "Reading" }),
-    ).toBeChecked();
-    expect(
-      screen.getByRole("menuitemradio", { name: "Completed" }),
-    ).not.toBeChecked();
-  });
-
-  // Radix drives submenu selection off pointer geometry that jsdom does not
-  // compute, so `onSelect` never fires on a sub-item here — verified against a
-  // bare ContextMenuSub with no card around it. The submit path each radio item
-  // calls is covered by `submitStatus` instead; opening the submenu and
-  // clicking through it is checked by hand.
-  it("builds the status patch each radio item submits", async () => {
-    await submitStatus(row(), "completed");
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Mark as completed" }),
+    );
 
     expect(updateProgress).toHaveBeenCalledOnce();
     const formData = updateProgress.mock.calls[0][1];
     expect(formData.get("entry_id")).toBe("7");
     expect(formData.get("list_status")).toBe("completed");
+  });
+
+  it("offers re-reading a title that is already completed", async () => {
+    const user = await openMenu(row({ list_status: "completed" }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Mark as reading" }),
+    );
+
+    expect(updateProgress.mock.calls[0][1].get("list_status")).toBe("reading");
+  });
+
+  it("shows only one status move, not the full list", async () => {
+    await openMenu();
+
+    await screen.findByRole("menuitem", { name: "Mark as completed" });
+    expect(screen.queryByRole("menuitemradio")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: "Plan to read" }),
+    ).not.toBeInTheDocument();
   });
 
   it("surfaces a failed save as a toast instead of silently dropping it", async () => {
@@ -177,7 +186,7 @@ describe("entry card quick-access menu", () => {
   });
 });
 
-describe("sources submenu", () => {
+describe("source shortcuts", () => {
   it("offers every top source when the entry has none attached", () => {
     expect(addableSources([], TOP_SOURCES).map((s) => s.name)).toEqual([
       "Tapas",
@@ -211,5 +220,91 @@ describe("sources submenu", () => {
     expect(formData.get("entry_id")).toBe("7");
     expect(formData.get("source_id")).toBe("2");
     expect(formData.get("url")).toBeNull();
+  });
+});
+
+describe("go-to shortcuts", () => {
+  const withSource = (url: string | null) =>
+    row({
+      entry_sources: [
+        { id: 3, url, is_primary: true, sources: { id: 1, name: "Tapas" } },
+      ],
+    } as unknown as Partial<LibraryRow>);
+
+  it("always offers the in-app entry page", async () => {
+    await openMenu();
+
+    const link = await screen.findByRole("menuitem", { name: "Go to entry" });
+    expect(link).toHaveAttribute("href", "/entry/7");
+  });
+
+  it("links an attached source that has a url", async () => {
+    await openMenu(withSource("https://tapas.io/series/tog"));
+
+    const link = await screen.findByRole("menuitem", { name: "Go to Tapas" });
+    expect(link).toHaveAttribute("href", "https://tapas.io/series/tog");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  it("hides a source quick-added without a url", async () => {
+    await openMenu(withSource(null));
+
+    await screen.findByRole("menuitem", { name: "Go to entry" });
+    expect(
+      screen.queryByRole("menuitem", { name: "Go to Tapas" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps a url-less source reachable for editing", async () => {
+    await openMenu(withSource(null));
+
+    expect(
+      await screen.findByRole("menuitem", { name: "Edit Tapas" }),
+    ).toBeInTheDocument();
+  });
+
+  it("drops sources whose url is only whitespace", () => {
+    const attached = [
+      { id: 1, url: "   ", sources: { id: 1, name: "Tapas" } },
+      { id: 2, url: "https://x.test", sources: { id: 2, name: "Webtoon" } },
+    ] as unknown as LibraryRow["entry_sources"];
+
+    expect(linkableSources(attached).map((es) => es.id)).toEqual([2]);
+  });
+
+  it("drops an attachment whose source did not join", () => {
+    const attached = [
+      { id: 1, url: "https://x.test", sources: null },
+    ] as unknown as LibraryRow["entry_sources"];
+
+    expect(linkableSources(attached)).toEqual([]);
+  });
+});
+
+describe("nextStatus", () => {
+  it("moves a title being read to completed", () => {
+    expect(nextStatus("reading")).toEqual({
+      value: "completed",
+      label: "Mark as completed",
+    });
+  });
+
+  it("offers a re-read once completed", () => {
+    expect(nextStatus("completed")?.value).toBe("reading");
+  });
+
+  it.each(["on_hold", "dropped", "plan_to_read"])(
+    "resumes reading from %s",
+    (status) => {
+      expect(nextStatus(status)).toEqual({
+        value: "reading",
+        label: "Start reading",
+      });
+    },
+  );
+
+  it("offers nothing for a status it does not know", () => {
+    expect(nextStatus("something_else")).toBeNull();
   });
 });
