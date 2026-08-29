@@ -69,23 +69,14 @@ export default async function RootPage({ searchParams }: PageProps<"/">) {
     <div className="flex min-h-screen flex-col">
       <header className="flex items-center justify-between px-6 py-4">
         <div className="flex items-center gap-2">
-          {/* Both files bake in their own opaque background, so they are
-              swapped by theme rather than tinted — matching AppShell. */}
+          {/* One icon in both themes, matching AppShell. */}
           <Image
-            src="/wst-logo.png"
+            src="/icon-1024x1024.png"
             alt=""
             width={2048}
             height={2048}
             priority
-            className="size-8 rounded-md dark:hidden"
-          />
-          <Image
-            src="/wst-logo-dark.png"
-            alt=""
-            width={2048}
-            height={2048}
-            priority
-            className="hidden size-8 rounded-md dark:block"
+            className="size-8 rounded-md"
           />
           <span className="font-display text-lg font-bold tracking-tight">
             Source<span className="text-brand">Tracker</span>

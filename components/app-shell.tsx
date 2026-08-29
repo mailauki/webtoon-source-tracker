@@ -59,20 +59,12 @@ export async function AppShell({
 						    sr-only and visible, so the name never doubles up. */}
 						<Link href="/library" className="flex shrink-0 items-center gap-2">
 							<Image
-								src="/wst-logo.png"
+								src="/icon-1024x1024.png"
 								alt=""
 								width={2048}
 								height={2048}
 								priority
-								className="size-8 rounded-md dark:hidden"
-							/>
-							<Image
-								src="/wst-logo-dark.png"
-								alt=""
-								width={2048}
-								height={2048}
-								priority
-								className="hidden size-8 rounded-md dark:block"
+								className="size-8 rounded-md"
 							/>
 							<span className="font-display text-lg font-bold tracking-tight max-sm:sr-only">
 								Source<span className="text-brand">Tracker</span>
