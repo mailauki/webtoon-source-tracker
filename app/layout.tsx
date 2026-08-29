@@ -54,44 +54,16 @@ export const metadata: Metadata = {
     description: "Track which app or site you read each manga and webtoon on.",
   },
   icons: {
-    icon: [
-      "/wst-logo.png",
-      { url: "/wst-logo-dark.png", media: "(prefers-color-scheme: dark)" },
-    ],
-    // Android home-screen icons, picked by the launcher from these sizes.
-    // The dark entries must point at the *-dark files — pointing them at the
-    // light ones renders a valid-looking tag that quietly serves black-on-amber
-    // in dark mode.
+    icon: "/icon-1024x1024.png",
     shortcut: [
       { url: "/android-chrome-192x192.png", sizes: "192x192", type: "image/png" },
       { url: "/android-chrome-512x512.png", sizes: "512x512", type: "image/png" },
-      {
-        url: "/android-chrome-192x192-dark.png",
-        sizes: "192x192",
-        type: "image/png",
-        media: "(prefers-color-scheme: dark)",
-      },
-      {
-        url: "/android-chrome-512x512-dark.png",
-        sizes: "512x512",
-        type: "image/png",
-        media: "(prefers-color-scheme: dark)",
-      },
     ],
-    // No bare fallback string here: it would emit a fourth, media-less tag that
-    // always matches, competing with the light entry below.
     apple: [
       {
         url: "/apple-touch-icon.png",
         sizes: "180x180",
         type: "image/png",
-        media: "(prefers-color-scheme: light)",
-      },
-      {
-        url: "/apple-touch-icon-dark.png",
-        sizes: "180x180",
-        type: "image/png",
-        media: "(prefers-color-scheme: dark)",
       },
     ],
   },
