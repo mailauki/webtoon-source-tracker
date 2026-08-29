@@ -73,15 +73,11 @@ export function HeaderSearch() {
     // Overlays the nav. `inset-y-0 right-0` anchors it to the row, and the
     // max-width keeps it from swallowing the wordmark on narrow screens.
     //
-    // Below `sm` the field spans the whole row and lands on top of the logo
-    // tile, which is an amber rounded square while this is a pill — so its
-    // corners used to show through the gaps around the field as clipped
-    // slivers of amber. The strip carries its own opaque background there to
-    // cover the tile outright, rather than leaving a partly-hidden icon
-    // behind a shape that does not match it. The header's own ground is
-    // translucent (`bg-background/80`), so this has to be a solid
-    // `bg-background` — inheriting would let the tile show straight through.
-    <div className="absolute inset-y-0 right-0 z-10 flex w-full max-w-md items-center bg-background pl-2 sm:bg-transparent">
+    // The strip itself is transparent at every width: the header row's own
+    // left padding keeps the field clear of the logo tile below `sm`, so
+    // there is nothing to cover and the header's translucent ground carries
+    // straight through. Only the input is opaque — see its `bg-background`.
+    <div className="absolute inset-y-0 right-0 z-10 flex w-full max-w-md items-center">
       <label htmlFor={inputId} className="sr-only">
         Search titles
       </label>

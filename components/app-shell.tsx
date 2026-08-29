@@ -41,7 +41,7 @@ export async function AppShell({
     <div className="flex min-h-screen flex-col">
       <header className="fixed w-full top-0 z-40 border-b border-border bg-background/80 backdrop-blur px-4">
         {/* `relative` anchors the expanded search, which overlays the row. */}
-        <div className="relative h-[60px] mx-auto flex max-w-6xl items-center justify-between gap-4 py-3">
+        <div className="relative h-[60px] mx-auto flex max-w-6xl items-center justify-between gap-4 py-3 pl-2">
 					<div className="flex items-center gap-3 sm:gap-6">
 						{/* The logo always shows; the wordmark rejoins it once there is
 						    room. One icon serves both themes: it is an amber tile with
@@ -54,10 +54,9 @@ export async function AppShell({
 						    The wordmark returns at `sm`, alongside the nav labels. Note
 						    that the expanded search overlays from the right at up to
 						    max-w-md, so at exactly `sm` it can reach back over the
-						    wordmark; from `md` up the field clears it. Below `sm` it
-						    covers this icon — see HeaderSearch, which paints an opaque
-						    strip there so neither the tile nor the header showing through
-						    its transparent corners peeks around the field's pill.
+						    wordmark; from `md` up the field clears it. Below `sm` the
+						    row's `pl-2` keeps this icon clear of the field, so the
+						    search strip needs no background of its own to hide it.
 
 						    The image stays `alt=""` and the text carries the link's
 						    accessible name at every width — it only toggles between
