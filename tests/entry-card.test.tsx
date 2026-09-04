@@ -16,8 +16,8 @@ vi.mock("sonner", () => ({
 }));
 
 import { EntryCard } from "@/components/entry-card";
-import { readingLink } from "@/components/entry-card-menu";
 import type { LibraryRow } from "@/lib/data/entries";
+import { readingLink } from "@/lib/data/source-links";
 
 type Attachment = LibraryRow["entry_sources"][number];
 

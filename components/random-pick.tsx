@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { Dices } from "lucide-react";
+import { Dices, ExternalLink } from "lucide-react";
 import { useState } from "react";
 
 import { useLibraryFilters } from "@/components/library-grid";
@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { pickNext, selectCandidates } from "@/lib/data/pick-random";
+import { readingLink } from "@/lib/data/source-links";
 import type { LibraryRow } from "@/lib/data/entries";
 import { cn } from "@/lib/utils";
 
@@ -67,6 +68,11 @@ export function RandomPick() {
   // performing a choice it does not have.
   const disabled = candidates.length < 2;
 
+  // The same choice the card's read button makes — see readingLink — so the
+  // shelf and the dice never send you to different places for one title. Null
+  // when nothing attached to the pick carries a URL.
+  const readAt = picked ? readingLink(picked.entry_sources) : null;
+
   return (
     <>
       <button
@@ -106,12 +112,33 @@ export function RandomPick() {
             >
               Roll again
             </Button>
-            <Button
-              asChild
-              className="rounded-pill bg-brand font-bold text-brand-foreground hover:bg-brand/90"
-            >
-              <Link href={`/entry/${picked?.id}`}>Open</Link>
-            </Button>
+            {/* Grouped so the footer stays "re-roll on one side, act on the
+                other" with three buttons in it. Reversed on mobile for the
+                same reason the footer itself is: the primary action ends up
+                nearest the thumb. */}
+            <div className="flex flex-col-reverse gap-2 sm:flex-row">
+              {/* Where to actually read it. Offered only when a source carries
+                  a URL, on the same reasoning as the card's read button. */}
+              {readAt ? (
+                <Button asChild variant="outline" className="rounded-pill">
+                  <a
+                    href={readAt.url!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <ExternalLink />
+                    Read on {readAt.sources!.name}
+                  </a>
+                </Button>
+              ) : null}
+
+              <Button
+                asChild
+                className="rounded-pill bg-brand font-bold text-brand-foreground hover:bg-brand/90"
+              >
+                <Link href={`/entry/${picked?.id}`}>Open</Link>
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

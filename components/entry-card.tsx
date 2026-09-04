@@ -7,7 +7,6 @@ import { ExternalLink } from "lucide-react";
 
 import {
   EntryCardMenu,
-  readingLink,
   type SourceDialogRequest,
 } from "@/components/entry-card-menu";
 import { EntrySourceDialog } from "@/components/entry-source-dialog";
@@ -21,6 +20,7 @@ import type { LibraryRow } from "@/lib/data/entries";
 import { isOnHiatus } from "@/lib/data/pick-random";
 import type { RankedSource } from "@/lib/data/rank-sources";
 import type { Source } from "@/lib/data/rank-sources";
+import { readingLink } from "@/lib/data/source-links";
 
 const STATUS_LABELS: Record<string, string> = {
   reading: "Reading",

@@ -34,11 +34,19 @@ import { RandomPick } from "@/components/random-pick";
 import { DEFAULT_SORT } from "@/lib/data/library-prefs";
 import type { LibraryRow } from "@/lib/data/entries";
 
+/**
+ * An attachment: a bare slug where only the source chip cares, or the fuller
+ * shape where the read link does.
+ */
+type SourceSpec =
+  | string
+  | { slug: string; name?: string; url?: string; is_primary?: boolean };
+
 /** Only the fields the dice and its dialog actually read. */
 function row(
   id: number,
   list_status: string,
-  slugs: string[] = [],
+  sources: SourceSpec[] = [],
   title = `Title ${id}`,
 ): LibraryRow {
   return {
@@ -46,13 +54,18 @@ function row(
     list_status,
     num_chapters_read: 10,
     media_titles: { id, title, title_en: null, main_picture_url: null, num_chapters: 100 },
-    entry_sources: slugs.map((slug) => ({
-      id: `${id}-${slug}`,
-      is_primary: false,
-      is_paid: false,
-      is_official: true,
-      sources: { slug, name: slug },
-    })),
+    entry_sources: sources.map((spec) => {
+      const at = typeof spec === "string" ? { slug: spec } : spec;
+      return {
+        id: `${id}-${at.slug}`,
+        // Quick-add leaves this empty, which is the case with no read link.
+        url: at.url ?? null,
+        is_primary: at.is_primary ?? false,
+        is_paid: false,
+        is_official: true,
+        sources: { slug: at.slug, name: at.name ?? at.slug },
+      };
+    }),
   } as unknown as LibraryRow;
 }
 
@@ -199,5 +212,89 @@ describe("RandomPick", () => {
     setup({ status: "completed" });
 
     expect(roll()).toBeDisabled();
+  });
+});
+
+describe("the pick's read link", () => {
+  /** Pins the draw to the first candidate so the pick is known. */
+  function shelf(first: SourceSpec[]) {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    return {
+      entries: [
+        row(1, "reading", first, "Solo Leveling"),
+        row(2, "reading", [], "Omniscient Reader"),
+      ],
+      status: "reading",
+    };
+  }
+
+  const readLink = () => screen.queryByRole("link", { name: /^Read on/ });
+
+  it("offers the source the picked title is read at", async () => {
+    const user = userEvent.setup();
+    setup(
+      shelf([
+        { slug: "webtoon", name: "Webtoon", url: "https://webtoon.test/sl" },
+      ]),
+    );
+
+    await user.click(roll());
+
+    expect(dialogTitle()).toBe("Solo Leveling");
+    expect(readLink()).toHaveAttribute("href", "https://webtoon.test/sl");
+    expect(readLink()).toHaveAccessibleName("Read on Webtoon");
+  });
+
+  it("opens the reading link away from the app", async () => {
+    const user = userEvent.setup();
+    setup(shelf([{ slug: "webtoon", url: "https://webtoon.test/sl" }]));
+
+    await user.click(roll());
+
+    expect(readLink()).toHaveAttribute("target", "_blank");
+    expect(readLink()).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  // The same rule the card follows, so the two never point somewhere different
+  // for the same title.
+  it("points at the primary source rather than the first attached", async () => {
+    const user = userEvent.setup();
+    setup(
+      shelf([
+        { slug: "tapas", name: "Tapas", url: "https://tapas.test/sl" },
+        {
+          slug: "webtoon",
+          name: "Webtoon",
+          url: "https://webtoon.test/sl",
+          is_primary: true,
+        },
+      ]),
+    );
+
+    await user.click(roll());
+
+    expect(readLink()).toHaveAttribute("href", "https://webtoon.test/sl");
+  });
+
+  // A source quick-added from the card menu carries no URL, so there is
+  // nowhere to send anyone — the reveal already says as much.
+  it("offers no read link when no source has a url", async () => {
+    const user = userEvent.setup();
+    setup(shelf(["webtoon"]));
+
+    await user.click(roll());
+
+    expect(readLink()).not.toBeInTheDocument();
+    // The entry page is still one click away, which is where a URL gets added.
+    expect(screen.getByRole("link", { name: /open/i })).toBeInTheDocument();
+  });
+
+  it("offers no read link when the pick has no sources at all", async () => {
+    const user = userEvent.setup();
+    setup(shelf([]));
+
+    await user.click(roll());
+
+    expect(readLink()).not.toBeInTheDocument();
   });
 });

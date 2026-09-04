@@ -34,11 +34,11 @@ import type { ProgressState } from "@/app/actions/progress";
 import { EntryCard } from "@/components/entry-card";
 import {
   addableSources,
-  linkableSources,
   nextStatus,
   quickAddSource,
 } from "@/components/entry-card-menu";
 import type { LibraryRow } from "@/lib/data/entries";
+import { linkableSources } from "@/lib/data/source-links";
 
 function row(overrides: Partial<LibraryRow> = {}): LibraryRow {
   return {
