@@ -34,11 +34,11 @@ import type { ProgressState } from "@/app/actions/progress";
 import { EntryCard } from "@/components/entry-card";
 import {
   addableSources,
-  linkableSources,
   nextStatus,
   quickAddSource,
 } from "@/components/entry-card-menu";
 import type { LibraryRow } from "@/lib/data/entries";
+import { linkableSources } from "@/lib/data/source-links";
 
 function row(overrides: Partial<LibraryRow> = {}): LibraryRow {
   return {
@@ -66,7 +66,8 @@ async function openMenu(entry: LibraryRow = row()) {
   render(<EntryCard entry={entry} topSources={TOP_SOURCES} />);
   await user.pointer({
     keys: "[MouseRight]",
-    target: screen.getByRole("link", { name: /Tower of God/ }),
+    // Anchored: the card also carries a "Read … on …" link now.
+    target: screen.getByRole("link", { name: /^Tower of God/ }),
   });
   return user;
 }
