@@ -66,7 +66,8 @@ async function openMenu(entry: LibraryRow = row()) {
   render(<EntryCard entry={entry} topSources={TOP_SOURCES} />);
   await user.pointer({
     keys: "[MouseRight]",
-    target: screen.getByRole("link", { name: /Tower of God/ }),
+    // Anchored: the card also carries a "Read … on …" link now.
+    target: screen.getByRole("link", { name: /^Tower of God/ }),
   });
   return user;
 }

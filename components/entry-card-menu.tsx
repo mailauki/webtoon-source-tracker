@@ -101,6 +101,25 @@ export function linkableSources(
   return attached.filter((es) => Boolean(es.url?.trim()) && es.sources);
 }
 
+/**
+ * The one source a card's read button should open.
+ *
+ * Primary first — that is what the crown on the pill means, and picking
+ * anything else would make the badge and the button disagree about where this
+ * title is read. Falling back to the first linkable attachment keeps the
+ * button useful for the entries that never had a primary marked.
+ *
+ * Returns null when nothing is linkable, which is the same bar the menu's
+ * "Go to …" items clear: a quick-added source carries no URL, and a button
+ * that goes nowhere is worse than no button.
+ */
+export function readingLink(
+  attached: LibraryRow["entry_sources"],
+): LibraryRow["entry_sources"][number] | null {
+  const linkable = linkableSources(attached);
+  return linkable.find((es) => es.is_primary) ?? linkable[0] ?? null;
+}
+
 export type SourceDialogRequest =
   { mode: "add" } | { mode: "edit"; entrySourceId: number };
 
