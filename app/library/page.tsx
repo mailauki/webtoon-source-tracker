@@ -110,7 +110,7 @@ export default async function LibraryPage() {
     >
       <AppShell
         searchable
-        filters={
+        secondaryRow={
           // All of these live in the secondary row: the chips narrow the
           // shelf and the controls opposite act on what is left, and none is
           // much use without seeing the others.

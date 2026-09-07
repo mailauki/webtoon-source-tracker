@@ -3,8 +3,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function EntryLoading() {
   return (
     <div className="grid gap-8">
-      <Skeleton className="h-4 w-28" />
-
       <div className="grid gap-6 sm:grid-cols-[160px_1fr]">
         <Skeleton className="aspect-[1/2] w-full max-w-[160px] rounded-md" />
         <div className="grid content-start gap-3">

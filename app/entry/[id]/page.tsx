@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ExternalLink } from "lucide-react";
+import { ArrowLeft, ExternalLink } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { EntrySourceEditor } from "@/components/entry-source-editor";
@@ -48,15 +48,23 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
       : null;
 
   return (
-    <AppShell>
-      <div className="grid gap-8">
+    <AppShell
+      secondaryRow={
+        // Sticky under the header, like the library's status chips: the way
+        // back stays one tap away however far down the page the reader is.
+        // The row paints nothing of its own, so the link carries the same
+        // translucent pill the chips do rather than sitting over the content
+        // scrolling beneath it.
         <Link
           href="/library"
-          className="text-sm text-muted-foreground underline-offset-4 hover:underline"
+          className="inline-flex items-center gap-1 rounded-pill border border-border bg-background/60 px-3 py-1 text-xs font-semibold text-muted-foreground backdrop-blur transition-colors hover:text-foreground"
         >
-          ← Back to library
+          <ArrowLeft className="size-3.5" />
+          Back to library
         </Link>
-
+      }
+    >
+      <div className="grid gap-8">
         <div className="grid gap-6 sm:grid-cols-[160px_1fr]">
           <div className="relative aspect-[1/2] w-full max-w-[160px] overflow-hidden rounded-md bg-muted">
             {title.main_picture_url ? (
