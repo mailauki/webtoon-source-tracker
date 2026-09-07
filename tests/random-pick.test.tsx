@@ -42,16 +42,21 @@ type SourceSpec =
   | string
   | { slug: string; name?: string; url?: string; is_primary?: boolean };
 
+/** Fixture clock, so `daysAgo` in a row reads as "touched N days ago". */
+const NOW = new Date("2026-03-01T00:00:00Z").getTime();
+
 /** Only the fields the dice and its dialog actually read. */
 function row(
   id: number,
   list_status: string,
   sources: SourceSpec[] = [],
   title = `Title ${id}`,
+  daysAgo = 1,
 ): LibraryRow {
   return {
     id,
     list_status,
+    mal_updated_at: new Date(NOW - daysAgo * 86_400_000).toISOString(),
     num_chapters_read: 10,
     media_titles: { id, title, title_en: null, main_picture_url: null, num_chapters: 100 },
     entry_sources: sources.map((spec) => {
@@ -75,10 +80,15 @@ const ROWS = [
   row(3, "completed", ["tapas"], "Lore Olympus"),
 ];
 
-function setup({ entries = ROWS, status = "", source = "" } = {}) {
+function setup({
+  entries = ROWS,
+  status = "",
+  source = "",
+  hideHiatus = false,
+} = {}) {
   return render(
     <LibraryFilters
-      initial={{ status, source, sort: DEFAULT_SORT }}
+      initial={{ status, source, hideHiatus, sort: DEFAULT_SORT }}
       entries={entries}
     >
       {/* The query has no seed — it is typed, so the field has to be here. */}
@@ -97,7 +107,10 @@ async function search(q: string) {
   );
 }
 
-const roll = () => screen.getByRole("button", { name: /pick something to read/i });
+const roll = () => screen.getByRole("button", { name: /surprise me/i });
+const neglected = () =>
+  screen.getByRole("button", { name: /haven't read in a while/i });
+const planPick = () => screen.getByRole("button", { name: /from plan to read/i });
 const dialogTitle = () =>
   within(screen.getByRole("dialog")).getByTestId("picked-title").textContent;
 
@@ -196,7 +209,7 @@ describe("RandomPick", () => {
     await search("solo");
 
     expect(
-      screen.queryByRole("button", { name: /pick something to read/i }),
+      screen.queryByRole("button", { name: /surprise me/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -296,5 +309,179 @@ describe("the pick's read link", () => {
     await user.click(roll());
 
     expect(readLink()).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * The two shortcut modes. Both answer a question the chips cannot express, so
+ * both must reach past whatever the chips currently say.
+ */
+describe("the mode buttons", () => {
+  // Five is the floor on the neglected slice, so a shelf this size makes
+  // every parked title eligible and the assertions are about status, not the
+  // slice — which pick-random.test.ts covers directly.
+  const SHELF = [
+    row(1, "reading", [], "Solo Leveling", 90),
+    row(2, "on_hold", [], "Omniscient Reader", 60),
+    row(3, "completed", [], "Lore Olympus", 30),
+    row(4, "plan_to_read", [], "Tower of God", 10),
+    row(5, "plan_to_read", [], "Bastard", 5),
+  ];
+
+  it("draws only from plan-to-read titles", async () => {
+    const user = userEvent.setup();
+    setup({ entries: SHELF });
+
+    await user.click(planPick());
+
+    expect(["Tower of God", "Bastard"]).toContain(dialogTitle());
+  });
+
+  it("draws only from titles that were started and parked", async () => {
+    const user = userEvent.setup();
+    setup({ entries: SHELF });
+
+    await user.click(neglected());
+
+    expect(["Solo Leveling", "Omniscient Reader"]).toContain(dialogTitle());
+  });
+
+  // The modes are shortcuts past the chips, not narrowings of them: asking
+  // for something off the plan pile while the Reading chip is up must still
+  // return a plan-to-read title rather than nothing.
+  it("reaches past the active chips", async () => {
+    const user = userEvent.setup();
+    setup({ entries: SHELF, status: "reading" });
+
+    await user.click(planPick());
+
+    expect(["Tower of God", "Bastard"]).toContain(dialogTitle());
+  });
+
+  // The plain roll is the one that still means "out of what I can see".
+  it("leaves the surprise roll bound to the chips", async () => {
+    const user = userEvent.setup();
+    setup({
+      entries: [...SHELF, row(6, "plan_to_read", [], "Noblesse", 2)],
+      status: "plan_to_read",
+    });
+
+    await user.click(roll());
+
+    expect(["Tower of God", "Bastard", "Noblesse"]).toContain(dialogTitle());
+  });
+
+  // Each button answers for its own pool. A shelf with nothing parked should
+  // disable the neglected button while the others stay live.
+  it("disables only the mode that has nothing to draw from", () => {
+    setup({
+      entries: [
+        row(1, "plan_to_read", [], "Tower of God", 10),
+        row(2, "plan_to_read", [], "Bastard", 5),
+      ],
+    });
+
+    expect(neglected()).toBeDisabled();
+    expect(planPick()).toBeEnabled();
+  });
+
+  it("disables a mode holding only one title", () => {
+    // One candidate can only ever return itself — the same reasoning the
+    // plain roll already follows.
+    setup({
+      entries: [
+        row(1, "plan_to_read", [], "Tower of God", 10),
+        row(2, "reading", [], "Solo Leveling", 90),
+        row(3, "reading", [], "Omniscient Reader", 60),
+      ],
+    });
+
+    expect(planPick()).toBeDisabled();
+  });
+
+  // Each mode is its own draw. Carrying the exclusions across would make a
+  // switch to a small pool find everything already seen and reset instantly,
+  // throwing away the never-repeat rule on the pool the user just asked for.
+  it("starts a fresh no-repeat cycle when the mode changes", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    setup({
+      entries: [
+        row(1, "reading", [], "Solo Leveling", 90),
+        row(2, "reading", [], "Omniscient Reader", 60),
+        row(3, "plan_to_read", [], "Tower of God", 10),
+        row(4, "plan_to_read", [], "Bastard", 5),
+      ],
+    });
+
+    // Exhaust the neglected pool, then switch. With `seen` carried over, the
+    // plan pool would be drawn from a set already holding ids 1 and 2 — the
+    // switch has to clear it.
+    await user.click(neglected());
+    await user.click(screen.getByRole("button", { name: /roll again/i }));
+    await user.keyboard("{Escape}");
+
+    await user.click(planPick());
+    const first = dialogTitle();
+    await user.click(screen.getByRole("button", { name: /roll again/i }));
+
+    expect(dialogTitle()).not.toBe(first);
+    expect(["Tower of God", "Bastard"]).toContain(first);
+  });
+
+  it("hides the whole banner during a search", async () => {
+    setup({ entries: SHELF });
+    await search("solo");
+
+    expect(
+      screen.queryByRole("button", { name: /from plan to read/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /haven't read in a while/i }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+// The toggle is the user saying paused titles are not worth their time. A die
+// that can still land on one contradicts the shelf it sits above.
+describe("the hiatus toggle", () => {
+  /** A row whose every source has paused. */
+  const paused = (id: number, title: string, list_status = "reading") =>
+    ({
+      ...row(id, list_status, [], title, 90),
+      entry_sources: [{ id: `${id}-w`, is_hiatus: true, sources: { slug: "webtoon" } }],
+    }) as unknown as LibraryRow;
+
+  it("keeps the surprise roll off paused titles", async () => {
+    const user = userEvent.setup();
+    setup({
+      hideHiatus: true,
+      status: "reading",
+      entries: [
+        paused(1, "Solo Leveling"),
+        row(2, "reading", [], "Omniscient Reader", 60),
+        row(3, "reading", [], "Tower of God", 30),
+      ],
+    });
+
+    await user.click(roll());
+
+    expect(dialogTitle()).not.toBe("Solo Leveling");
+  });
+
+  it("keeps the mode buttons off paused titles too", async () => {
+    const user = userEvent.setup();
+    setup({
+      hideHiatus: true,
+      entries: [
+        paused(1, "Solo Leveling", "plan_to_read"),
+        row(2, "plan_to_read", [], "Tower of God", 60),
+        row(3, "plan_to_read", [], "Bastard", 30),
+      ],
+    });
+
+    await user.click(planPick());
+
+    expect(dialogTitle()).not.toBe("Solo Leveling");
   });
 });

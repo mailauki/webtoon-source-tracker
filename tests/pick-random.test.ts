@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { LibraryRow } from "@/lib/data/entries";
-import { isOnHiatus, pickNext, selectCandidates } from "@/lib/data/pick-random";
+import {
+  isOnHiatus,
+  pickNext,
+  selectByMode,
+  selectCandidates,
+} from "@/lib/data/pick-random";
 
 /** Only the fields the candidate filter actually reads. */
 function row(
@@ -223,5 +228,159 @@ describe("selectCandidates — hiatus", () => {
         }),
       ),
     ).toEqual([2, 3]);
+  });
+});
+
+/**
+ * A row with a last-touched timestamp, for the neglected mode. Days are
+ * relative to NOW so the fixtures read as "touched N days ago".
+ */
+const NOW = new Date("2026-03-01T00:00:00Z").getTime();
+
+function agedRow(
+  id: number,
+  list_status: string,
+  daysAgo: number | null,
+  flags: boolean[] = [false],
+): LibraryRow {
+  return {
+    id,
+    list_status,
+    mal_updated_at:
+      daysAgo === null
+        ? null
+        : new Date(NOW - daysAgo * 86_400_000).toISOString(),
+    entry_sources: flags.map((is_hiatus, i) => ({
+      is_hiatus,
+      sources: { slug: `s${i}` },
+    })),
+  } as unknown as LibraryRow;
+}
+
+const NO_CHIPS = { status: "", source: "" };
+
+describe("selectByMode — surprise", () => {
+  it("is the chip selection, unchanged", () => {
+    // The plain roll still draws from exactly what the shelf is showing, so
+    // it must agree with selectCandidates on every input.
+    const filters = { status: "reading", source: "webtoon" };
+    expect(ids(selectByMode(ROWS, "surprise", filters))).toEqual(
+      ids(selectCandidates(ROWS, filters)),
+    );
+  });
+});
+
+describe("selectByMode — plan", () => {
+  const SHELF = [
+    agedRow(1, "plan_to_read", 5),
+    agedRow(2, "reading", 5),
+    agedRow(3, "plan_to_read", 5),
+    agedRow(4, "completed", 5),
+  ];
+
+  it("keeps only plan-to-read titles", () => {
+    expect(ids(selectByMode(SHELF, "plan", NO_CHIPS))).toEqual([1, 3]);
+  });
+
+  // The mode is a shortcut past the chips, not a narrowing of them: asking
+  // for something from the pile you have not started must not come back empty
+  // because the Reading chip happens to be active.
+  it("ignores the active chips", () => {
+    const filters = { status: "reading", source: "nowhere" };
+    expect(ids(selectByMode(SHELF, "plan", filters))).toEqual([1, 3]);
+  });
+
+  it("still honours the hiatus toggle", () => {
+    // Hiding paused titles is the user saying they are bad recommendations,
+    // which is true in every mode.
+    const shelf = [
+      agedRow(1, "plan_to_read", 5, [true]),
+      agedRow(2, "plan_to_read", 5, [false]),
+    ];
+    expect(
+      ids(selectByMode(shelf, "plan", { ...NO_CHIPS, hideHiatus: true })),
+    ).toEqual([2]);
+  });
+});
+
+describe("selectByMode — neglected", () => {
+  it("keeps only titles that were started and parked", () => {
+    // Completed and dropped are settled; nudging the user back to them is not
+    // what this button is for.
+    const shelf = [
+      agedRow(1, "reading", 100),
+      agedRow(2, "on_hold", 100),
+      agedRow(3, "completed", 100),
+      agedRow(4, "dropped", 100),
+      agedRow(5, "plan_to_read", 100),
+    ];
+    expect(ids(selectByMode(shelf, "neglected", NO_CHIPS))).toEqual([
+      1, 2,
+    ]);
+  });
+
+  it("ignores the active chips", () => {
+    const shelf = [agedRow(1, "reading", 100), agedRow(2, "on_hold", 100)];
+    const filters = { status: "completed", source: "nowhere" };
+    expect(ids(selectByMode(shelf, "neglected", filters))).toEqual([1, 2]);
+  });
+
+  // The slice is what makes this "in a while" rather than "anything you are
+  // reading": on a long shelf only the stalest third is eligible.
+  it("keeps the oldest third of a long shelf", () => {
+    const shelf = Array.from({ length: 30 }, (_, i) =>
+      agedRow(i + 1, "reading", i + 1),
+    );
+    const picked = ids(selectByMode(shelf, "neglected", NO_CHIPS));
+
+    expect(picked).toHaveLength(10);
+    // Highest daysAgo is the least recently touched, and ids ascend with it.
+    expect(picked.sort((a, b) => a - b)).toEqual([
+      21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
+    ]);
+  });
+
+  // A third of a small shelf is one or two titles, which is not a draw. The
+  // floor keeps the button useful for someone with a short list.
+  it("keeps at least five candidates on a short shelf", () => {
+    const shelf = Array.from({ length: 9 }, (_, i) =>
+      agedRow(i + 1, "reading", i + 1),
+    );
+    expect(selectByMode(shelf, "neglected", NO_CHIPS)).toHaveLength(5);
+  });
+
+  it("keeps everything when there is less than the floor", () => {
+    const shelf = [agedRow(1, "reading", 1), agedRow(2, "reading", 2)];
+    expect(ids(selectByMode(shelf, "neglected", NO_CHIPS))).toEqual([
+      2, 1,
+    ]);
+  });
+
+  // Never logged at all is the most neglected a title can be, so a null sorts
+  // as older than any real timestamp rather than falling to the bottom.
+  it("treats a title never logged as the most neglected", () => {
+    const shelf = [
+      agedRow(1, "reading", 1),
+      agedRow(2, "reading", 2),
+      agedRow(3, "reading", null),
+    ];
+    expect(ids(selectByMode(shelf, "neglected", NO_CHIPS))[0]).toBe(3);
+  });
+
+  it("still honours the hiatus toggle", () => {
+    const shelf = [
+      agedRow(1, "reading", 100, [true]),
+      agedRow(2, "reading", 90, [false]),
+    ];
+    expect(
+      ids(
+        selectByMode(shelf, "neglected", { ...NO_CHIPS, hideHiatus: true }),
+      ),
+    ).toEqual([2]);
+  });
+
+  it("returns nothing when no title is in progress", () => {
+    const shelf = [agedRow(1, "completed", 100), agedRow(2, "plan_to_read", 3)];
+    expect(selectByMode(shelf, "neglected", NO_CHIPS)).toEqual([]);
   });
 });

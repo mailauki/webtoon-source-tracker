@@ -116,13 +116,12 @@ export default async function LibraryPage() {
           // much use without seeing the others.
           <div className="flex flex-wrap items-center justify-between gap-2">
             <StatusFilter statuses={statusChips} />
-            {/* All three act on the shelf the chips have narrowed: one hides
-                the paused titles, one orders what is left, and one picks out
-                of it. `flex-wrap` on the parent lets this group drop to its
-                own line rather than squeezing the status row on a phone. */}
+            {/* Both act on the shelf the chips have narrowed: one hides the
+                paused titles and one orders what is left. `flex-wrap` on the
+                parent lets this group drop to its own line rather than
+                squeezing the status row on a phone. */}
             <div className="flex shrink-0 items-center gap-1.5">
               <HiatusFilter />
-              <RandomPick />
               <SortFilter />
             </div>
           </div>
@@ -148,6 +147,11 @@ export default async function LibraryPage() {
               stale={stale}
             />
           </div>
+
+          {/* Above the shelf rather than in the filter row: two of its three
+              questions reach past the chips, so it is not a filter control
+              and sitting among them would suggest it was. */}
+          <RandomPick />
 
           {connection.status === "needs_reauth" ? (
             <p className="rounded-md bg-alert/10 px-3 py-2 text-sm text-alert">
