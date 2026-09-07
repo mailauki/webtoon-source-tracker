@@ -107,3 +107,74 @@ export function pickNext(candidates: LibraryRow[], seen: Set<number>): Pick {
     reset: exhausted,
   };
 }
+
+/**
+ * Which question the user asked.
+ *
+ * "surprise" is the die over the shelf as the chips have left it. The other
+ * two are shortcuts: they answer a question the chips cannot express, so they
+ * define their own candidate set and ignore the chips entirely. Narrowing
+ * them by the chips instead would make "give me something from my plan pile"
+ * come back empty whenever the Reading chip happened to be active — a dead
+ * button for a reason the user never asked about.
+ */
+export type PickMode = "surprise" | "neglected" | "plan";
+
+/** Statuses that mean "started, then parked" — what `neglected` draws from. */
+const PARKED = new Set(["reading", "on_hold"]);
+
+/**
+ * How much of the stalest end of the shelf counts as "in a while", and the
+ * fewest titles that slice may contain.
+ *
+ * A relative slice rather than a fixed cutoff in days: "30 days untouched" is
+ * the whole shelf for someone who reads in bursts and none of it for someone
+ * who reads nightly, so the same number cannot serve both. The floor is what
+ * keeps the button working on a short list, where a third is one title and a
+ * draw of one is not a draw.
+ */
+const NEGLECTED_FRACTION = 1 / 3;
+const NEGLECTED_FLOOR = 5;
+
+/** Milliseconds since the epoch, with "never logged" sorting oldest. */
+function lastTouched(entry: LibraryRow): number {
+  const at = entry.mal_updated_at;
+  // A title never logged is the most neglected one there is, so it sorts
+  // ahead of every real timestamp rather than falling to the bottom.
+  return at ? new Date(at).getTime() : -Infinity;
+}
+
+/**
+ * The titles a given mode may draw from.
+ *
+ * `hideHiatus` applies to all three: a paused title is a poor recommendation
+ * whatever the question was, and the toggle is the user having said so.
+ *
+ * Ordering is by timestamp alone, so this needs no notion of "now" — the
+ * stalest end of the shelf is the stalest end whenever it is asked.
+ */
+export function selectByMode(
+  entries: LibraryRow[],
+  mode: PickMode,
+  filters: CandidateFilters,
+): LibraryRow[] {
+  if (mode === "surprise") return selectCandidates(entries, filters);
+
+  const { hideHiatus = false } = filters;
+  const shelf = hideHiatus
+    ? entries.filter((entry) => !isOnHiatus(entry))
+    : entries;
+
+  if (mode === "plan") {
+    return shelf.filter((entry) => entry.list_status === "plan_to_read");
+  }
+
+  const parked = shelf.filter((entry) => PARKED.has(entry.list_status));
+  const stalest = [...parked].sort((a, b) => lastTouched(a) - lastTouched(b));
+
+  const slice = Math.max(
+    NEGLECTED_FLOOR,
+    Math.floor(stalest.length * NEGLECTED_FRACTION),
+  );
+  return stalest.slice(0, slice);
+}

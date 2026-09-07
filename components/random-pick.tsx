@@ -16,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { pickNext, selectCandidates } from "@/lib/data/pick-random";
+import { pickNext, selectByMode, type PickMode } from "@/lib/data/pick-random";
 import { readingLink } from "@/lib/data/source-links";
 import type { LibraryRow } from "@/lib/data/entries";
 import { cn } from "@/lib/utils";
@@ -29,44 +29,87 @@ const STATUS_LABELS: Record<string, string> = {
   plan_to_read: "Plan to read",
 };
 
+/** What each button offers, and what the reveal calls the draw it came from. */
+const MODES: { mode: PickMode; label: string; drawnFrom: string }[] = [
+  {
+    mode: "surprise",
+    label: "Surprise me",
+    drawnFrom: "Drawn from the titles this view is showing.",
+  },
+  {
+    mode: "neglected",
+    label: "Haven't read in a while",
+    drawnFrom: "Drawn from the titles you have left sitting the longest.",
+  },
+  {
+    mode: "plan",
+    label: "From plan to read",
+    drawnFrom: "Drawn from the titles you have been meaning to start.",
+  },
+];
+
 /**
- * "Pick something to read" — a die over the shelf the chips are showing.
+ * "Not sure what to read?" — a small banner over the shelf.
  *
- * The chips are the filter. Narrowing to Reading + Webtoon and then rolling is
- * the whole feature; a second set of pickers inside the dialog would be the
- * same choice in two places, free to disagree with what is on screen.
+ * Three questions, not three filters. "Surprise me" is a die over the shelf as
+ * the chips have left it, so what it returns is always something the user can
+ * see. The other two answer questions the chips cannot express — how long a
+ * title has sat, and what was never started — so they reach past the chips to
+ * their own pool. Making them narrow within the chips instead would leave the
+ * plan-to-read button dead whenever the Reading chip was up, for a reason the
+ * user never asked about.
  *
- * Which titles are eligible is `selectCandidates`, the same function the grid
- * narrows with — so what the die can return is always exactly what the user
- * can see.
+ * Which titles each mode may return is `selectByMode`, next to the same
+ * `selectCandidates` the grid narrows with, so the shelf and the dice can
+ * never disagree about what "Reading + Webtoon" covers.
  */
 export function RandomPick() {
-  const { entries, status, source, deferredQuery } = useLibraryFilters();
+  const { entries, status, source, hideHiatus, deferredQuery } =
+    useLibraryFilters();
 
   const [picked, setPicked] = useState<LibraryRow | null>(null);
+  // Which mode produced the title on screen — the reveal names it, and
+  // "Roll again" has to draw from the same pool the first press did.
+  const [mode, setMode] = useState<PickMode>("surprise");
   // Which titles this run has already offered. Kept as ids rather than rows so
   // it stays valid across the re-renders that bring new row objects.
   const [seen, setSeen] = useState<Set<number>>(new Set());
 
-  const candidates = selectCandidates(entries, { status, source });
+  // `hideHiatus` rides along with the chips: the toggle is the user saying a
+  // paused title is not worth their time, which is as true of a recommendation
+  // as it is of the shelf.
+  const filters = { status, source, hideHiatus };
+  const pools = MODES.map((m) => ({
+    ...m,
+    candidates: selectByMode(entries, m.mode, filters),
+  }));
 
   // A search bypasses the chips and is a lookup of one known title, so there is
   // nothing for a die to decide — see lib/data/pick-random.ts.
   if (deferredQuery.trim() !== "") return null;
 
-  function roll() {
-    const { entry, reset } = pickNext(candidates, seen);
+  /**
+   * Draw from `next`, carrying `seen` only while the mode holds.
+   *
+   * Each mode is its own draw: carrying exclusions across a switch would make
+   * a small pool find everything already seen on its first press and reset
+   * immediately, losing the never-repeat rule on the pool just asked for.
+   */
+  function roll(next: PickMode) {
+    const pool = pools.find((p) => p.mode === next)!.candidates;
+    const carried = next === mode ? seen : new Set<number>();
+
+    const { entry, reset } = pickNext(pool, carried);
     if (!entry) return;
 
     // `pickNext` reports the restart but does not own `seen`; clearing it here
     // is what keeps the second cycle as repeat-free as the first.
-    setSeen(reset ? new Set([entry.id]) : new Set(seen).add(entry.id));
+    setSeen(reset ? new Set([entry.id]) : new Set(carried).add(entry.id));
+    setMode(next);
     setPicked(entry);
   }
 
-  // One candidate can only ever return itself, so the die says so rather than
-  // performing a choice it does not have.
-  const disabled = candidates.length < 2;
+  const active = MODES.find((m) => m.mode === mode)!;
 
   // The same choice the card's read button makes — see readingLink — so the
   // shelf and the dice never send you to different places for one title. Null
@@ -75,24 +118,57 @@ export function RandomPick() {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={roll}
-        disabled={disabled}
-        aria-label="Pick something to read"
-        title={
-          disabled
-            ? "Not enough titles in this view to pick from"
-            : `Pick something to read from ${candidates.length} titles`
-        }
-        className={cn(
-          "inline-flex shrink-0 items-center gap-1 rounded-pill border border-border bg-background/60 px-3 py-1 text-xs font-semibold text-muted-foreground backdrop-blur transition-colors hover:text-foreground",
-          disabled && "opacity-40 hover:text-muted-foreground",
-        )}
-      >
-        <Dices className="size-3.5" />
-        <span className="max-sm:sr-only">Pick for me</span>
-      </button>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-lg border border-border bg-card px-4 py-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <Dices className="size-5 shrink-0 text-brand" aria-hidden />
+          <div className="min-w-0">
+            <p className="font-display text-sm font-semibold">
+              Not sure what to read?
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Let the shelf decide for you.
+            </p>
+          </div>
+        </div>
+
+        {/* The primary leads and the two shortcuts follow it, so the common
+            case reads as one button and the other questions stay one press
+            away rather than behind a menu. Wraps to its own line on a phone,
+            which is why the group is a flex row of its own. */}
+        <div className="flex flex-wrap items-center gap-2">
+          {pools.map(({ mode: m, label, candidates }) => {
+            // One candidate can only ever return itself, so a mode with fewer
+            // than two says so rather than performing a choice it lacks.
+            const disabled = candidates.length < 2;
+            const primary = m === "surprise";
+
+            return (
+              <button
+                key={m}
+                type="button"
+                onClick={() => roll(m)}
+                disabled={disabled}
+                title={
+                  disabled
+                    ? "Not enough titles here to pick from"
+                    : `Pick from ${candidates.length} titles`
+                }
+                className={cn(
+                  "inline-flex shrink-0 items-center rounded-pill px-3 py-1.5 text-xs font-semibold transition-colors",
+                  primary
+                    ? "bg-brand font-bold text-brand-foreground hover:bg-brand/90"
+                    : "border border-border text-muted-foreground hover:text-foreground",
+                  disabled && "opacity-40",
+                  disabled && !primary && "hover:text-muted-foreground",
+                  disabled && primary && "hover:bg-brand",
+                )}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       <Dialog
         open={picked !== null}
@@ -101,13 +177,15 @@ export function RandomPick() {
         }}
       >
         <DialogContent className="sm:max-w-sm">
-          {picked ? <PickedTitle entry={picked} /> : null}
+          {picked ? (
+            <PickedTitle entry={picked} drawnFrom={active.drawnFrom} />
+          ) : null}
 
           <DialogFooter className="gap-2 sm:justify-between">
             <Button
               type="button"
               variant="outline"
-              onClick={roll}
+              onClick={() => roll(mode)}
               className="rounded-pill"
             >
               Roll again
@@ -147,7 +225,13 @@ export function RandomPick() {
 }
 
 /** The reveal: cover, title, where it is on the shelf, and where to read it. */
-function PickedTitle({ entry }: { entry: LibraryRow }) {
+function PickedTitle({
+  entry,
+  drawnFrom,
+}: {
+  entry: LibraryRow;
+  drawnFrom: string;
+}) {
   const title = entry.media_titles;
   const total = title.num_chapters;
 
@@ -160,9 +244,7 @@ function PickedTitle({ entry }: { entry: LibraryRow }) {
     <>
       <DialogHeader>
         <DialogTitle className="font-display">Tonight&rsquo;s pick</DialogTitle>
-        <DialogDescription>
-          Drawn from the titles this view is showing.
-        </DialogDescription>
+        <DialogDescription>{drawnFrom}</DialogDescription>
       </DialogHeader>
 
       <div className="flex gap-4">
