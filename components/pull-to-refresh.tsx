@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, RefreshCw } from "lucide-react";
 
@@ -51,17 +51,42 @@ export function PullToRefresh() {
   // release animates back. Kept as state because render reads it.
   const [dragging, setDragging] = useState(false);
   // The refresh is a transition, so `isRefreshing` tracks the real re-fetch
-  // rather than a guessed duration.
+  // rather than a guessed duration. `refreshRequest` counts the releases that
+  // asked for one; nothing reads the number. It exists to re-run the retract
+  // effect below, which otherwise only wakes when `isRefreshing` changes —
+  // and a refresh that settles before React ever commits it as pending
+  // changes nothing for that effect to see. Each request is a new number, so
+  // it fires on every pull without a flag anyone has to clear.
   const [isRefreshing, startRefresh] = useTransition();
+  const [refreshRequest, setRefreshRequest] = useState(0);
   // Where the chrome ends. The filter row wraps on a narrow screen, so this
   // is measured rather than assumed; 60px is the bare header until it is.
   const [chromeBottom, setChromeBottom] = useState(60);
 
   // Refs, not state: the touch handlers run on every frame of the gesture and
-  // must not re-subscribe or re-render to read these.
+  // must not re-subscribe or re-render to read these. The pull is mirrored
+  // into one because render needs it as state, while the handlers subscribe
+  // once and would otherwise read whatever it was when they did.
   const startY = useRef<number | null>(null);
   const pulling = useRef(false);
+  const pullRef = useRef(0);
   const refreshingRef = useRef(false);
+
+  const applyPull = useCallback((next: number) => {
+    pullRef.current = next;
+    setPull(next);
+  }, []);
+
+  // Called from a touch handler, never from a state updater. An updater runs
+  // during render, and React refuses to start a transition from there: the
+  // refresh went out untracked, `isRefreshing` never flipped, and the
+  // indicator stayed pinned open with every later gesture locked out behind
+  // the guard in onTouchStart.
+  const requestRefresh = useCallback(() => {
+    refreshingRef.current = true;
+    setRefreshRequest((n) => n + 1);
+    startRefresh(() => router.refresh());
+  }, [router]);
 
   useEffect(() => {
     const chrome = document.querySelector("[data-app-chrome]");
@@ -109,7 +134,7 @@ export function PullToRefresh() {
         pulling.current = false;
         startY.current = null;
         setDragging(false);
-        setPull(0);
+        applyPull(0);
         return;
       }
 
@@ -118,11 +143,11 @@ export function PullToRefresh() {
         pulling.current = false;
         startY.current = null;
         setDragging(false);
-        setPull(0);
+        applyPull(0);
         return;
       }
 
-      setPull(resistCurve(distance));
+      applyPull(resistCurve(distance));
     }
 
     function onTouchEnd() {
@@ -131,14 +156,14 @@ export function PullToRefresh() {
       startY.current = null;
       setDragging(false);
 
-      setPull((current) => {
-        if (current < THRESHOLD) return 0;
+      if (pullRef.current < THRESHOLD) {
+        applyPull(0);
+        return;
+      }
 
-        // Hold the indicator at the threshold while the route re-fetches.
-        refreshingRef.current = true;
-        startRefresh(() => router.refresh());
-        return THRESHOLD;
-      });
+      // Hold the indicator at the threshold while the route re-fetches.
+      applyPull(THRESHOLD);
+      requestRefresh();
     }
 
     // `passive` throughout: this never calls preventDefault, so declaring it
@@ -155,14 +180,17 @@ export function PullToRefresh() {
       window.removeEventListener("touchend", onTouchEnd);
       window.removeEventListener("touchcancel", onTouchEnd);
     };
-  }, [router]);
+  }, [applyPull, requestRefresh]);
 
   // Retract once the transition settles — the server content has arrived.
+  // `refreshRequest` is a dependency and not a value here: it is what makes
+  // this run for a refresh whose pending flag never changed, which would
+  // otherwise leave the indicator open for good.
   useEffect(() => {
     if (isRefreshing || !refreshingRef.current) return;
     refreshingRef.current = false;
-    setPull(0);
-  }, [isRefreshing]);
+    applyPull(0);
+  }, [refreshRequest, isRefreshing, applyPull]);
 
   const refreshing = isRefreshing;
   const active = pull > 0 || refreshing;

@@ -19,21 +19,26 @@ import { getProfile } from "@/lib/auth/dal";
  * already does so in its own body, and the DAL caches the call per request, so
  * gating here would be a second redundant check rather than the real one.
  *
- * `filters` is a slot for a secondary header row. The status chips need
- * per-status counts, which only the library page queries — so the shell
- * provides the row and the page fills it, rather than the shell fetching data
- * that two of its three pages would throw away.
+ * `secondaryRow` is a slot for a sticky row under the header. The library
+ * fills it with the status chips and the controls beside them — those need
+ * per-status counts, which only the library page queries, so the shell
+ * provides the row and the page fills it rather than fetching data that its
+ * other pages would throw away. The entry page fills it with the back link,
+ * which stays reachable the same way while the page scrolls.
+ *
+ * The row itself paints nothing: content scrolls under it, so whatever a page
+ * puts here carries its own translucent background (see StatusPill).
  *
  * `searchable` gates the search control for the same reason: it filters the
  * library shelf, which only /library renders.
  */
 export async function AppShell({
   children,
-  filters,
+  secondaryRow,
   searchable = false,
 }: {
   children: React.ReactNode;
-  filters?: React.ReactNode;
+  secondaryRow?: React.ReactNode;
   searchable?: boolean;
 }) {
   const profile = await getProfile();
@@ -123,9 +128,9 @@ export async function AppShell({
         </div>
       </header>
 			<div data-app-chrome className="sticky top-15 z-40">
-        {/* Secondary row, only on pages that supply filters. */}
-        {filters && (
-          <div className="mx-auto max-w-6xl px-4 py-2">{filters}</div>
+        {/* Secondary row, only on pages that supply one. */}
+        {secondaryRow && (
+          <div className="mx-auto max-w-6xl px-4 py-2">{secondaryRow}</div>
         )}
 			</div>
 

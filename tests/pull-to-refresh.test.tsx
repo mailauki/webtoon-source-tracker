@@ -175,6 +175,30 @@ describe("PullToRefresh", () => {
     expect(refresh).toHaveBeenCalledOnce();
   });
 
+  // The refresh used to be fired from inside a setPull updater, which runs
+  // during render — React refuses to start a transition there, so the pending
+  // flag never flipped, the retract effect that watched it never re-ran, and
+  // the indicator stayed open with the next gesture locked out behind it.
+  it("retracts once the refresh settles", () => {
+    render(<PullToRefresh />);
+    pull(0, THRESHOLD + 20);
+    release();
+
+    expect(screen.getByRole("status", { hidden: true })).toHaveStyle({
+      opacity: "0",
+    });
+  });
+
+  it("takes another pull once the first refresh is done", () => {
+    render(<PullToRefresh />);
+    pull(0, THRESHOLD + 20);
+    release();
+    pull(0, THRESHOLD + 20);
+    release();
+
+    expect(refresh).toHaveBeenCalledTimes(2);
+  });
+
   it("stays silent to assistive tech until it is actually refreshing", () => {
     render(<PullToRefresh />);
 
