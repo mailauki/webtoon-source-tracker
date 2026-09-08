@@ -86,3 +86,60 @@ export function hydrateCollection(
     items,
   };
 }
+
+/**
+ * A user's own collection as the index page needs it: the row, how many
+ * titles are in it, and enough covers to show what it holds.
+ *
+ * The covers are a preview, not the contents — the detail page is where the
+ * whole thing lives.
+ */
+export type CollectionSummary = {
+  id: number;
+  name: string;
+  description: string | null;
+  itemCount: number;
+  /** Cover URLs of the first few titles, in shelf order. Nulls dropped. */
+  covers: string[];
+};
+
+/** How many covers the index card shows. */
+export const SUMMARY_COVER_COUNT = 4;
+
+/**
+ * Reduces a collection to what its card on the index needs.
+ *
+ * Ordering matches hydrateCollection, so the covers here are the same titles,
+ * in the same order, as the first row of the detail page — a card that
+ * previewed a different four would read as a different collection.
+ */
+export function summariseCollection(
+  collection: RawCollection,
+): CollectionSummary {
+  const ordered = [...collection.collection_items].sort(
+    (a, b) => a.position - b.position || a.id - b.id,
+  );
+
+  return {
+    id: collection.id,
+    name: collection.name,
+    description: collection.description,
+    itemCount: ordered.length,
+    covers: ordered
+      .map((item) => item.media_titles.main_picture_url)
+      .filter((url): url is string => Boolean(url))
+      .slice(0, SUMMARY_COVER_COUNT),
+  };
+}
+
+/**
+ * The next position to write for a title appended to a collection.
+ *
+ * Positions are spaced by ten so a title can be slipped between two others by
+ * hand without renumbering the shelf. An empty collection starts at ten rather
+ * than zero, leaving room to insert something ahead of the first item.
+ */
+export function nextPosition(positions: number[]): number {
+  if (positions.length === 0) return 10;
+  return Math.max(...positions) + 10;
+}
