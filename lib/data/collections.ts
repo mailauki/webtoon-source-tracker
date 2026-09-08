@@ -3,7 +3,6 @@ import "server-only";
 import {
   hydrateCollection,
   type Collection,
-  type CollectionTarget,
   type RawCollection,
 } from "@/lib/data/collection-items";
 import { createClient } from "@/lib/supabase/server";
@@ -48,11 +47,7 @@ const COLLECTION_SELECT = `
   )
 `;
 
-export type {
-  Collection,
-  CollectionItem,
-  CollectionTarget,
-} from "@/lib/data/collection-items";
+export type { Collection, CollectionItem } from "@/lib/data/collection-items";
 
 /**
  * Catalog title id -> the viewer's own user_entries id for it.
@@ -136,113 +131,4 @@ export async function getCuratedCollection(
   if (!data) return null;
 
   return hydrateCollection(data as unknown as RawCollection, tracked);
-}
-
-/**
- * The viewer's own collections, each with its titles.
- *
- * `is("owner_id", null)` is inverted here — `not("owner_id", "is", null)` —
- * rather than filtering on the user's id: RLS already narrows this to rows the
- * caller owns, so asking for "the visible rows that have an owner" is the same
- * set, without restating the identity check the policy performs.
- *
- * Ordered by name. `sort_order` exists for the editorial running order of
- * /discover and every user row shares its default, so it would order nothing
- * here.
- */
-export async function getMyCollections(): Promise<Collection[]> {
-  const supabase = await createClient();
-
-  const [{ data, error }, tracked] = await Promise.all([
-    supabase
-      .from("collections")
-      .select(COLLECTION_SELECT)
-      .not("owner_id", "is", null)
-      .order("name"),
-    getTrackedEntries(),
-  ]);
-
-  if (error) throw new Error(`Failed to load your collections: ${error.message}`);
-
-  // Empty ones are kept, unlike the curated shelves: a collection you just
-  // made and have not filled is exactly the one you need to see.
-  return ((data ?? []) as unknown as RawCollection[]).map((row) =>
-    hydrateCollection(row, tracked),
-  );
-}
-
-/**
- * One of the viewer's own collections.
- *
- * Keyed on the surrogate id, not a slug — user rows have no slug at all
- * (collections_shape_ck), so there is nothing else to key on. RLS is what
- * makes a guessed id safe: it matches nothing rather than returning someone
- * else's collection, which the page turns into a 404.
- */
-export async function getMyCollection(id: number): Promise<Collection | null> {
-  const supabase = await createClient();
-
-  const [{ data, error }, tracked] = await Promise.all([
-    supabase
-      .from("collections")
-      .select(COLLECTION_SELECT)
-      .not("owner_id", "is", null)
-      .eq("id", id)
-      .maybeSingle(),
-    getTrackedEntries(),
-  ]);
-
-  if (error) throw new Error(`Failed to load collection: ${error.message}`);
-  if (!data) return null;
-
-  return hydrateCollection(data as unknown as RawCollection, tracked);
-}
-
-/**
- * Just the names and membership of the viewer's collections, for the
- * "add to collection" menu on a library card.
- *
- * Deliberately not `getMyCollections()`: the menu needs to know which
- * collections already hold this title so it can show a tick rather than an
- * option that would only ever fail the unique constraint, and that is one
- * narrow read instead of every collection's full catalog join.
- */
-export async function getCollectionTargets(
-  { withItemIds = false }: { withItemIds?: boolean } = {},
-): Promise<CollectionTarget[]> {
-  const supabase = await createClient();
-
-  // The entry page can remove as well as add, and removing needs the
-  // collection_items id. The library shelf only ever adds, so it does not ask
-  // for ids it would throw away.
-  const select = withItemIds
-    ? "id, name, collection_items ( id, title_id )"
-    : "id, name, collection_items ( title_id )";
-
-  const { data, error } = await supabase
-    .from("collections")
-    .select(select)
-    .not("owner_id", "is", null)
-    .order("name");
-
-  // These are a shortcut; losing them should not take the page down.
-  if (error) return [];
-
-  return (
-    (data ?? []) as unknown as {
-      id: number;
-      name: string;
-      collection_items: { id?: number; title_id: number }[];
-    }[]
-  ).map((row) => ({
-    id: row.id,
-    name: row.name,
-    titleIds: row.collection_items.map((item) => item.title_id),
-    items: withItemIds
-      ? row.collection_items.map((item) => ({
-          id: item.id!,
-          titleId: item.title_id,
-        }))
-      : undefined,
-  }));
 }

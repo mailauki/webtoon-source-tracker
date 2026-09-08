@@ -25,17 +25,6 @@ vi.mock("@/app/actions/entry-sources", () => ({
   removeEntrySource: vi.fn(async () => ({ message: "Source removed." })),
 }));
 
-// The menu now offers "add to collection" too, which reaches the same way.
-const { addToCollection } = vi.hoisted(() => ({
-  addToCollection: vi.fn<
-    (
-      prev: unknown,
-      formData: FormData,
-    ) => Promise<{ ok: boolean; message?: string; error?: string } | null>
-  >(async () => ({ ok: true, message: "Added to collection." })),
-}));
-vi.mock("@/app/actions/collections", () => ({ addToCollection }));
-
 const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }));
 vi.mock("sonner", () => ({
   toast: { error: toastError, success: vi.fn() },
@@ -58,8 +47,6 @@ function row(overrides: Partial<LibraryRow> = {}): LibraryRow {
     num_chapters_read: 41,
     entry_sources: [],
     media_titles: {
-      // The collection shortcuts send this, not the entry id.
-      id: 500,
       title: "Tower of God",
       num_chapters: 179,
       main_picture_url: null,
@@ -74,23 +61,9 @@ const TOP_SOURCES = [
   { id: 2, name: "Webtoon", count: 4 },
 ];
 
-const COLLECTIONS = [
-  { id: 11, name: "Comfort rereads", titleIds: [] },
-  { id: 12, name: "Already in this one", titleIds: [500] },
-];
-
-async function openMenu(
-  entry: LibraryRow = row(),
-  collections: { id: number; name: string; titleIds: number[] }[] = [],
-) {
+async function openMenu(entry: LibraryRow = row()) {
   const user = userEvent.setup();
-  render(
-    <EntryCard
-      entry={entry}
-      topSources={TOP_SOURCES}
-      collections={collections}
-    />,
-  );
+  render(<EntryCard entry={entry} topSources={TOP_SOURCES} />);
   await user.pointer({
     keys: "[MouseRight]",
     // Anchored: the card also carries a "Read … on …" link now.
@@ -103,7 +76,6 @@ afterEach(() => {
   cleanup();
   // `restoreMocks` restores spies but leaves vi.fn() call history intact.
   updateProgress.mockClear();
-  addToCollection.mockClear();
   toastError.mockClear();
 });
 
@@ -335,63 +307,5 @@ describe("nextStatus", () => {
 
   it("offers nothing for a status it does not know", () => {
     expect(nextStatus("something_else")).toBeNull();
-  });
-});
-
-describe("adding to a collection from the card menu", () => {
-  it("offers nothing when the viewer has no collections", async () => {
-    await openMenu();
-    await screen.findByRole("menu");
-
-    expect(
-      screen.queryByRole("menuitem", { name: /Comfort rereads/ }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("sends the catalog title id, not the entry id", async () => {
-    // collection_items points at media_titles, so a collection outlives the
-    // title leaving the library. Sending entry.id would target the wrong row.
-    const user = await openMenu(row(), COLLECTIONS);
-    await user.click(
-      await screen.findByRole("menuitem", { name: /Comfort rereads/ }),
-    );
-
-    expect(addToCollection).toHaveBeenCalledOnce();
-    const formData = addToCollection.mock.calls[0][1];
-    expect(formData.get("title_id")).toBe("500");
-    expect(formData.get("collection_id")).toBe("11");
-  });
-
-  it("disables a collection that already holds the title", async () => {
-    await openMenu(row(), COLLECTIONS);
-
-    expect(
-      await screen.findByRole("menuitem", { name: /Already in this one/ }),
-    ).toHaveAttribute("aria-disabled", "true");
-  });
-
-  it("still lists a collection that already holds the title", async () => {
-    // Dropping it would make "already in it" look like "no such collection".
-    await openMenu(row(), COLLECTIONS);
-
-    expect(
-      await screen.findByRole("menuitem", { name: /Already in this one/ }),
-    ).toBeInTheDocument();
-  });
-
-  it("surfaces a failure as a toast, since the menu has closed by then", async () => {
-    addToCollection.mockResolvedValueOnce({
-      ok: false,
-      error: "That title is already in this collection.",
-    });
-
-    const user = await openMenu(row(), COLLECTIONS);
-    await user.click(
-      await screen.findByRole("menuitem", { name: /Comfort rereads/ }),
-    );
-
-    expect(toastError).toHaveBeenCalledWith(
-      "That title is already in this collection.",
-    );
   });
 });

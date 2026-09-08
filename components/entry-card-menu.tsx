@@ -1,10 +1,9 @@
 "use client";
 
 import { useTransition } from "react";
-import { BookOpen, Check, ExternalLink, Layers, Pencil, Plus } from "lucide-react";
+import { BookOpen, Check, ExternalLink, Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
 
-import { addToCollection } from "@/app/actions/collections";
 import { addEntrySource } from "@/app/actions/entry-sources";
 import { updateProgress } from "@/app/actions/progress";
 import {
@@ -12,10 +11,6 @@ import {
   ContextMenuItem,
   ContextMenuSeparator,
 } from "@/components/ui/context-menu";
-import {
-  collectionsForTitle,
-  type CollectionTarget,
-} from "@/lib/data/collection-items";
 import type { LibraryRow } from "@/lib/data/entries";
 import type { RankedSource } from "@/lib/data/rank-sources";
 import { linkableSources } from "@/lib/data/source-links";
@@ -94,22 +89,6 @@ export function addableSources(
   return topSources.filter((s) => !attachedIds.has(s.id));
 }
 
-/**
- * Puts a title into one of the viewer's collections.
- *
- * Sends the catalog `title_id`, not the entry id: collection_items points at
- * media_titles so a collection outlives the title leaving the library.
- */
-export function submitAddToCollection(
-  entry: Pick<LibraryRow, "media_titles">,
-  collectionId: number,
-) {
-  const formData = new FormData();
-  formData.set("collection_id", String(collectionId));
-  formData.set("title_id", String(entry.media_titles.id));
-  return addToCollection(null, formData);
-}
-
 export type SourceDialogRequest =
   { mode: "add" } | { mode: "edit"; entrySourceId: number };
 
@@ -130,12 +109,10 @@ type ActionResult = { ok?: boolean; error?: string; message?: string } | null;
 export function EntryCardMenu({
   entry,
   topSources,
-  collections = [],
   onOpenDialog,
 }: {
   entry: LibraryRow;
   topSources: RankedSource[];
-  collections?: CollectionTarget[];
   onOpenDialog: (request: SourceDialogRequest) => void;
 }) {
   const [isPending, startTransition] = useTransition();
@@ -148,10 +125,6 @@ export function EntryCardMenu({
   const linkable = linkableSources(attached);
   const addable = addableSources(attached, topSources);
   const status = nextStatus(entry.list_status);
-  const collectionOptions = collectionsForTitle(
-    collections,
-    entry.media_titles.id,
-  );
 
   function run(action: () => Promise<ActionResult>) {
     startTransition(async () => {
@@ -237,26 +210,6 @@ export function EntryCardMenu({
         <Plus />
         Add source…
       </ContextMenuItem>
-
-      {/* Flat, like everything else here: Radix drives submenu selection off
-          pointer geometry jsdom does not compute, so a nested "Add to
-          collection ▸" would be untestable and awkward under a long-press.
-          A collection that already holds this title stays listed, ticked and
-          disabled — dropping it would make "already in it" and "no such
-          collection" look the same. */}
-      {collectionOptions.length > 0 ? <ContextMenuSeparator /> : null}
-      {collectionOptions.map((collection) => (
-        <ContextMenuItem
-          key={collection.id}
-          disabled={collection.has || isPending}
-          onSelect={() =>
-            run(() => submitAddToCollection(entry, collection.id))
-          }
-        >
-          {collection.has ? <Check /> : <Layers />}
-          {collection.name}
-        </ContextMenuItem>
-      ))}
     </ContextMenuContent>
   );
 }

@@ -15,7 +15,6 @@ import {
   getMalConnection,
   verifySession,
 } from "@/lib/auth/dal";
-import { getCollectionTargets } from "@/lib/data/collections";
 import { getLibrary, getStatusCounts } from "@/lib/data/entries";
 import { resolveActiveChip, resolveSort } from "@/lib/data/library-prefs";
 import { getSources, getTopSources } from "@/lib/data/sources";
@@ -79,16 +78,12 @@ export default async function LibraryPage() {
   // where the user did not ask for it.
   const hideHiatus = prefs?.hide_hiatus ?? false;
 
-  const [entries, statusCounts, sources, topSources, collections] =
-    await Promise.all([
-      getLibrary(),
-      getStatusCounts(),
-      getSources(),
-      getTopSources(),
-      // The card menu's "add to collection" shortcuts. Degrades to no
-      // shortcuts on failure rather than taking the shelf down.
-      getCollectionTargets(),
-    ]);
+  const [entries, statusCounts, sources, topSources] = await Promise.all([
+    getLibrary(),
+    getStatusCounts(),
+    getSources(),
+    getTopSources(),
+  ]);
   const stale = isStale(connection.last_synced_at);
 
   const statusChips = STATUS_CHIPS.map((chip) => ({
@@ -173,7 +168,6 @@ export default async function LibraryPage() {
             entries={entries}
             topSources={topSources}
             catalog={sources}
-            collections={collections}
             emptyFiltered={
               <EmptyState
                 title="No titles match"
