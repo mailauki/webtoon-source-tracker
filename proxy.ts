@@ -16,7 +16,13 @@ import type { NextRequest } from "next/server";
  * verifies the JWT and runs on every protected page and server action.
  */
 
-const PROTECTED_PREFIXES = ["/library", "/entry", "/settings"];
+const PROTECTED_PREFIXES = [
+  "/library",
+  "/entry",
+  "/settings",
+  "/discover",
+  "/collections",
+];
 const AUTH_PAGES = ["/auth/login", "/auth/signup"];
 
 function hasSessionCookie(request: NextRequest): boolean {

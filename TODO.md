@@ -106,6 +106,89 @@ Adding it means a second sync path (`/users/@me/animelist`, which uses
 `num_episodes_watched` rather than `num_chapters_read`), a media-type filter in
 the library, and making that outbound link type-aware.
 
+### Recommended titles — an automated "add these" collection
+
+Collections shipped with two shapes (curated and user-owned; see
+`supabase/migrations/20260908000000_collections.sql`). A third surface is
+obvious from there: a per-user set of titles they don't track yet, generated
+rather than chosen.
+
+It fits the schema — items already point at `media_titles` rather than
+`user_entries`, so a title nobody tracks is representable. It should **not** be
+a `collections` row.
+
+**Why it needs its own table.** `collection_items` is user intent: hand-picked,
+and never to be clobbered. A recommendation set is disposable and rebuilt
+wholesale, so sharing the table would mean every rebuild has to reason about
+which rows the user touched. The write paths differ too — `collection_items`
+goes through `private.collection_items_guard()` as the user, while
+recommendations are written by a server job with the admin client, so the guard
+would need a hole punched in it. And a rec carries columns an item has no
+business holding: a score, which library title it was derived from, when it was
+generated. `collections_shape_ck` would need a third shape for a row that is
+neither curated nor user-owned.
+
+Render it as a collection; store it as its own thing:
+
+```sql
+create table public.title_recommendations (
+  user_id         uuid   not null references public.profiles (id) on delete cascade,
+  title_id        bigint not null references public.media_titles (id) on delete cascade,
+  score           real   not null default 0,
+  -- The library title this was derived from: drives "because you read X", and
+  -- makes a bad recommendation debuggable.
+  source_title_id bigint references public.media_titles (id) on delete set null,
+  generated_at    timestamptz not null default now(),
+  primary key (user_id, title_id)
+);
+
+-- Survives rebuilds. The only durable row here; everything above can be
+-- truncated and regenerated.
+create table public.recommendation_dismissals (
+  user_id    uuid   not null references public.profiles (id) on delete cascade,
+  title_id   bigint not null references public.media_titles (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (user_id, title_id)
+);
+```
+
+Note `on delete cascade` to `media_titles` on both, where the rest of the
+schema uses `restrict`: a recommendation is disposable and must never be the
+thing blocking catalog cleanup. RLS is select-own on both plus insert/delete-own
+on dismissals — no user write policies on `title_recommendations`, the same
+shape `mal_connections` uses where the server writes and the user only reads.
+
+**Filter "already in my library" at read time, not at generation time.** A
+`not exists` against `user_entries` (and `recommendation_dismissals`) per query
+is cheap and always correct. Baking the exclusion into the generated set means a
+title sits in the recommendations until the next rebuild after being added.
+
+Two constraints that matter more than the schema:
+
+- **Supply.** Every path into `media_titles` today — `lib/sync/sync-list.ts`
+  and `app/actions/add-entry.ts` — runs through some user's MAL account, so the
+  catalog is currently a mirror of what users already track and "titles you
+  don't have" comes back nearly empty. Generating recommendations means
+  upserting catalog rows for titles nobody tracks. That is allowed (the catalog
+  is owned by nobody) but it breaks the current invariant that every
+  `media_titles` row has at least one `user_entries` row behind it: the catalog
+  starts growing on its own, and `on delete restrict` stops implying "nothing
+  here is orphaned". Eventually that wants a reaper for rows with no entries, no
+  collection items, and no live recommendations.
+- **Rate limits.** MAL signals over-quota with 403 and `lib/mal/client.ts`
+  deliberately does not retry it, so fanning out a per-library-title fetch on
+  page load is not viable. This has to be a batch job, which is the strongest
+  argument for persisting a generated set rather than computing on demand.
+
+For candidates, the cheapest real option is MAL's own data: `/manga/{id}`
+exposes recommendation and related-title fields that `getManga` does not
+currently request (it asks only for `LIST_FIELDS`) — confirm against the API
+docs before planning around it. Aggregate across the user's library, weight by
+their score and list status, drop anything tracked or dismissed.
+`/manga/ranking` is a reasonable cold-start fallback. Collaborative filtering
+over `user_entries` is the tempting third option and the wrong one until there
+is a real userbase — at one user it returns nothing.
+
 ### Guest demo mode
 
 A signed-out visitor currently sees the landing page and can go no further —

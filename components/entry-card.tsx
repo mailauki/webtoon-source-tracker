@@ -16,6 +16,7 @@ import {
   SourceBadge,
 } from "@/components/source-badge";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
+import type { CollectionTarget } from "@/lib/data/collection-items";
 import type { LibraryRow } from "@/lib/data/entries";
 import { isOnHiatus } from "@/lib/data/pick-random";
 import type { RankedSource } from "@/lib/data/rank-sources";
@@ -39,10 +40,12 @@ export function EntryCard({
   entry,
   topSources = [],
   catalog = [],
+  collections = [],
 }: {
   entry: LibraryRow;
   topSources?: RankedSource[];
   catalog?: Source[];
+  collections?: CollectionTarget[];
 }) {
   // The dialog lives outside <ContextMenu> — Radix unmounts menu content on
   // close and would take the dialog with it.
@@ -192,6 +195,7 @@ export function EntryCard({
       <EntryCardMenu
         entry={entry}
         topSources={topSources}
+        collections={collections}
         onOpenDialog={setDialog}
       />
 
