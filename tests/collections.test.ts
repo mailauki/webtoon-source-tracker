@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  collectionMembership,
   collectionsForTitle,
   hydrateCollection,
   type RawCollection,
@@ -153,5 +154,45 @@ describe("collectionsForTitle", () => {
 
   it("returns nothing when the viewer has no collections", () => {
     expect(collectionsForTitle([], 10)).toEqual([]);
+  });
+});
+
+describe("collectionMembership", () => {
+  const targets = [
+    {
+      id: 1,
+      name: "Comfort rereads",
+      titleIds: [10],
+      items: [{ id: 900, titleId: 10 }],
+    },
+    { id: 2, name: "To recommend", titleIds: [], items: [] },
+  ];
+
+  it("hands back the item id, which is what removing needs", () => {
+    expect(collectionMembership(targets, 10)).toEqual([
+      { id: 1, name: "Comfort rereads", itemId: 900 },
+      { id: 2, name: "To recommend", itemId: null },
+    ]);
+  });
+
+  it("lists every collection, not only the ones holding the title", () => {
+    // The section answers "where could this go" as well as "where is it".
+    expect(collectionMembership(targets, 999)).toHaveLength(2);
+    expect(collectionMembership(targets, 999).every((m) => m.itemId === null))
+      .toBe(true);
+  });
+
+  it("reports no membership when items were not requested", () => {
+    // The library shelf asks without item ids; nothing should claim to be
+    // removable on the strength of titleIds alone.
+    const withoutItems = [{ id: 1, name: "Comfort rereads", titleIds: [10] }];
+
+    expect(collectionMembership(withoutItems, 10)).toEqual([
+      { id: 1, name: "Comfort rereads", itemId: null },
+    ]);
+  });
+
+  it("returns nothing when the viewer has no collections", () => {
+    expect(collectionMembership([], 10)).toEqual([]);
   });
 });

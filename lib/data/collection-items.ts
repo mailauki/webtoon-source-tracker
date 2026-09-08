@@ -99,6 +99,14 @@ export type CollectionTarget = {
   id: number;
   name: string;
   titleIds: number[];
+  /**
+   * The item rows behind `titleIds`, when the caller needs to remove one.
+   *
+   * Optional because the library card's menu only ever adds, and asking for
+   * ids it would throw away would widen the query behind every card on the
+   * shelf. The entry page, which can remove, asks for them.
+   */
+  items?: { id: number; titleId: number }[];
 };
 
 /**
@@ -117,5 +125,29 @@ export function collectionsForTitle(
     id: target.id,
     name: target.name,
     has: target.titleIds.includes(titleId),
+  }));
+}
+
+/**
+ * The membership of one title across the viewer's collections, for the entry
+ * page's editor.
+ *
+ * Where `collectionsForTitle` answers "which of these can I add it to", this
+ * answers "which is it in, and by which item" — removing needs the
+ * collection_items id, which the menu never has to know because it only ever
+ * adds.
+ *
+ * Both halves come back in one list rather than two so the section can render
+ * a stable order: a collection does not jump position when the title goes
+ * into it.
+ */
+export function collectionMembership(
+  targets: CollectionTarget[],
+  titleId: number,
+): { id: number; name: string; itemId: number | null }[] {
+  return targets.map((target) => ({
+    id: target.id,
+    name: target.name,
+    itemId: target.items?.find((item) => item.titleId === titleId)?.id ?? null,
   }));
 }

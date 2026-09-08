@@ -207,27 +207,42 @@ export async function getMyCollection(id: number): Promise<Collection | null> {
  * option that would only ever fail the unique constraint, and that is one
  * narrow read instead of every collection's full catalog join.
  */
-export async function getCollectionTargets(): Promise<CollectionTarget[]> {
+export async function getCollectionTargets(
+  { withItemIds = false }: { withItemIds?: boolean } = {},
+): Promise<CollectionTarget[]> {
   const supabase = await createClient();
+
+  // The entry page can remove as well as add, and removing needs the
+  // collection_items id. The library shelf only ever adds, so it does not ask
+  // for ids it would throw away.
+  const select = withItemIds
+    ? "id, name, collection_items ( id, title_id )"
+    : "id, name, collection_items ( title_id )";
 
   const { data, error } = await supabase
     .from("collections")
-    .select("id, name, collection_items ( title_id )")
+    .select(select)
     .not("owner_id", "is", null)
     .order("name");
 
-  // The menu is a shortcut; losing it should not take the library down.
+  // These are a shortcut; losing them should not take the page down.
   if (error) return [];
 
   return (
     (data ?? []) as unknown as {
       id: number;
       name: string;
-      collection_items: { title_id: number }[];
+      collection_items: { id?: number; title_id: number }[];
     }[]
   ).map((row) => ({
     id: row.id,
     name: row.name,
     titleIds: row.collection_items.map((item) => item.title_id),
+    items: withItemIds
+      ? row.collection_items.map((item) => ({
+          id: item.id!,
+          titleId: item.title_id,
+        }))
+      : undefined,
   }));
 }

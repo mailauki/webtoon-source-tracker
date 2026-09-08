@@ -4,10 +4,12 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { EntryCollections } from "@/components/entry-collections";
 import { EntrySourceEditor } from "@/components/entry-source-editor";
 import { ProgressEditor } from "@/components/progress-editor";
 import { Badge } from "@/components/ui/badge";
 import { verifySession } from "@/lib/auth/dal";
+import { getCollectionTargets } from "@/lib/data/collections";
 import { getEntry } from "@/lib/data/entries";
 import { getSources } from "@/lib/data/sources";
 
@@ -34,7 +36,13 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
   const entryId = Number(id);
   if (!Number.isInteger(entryId) || entryId <= 0) notFound();
 
-  const [entry, catalog] = await Promise.all([getEntry(entryId), getSources()]);
+  const [entry, catalog, collections] = await Promise.all([
+    getEntry(entryId),
+    getSources(),
+    // withItemIds: this page can take a title back out of a collection, and
+    // removing needs the collection_items id.
+    getCollectionTargets({ withItemIds: true }),
+  ]);
 
   // RLS makes "does not exist" and "belongs to someone else" indistinguishable
   // here, which is what we want: both 404 rather than confirming existence.
@@ -156,6 +164,10 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
           sources={entry.entry_sources}
           catalog={catalog}
         />
+
+        {/* Below the sources: where you read a title is the point of the app,
+            and which lists you filed it under is the lighter question. */}
+        <EntryCollections titleId={title.id} collections={collections} />
       </div>
     </AppShell>
   );
