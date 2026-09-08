@@ -19,7 +19,7 @@ import type { Collection } from "@/lib/data/collection-items";
 export function CollectionShelf({ collection }: { collection: Collection }) {
   // The see-all page is keyed on the slug, which only curated rows carry. A
   // collection without one still renders — it just does not link anywhere.
-  const href = collection.slug ? `/collections/${collection.slug}` : null;
+  const href = collection.slug ? `/discover/${collection.slug}` : null;
 
   const heading = (
     <>

@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   hydrateCollection,
+  nextPosition,
+  summariseCollection,
+  SUMMARY_COVER_COUNT,
   type RawCollection,
   type RawCollectionItem,
 } from "@/lib/data/collection-items";
@@ -24,6 +27,22 @@ function item(
       mal_media_kind: "manhwa",
       num_chapters: null,
       mal_status: "currently_publishing",
+    },
+  };
+}
+
+/** `item`, but with artwork — the covers a summary previews. */
+function covered(
+  id: number,
+  position: number,
+  titleId = id * 100,
+): RawCollectionItem {
+  const row = item(id, position, titleId);
+  return {
+    ...row,
+    media_titles: {
+      ...row.media_titles,
+      main_picture_url: `https://example.test/${titleId}.jpg`,
     },
   };
 }
@@ -124,5 +143,63 @@ describe("hydrateCollection", () => {
     const result = hydrateCollection(collection([]), new Map());
 
     expect(result.items).toEqual([]);
+  });
+});
+
+describe("summariseCollection", () => {
+  it("counts every item, even beyond the covers it shows", () => {
+    const items = Array.from({ length: 7 }, (_, i) =>
+      covered(i + 1, (i + 1) * 10),
+    );
+    const result = summariseCollection(collection(items));
+
+    expect(result.itemCount).toBe(7);
+    expect(result.covers).toHaveLength(SUMMARY_COVER_COUNT);
+  });
+
+  it("previews the same titles the detail page shows first", () => {
+    // A card that previewed a different four would read as a different
+    // collection, so the ordering here has to match hydrateCollection's.
+    const rows = [covered(1, 30), covered(2, 10), covered(3, 20)];
+
+    const summary = summariseCollection(collection(rows));
+    const detail = hydrateCollection(collection(rows), new Map());
+
+    expect(summary.covers).toEqual(
+      detail.items.map((i) => i.media_titles.main_picture_url),
+    );
+  });
+
+  it("drops titles with no cover rather than leaving a gap", () => {
+    const result = summariseCollection(collection([covered(1, 10), item(2, 20)]));
+
+    expect(result.covers).toEqual(["https://example.test/100.jpg"]);
+    // The coverless title still counts — it is in the collection.
+    expect(result.itemCount).toBe(2);
+  });
+
+  it("handles an empty collection", () => {
+    const result = summariseCollection(collection([]));
+
+    expect(result).toMatchObject({ itemCount: 0, covers: [] });
+  });
+});
+
+describe("nextPosition", () => {
+  it("starts at ten, leaving room to insert ahead of the first item", () => {
+    expect(nextPosition([])).toBe(10);
+  });
+
+  it("appends past the end, spaced for manual insertion", () => {
+    expect(nextPosition([10, 20, 30])).toBe(40);
+  });
+
+  it("goes past the highest position, not the last one handed in", () => {
+    // The query that feeds this does not order, so it must not assume it.
+    expect(nextPosition([30, 10, 20])).toBe(40);
+  });
+
+  it("survives the duplicate positions a lost race can leave behind", () => {
+    expect(nextPosition([10, 10, 20])).toBe(30);
   });
 });

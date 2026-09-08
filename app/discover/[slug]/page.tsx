@@ -9,7 +9,7 @@ import { getCuratedCollection } from "@/lib/data/collections";
 
 export async function generateMetadata({
   params,
-}: PageProps<"/collections/[slug]">) {
+}: PageProps<"/discover/[slug]">) {
   const { slug } = await params;
   const collection = await getCuratedCollection(slug);
   return { title: collection ? collection.name : "Not found" };
@@ -23,7 +23,7 @@ export async function generateMetadata({
  */
 export default async function CollectionPage({
   params,
-}: PageProps<"/collections/[slug]">) {
+}: PageProps<"/discover/[slug]">) {
   await verifySession();
 
   const { slug } = await params;

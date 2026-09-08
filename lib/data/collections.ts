@@ -2,7 +2,9 @@ import "server-only";
 
 import {
   hydrateCollection,
+  summariseCollection,
   type Collection,
+  type CollectionSummary,
   type RawCollection,
 } from "@/lib/data/collection-items";
 import { createClient } from "@/lib/supabase/server";
@@ -47,7 +49,11 @@ const COLLECTION_SELECT = `
   )
 `;
 
-export type { Collection, CollectionItem } from "@/lib/data/collection-items";
+export type {
+  Collection,
+  CollectionItem,
+  CollectionSummary,
+} from "@/lib/data/collection-items";
 
 /**
  * Catalog title id -> the viewer's own user_entries id for it.
@@ -132,3 +138,88 @@ export async function getCuratedCollection(
 
   return hydrateCollection(data as unknown as RawCollection, tracked);
 }
+
+// ---------------------------------------------------------------------------
+// The viewer's own collections
+// ---------------------------------------------------------------------------
+//
+// Everything below reads user-owned rows: a non-null owner_id, which RLS
+// already narrows to the caller. The `not("owner_id", "is", null)` filters are
+// therefore about shape, not access — they keep curated rows off a page that
+// means "yours", the mirror of the `is("owner_id", null)` above.
+
+/**
+ * Every collection the viewer has made, newest first.
+ *
+ * Ordered by created_at rather than `sort_order`: that column is the editorial
+ * running order of /discover, and a user has no way to set it. Newest first
+ * means a collection just made is where it was left.
+ */
+export async function getMyCollections(): Promise<CollectionSummary[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("collections")
+    .select(COLLECTION_SELECT)
+    .not("owner_id", "is", null)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(`Failed to load your collections: ${error.message}`);
+
+  return ((data ?? []) as unknown as RawCollection[]).map(summariseCollection);
+}
+
+/**
+ * One of the viewer's own collections, with everything in it.
+ *
+ * Returns null when the id does not exist or belongs to someone else — RLS
+ * makes those indistinguishable, which is what we want: a wrong id and
+ * someone else's id both 404 rather than confirming existence. A curated
+ * collection reached by id 404s here too, for the same reason its page is
+ * under /discover: it is not the viewer's to edit.
+ */
+export async function getMyCollection(id: number): Promise<Collection | null> {
+  const supabase = await createClient();
+
+  const [{ data, error }, tracked] = await Promise.all([
+    supabase
+      .from("collections")
+      .select(COLLECTION_SELECT)
+      .not("owner_id", "is", null)
+      .eq("id", id)
+      .maybeSingle(),
+    getTrackedEntries(),
+  ]);
+
+  if (error) throw new Error(`Failed to load collection: ${error.message}`);
+  if (!data) return null;
+
+  return hydrateCollection(data as unknown as RawCollection, tracked);
+}
+
+/**
+ * The viewer's library, reduced to what the "add titles" picker needs.
+ *
+ * Deliberately not getLibrary(): that query carries every entry's sources and
+ * progress so the grid can filter on them, none of which a picker shows. This
+ * is the same rows, narrowed to a name and a cover.
+ */
+export async function getLibraryTitles() {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("user_entries")
+    .select(
+      `id, media_titles!inner ( id, title, main_picture_url )`,
+    )
+    .order("mal_updated_at", { ascending: false, nullsFirst: false });
+
+  if (error) throw new Error(`Failed to load your library: ${error.message}`);
+
+  return (data ?? []) as unknown as {
+    id: number;
+    media_titles: { id: number; title: string; main_picture_url: string | null };
+  }[];
+}
+
+export type LibraryTitle = Awaited<ReturnType<typeof getLibraryTitles>>[number];
