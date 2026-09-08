@@ -39,6 +39,102 @@ export type Database = {
   }
   public: {
     Tables: {
+      collection_items: {
+        Row: {
+          collection_id: number
+          created_at: string
+          id: number
+          note: string | null
+          owner_id: string | null
+          position: number
+          title_id: number
+        }
+        Insert: {
+          collection_id: number
+          created_at?: string
+          id?: never
+          note?: string | null
+          owner_id?: string | null
+          position?: number
+          title_id: number
+        }
+        Update: {
+          collection_id?: number
+          created_at?: string
+          id?: never
+          note?: string | null
+          owner_id?: string | null
+          position?: number
+          title_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "collection_items_collection_id_fkey"
+            columns: ["collection_id"]
+            isOneToOne: false
+            referencedRelation: "collections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "collection_items_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "collection_items_title_id_fkey"
+            columns: ["title_id"]
+            isOneToOne: false
+            referencedRelation: "media_titles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      collections: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: number
+          is_active: boolean
+          name: string
+          owner_id: string | null
+          slug: string | null
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: never
+          is_active?: boolean
+          name: string
+          owner_id?: string | null
+          slug?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: never
+          is_active?: boolean
+          name?: string
+          owner_id?: string | null
+          slug?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "collections_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       entry_sources: {
         Row: {
           chapters_read: number | null

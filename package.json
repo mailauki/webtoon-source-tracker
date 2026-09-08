@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "seed:demo": "node --experimental-strip-types --no-warnings scripts/seed-demo.ts"
+    "seed:demo": "node --experimental-strip-types --no-warnings scripts/seed-demo.ts",
+    "seed:collections": "node --experimental-strip-types --no-warnings scripts/seed-collections.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",
