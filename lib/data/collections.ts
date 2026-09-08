@@ -2,6 +2,7 @@ import "server-only";
 
 import {
   hydrateCollection,
+  type CollectionTarget,
   summariseCollection,
   type Collection,
   type CollectionSummary,
@@ -53,6 +54,7 @@ export type {
   Collection,
   CollectionItem,
   CollectionSummary,
+  CollectionTarget,
 } from "@/lib/data/collection-items";
 
 /**
@@ -223,3 +225,52 @@ export async function getLibraryTitles() {
 }
 
 export type LibraryTitle = Awaited<ReturnType<typeof getLibraryTitles>>[number];
+
+/**
+ * The viewer's collections, reduced to what the card menu and the entry page
+ * need to file a title.
+ *
+ * Deliberately not `getMyCollections()`: that carries each collection's cover
+ * preview for the index, none of which these surfaces show. This is the same
+ * rows narrowed to a name and its membership.
+ *
+ * `withItemIds` is opt-in because the entry page can remove as well as add,
+ * and removing needs the collection_items id. The library shelf only ever
+ * adds, so it does not pay for ids it would throw away on every card.
+ */
+export async function getCollectionTargets({
+  withItemIds = false,
+}: { withItemIds?: boolean } = {}): Promise<CollectionTarget[]> {
+  const supabase = await createClient();
+
+  const select = withItemIds
+    ? "id, name, collection_items ( id, title_id )"
+    : "id, name, collection_items ( title_id )";
+
+  const { data, error } = await supabase
+    .from("collections")
+    .select(select)
+    .not("owner_id", "is", null)
+    .order("name");
+
+  // These are a shortcut; losing them should not take the page down.
+  if (error) return [];
+
+  return (
+    (data ?? []) as unknown as {
+      id: number;
+      name: string;
+      collection_items: { id?: number; title_id: number }[];
+    }[]
+  ).map((row) => ({
+    id: row.id,
+    name: row.name,
+    titleIds: row.collection_items.map((item) => item.title_id),
+    items: withItemIds
+      ? row.collection_items.map((item) => ({
+          id: item.id!,
+          titleId: item.title_id,
+        }))
+      : undefined,
+  }));
+}

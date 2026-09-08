@@ -143,3 +143,67 @@ export function nextPosition(positions: number[]): number {
   if (positions.length === 0) return 10;
   return Math.max(...positions) + 10;
 }
+
+/**
+ * A collection reduced to what the two "file this title" surfaces need: the
+ * library card's menu and the entry page's section.
+ *
+ * Declared here rather than in `collections.ts` so client components can name
+ * the type without importing a `server-only` module — the type is erased at
+ * build time, but the test runner still follows the import at runtime.
+ */
+export type CollectionTarget = {
+  id: number;
+  name: string;
+  titleIds: number[];
+  /**
+   * The item rows behind `titleIds`, when the caller needs to remove one.
+   *
+   * Optional because the library card's menu only ever adds, and asking for
+   * ids it would throw away would widen the query sitting behind every card
+   * on the shelf. The entry page, which can remove, asks for them.
+   */
+  items?: { id: number; titleId: number }[];
+};
+
+/**
+ * The collections worth offering for one title, for the card menu.
+ *
+ * A collection that already holds it comes back as `has: true` rather than
+ * being dropped: the menu shows it ticked and disabled, so "is this filed
+ * anywhere" is answerable without opening each collection. Dropping it would
+ * make a collection that has the title and a collection that does not exist
+ * look identical.
+ */
+export function collectionsForTitle(
+  targets: CollectionTarget[],
+  titleId: number,
+): { id: number; name: string; has: boolean }[] {
+  return targets.map((target) => ({
+    id: target.id,
+    name: target.name,
+    has: target.titleIds.includes(titleId),
+  }));
+}
+
+/**
+ * The membership of one title across the viewer's collections, for the entry
+ * page's section.
+ *
+ * Where `collectionsForTitle` answers "which of these can I add it to", this
+ * answers "which is it in, and by which item" — removing needs the
+ * collection_items id, which the menu never has to know because it only adds.
+ *
+ * Every collection comes back, in or out, so the section can render a stable
+ * order: a collection does not jump position when the title goes into it.
+ */
+export function collectionMembership(
+  targets: CollectionTarget[],
+  titleId: number,
+): { id: number; name: string; itemId: number | null }[] {
+  return targets.map((target) => ({
+    id: target.id,
+    name: target.name,
+    itemId: target.items?.find((item) => item.titleId === titleId)?.id ?? null,
+  }));
+}
