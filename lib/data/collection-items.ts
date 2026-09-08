@@ -86,3 +86,36 @@ export function hydrateCollection(
     items,
   };
 }
+
+/**
+ * A collection as the library card's menu sees it: enough to name it and to
+ * know whether this title is already in it.
+ *
+ * Declared here rather than in `collections.ts` so client components can name
+ * the type without importing a `server-only` module — the type is erased at
+ * build time, but the test runner still follows the import at runtime.
+ */
+export type CollectionTarget = {
+  id: number;
+  name: string;
+  titleIds: number[];
+};
+
+/**
+ * The collections worth offering for one title.
+ *
+ * A collection that already holds it is returned as `has: true` rather than
+ * dropped: the menu shows it ticked and disabled, so the answer to "is this in
+ * my collections" is visible without opening each one. Dropping it would make
+ * a full collection and a missing collection look identical.
+ */
+export function collectionsForTitle(
+  targets: CollectionTarget[],
+  titleId: number,
+): { id: number; name: string; has: boolean }[] {
+  return targets.map((target) => ({
+    id: target.id,
+    name: target.name,
+    has: target.titleIds.includes(titleId),
+  }));
+}

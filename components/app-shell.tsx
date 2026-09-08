@@ -1,4 +1,4 @@
-import { Compass, LibraryBig, LogOut, Settings } from "lucide-react";
+import { Compass, Layers, LibraryBig, LogOut, Settings } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -106,6 +106,17 @@ export async function AppShell({
 								<Link href="/discover">
 									<Compass className="size-4 sm:size-3.5" />
 									<span className="max-sm:sr-only">Discover</span>
+								</Link>
+							</Button>
+							<Button
+								asChild
+								variant="ghost"
+								size="sm"
+								className="rounded-pill max-sm:size-9 max-sm:px-0"
+							>
+								<Link href="/collections">
+									<Layers className="size-4 sm:size-3.5" />
+									<span className="max-sm:sr-only">Collections</span>
 								</Link>
 							</Button>
 							<Button

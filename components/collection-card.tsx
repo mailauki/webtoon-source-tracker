@@ -4,9 +4,14 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useRef, useState } from "react";
-import { Check, Loader2, Plus } from "lucide-react";
+import { toast } from "sonner";
+import { Check, Loader2, Plus, X } from "lucide-react";
 
 import { addEntry, type AddEntryState } from "@/app/actions/add-entry";
+import {
+  removeFromCollection,
+  type CollectionState,
+} from "@/app/actions/collections";
 import { Button } from "@/components/ui/button";
 import type { CollectionItem } from "@/lib/data/collection-items";
 
@@ -19,11 +24,22 @@ import type { CollectionItem } from "@/lib/data/collection-items";
  * title lettered over the art — so a curated row reads as the same kind of
  * object as the library grid rather than as a separate widget.
  *
- * A Client Component only because of the add button. The cover and title would
+ * `removableFrom` swaps the button for a remove one. Inside a collection the
+ * viewer owns, taking a title out is the action that belongs on the card;
+ * adding it to the library is still reachable one tap away on its entry page.
+ * Curated shelves never pass it, so they keep the add button.
+ *
+ * A Client Component only because of that button. The cover and title would
  * render fine on the server; splitting them would mean two components sharing
  * one layout, for the sake of a card that is mostly a button.
  */
-export function CollectionCard({ item }: { item: CollectionItem }) {
+export function CollectionCard({
+  item,
+  removableFrom,
+}: {
+  item: CollectionItem;
+  removableFrom?: number;
+}) {
   const title = item.media_titles;
   const router = useRouter();
 
@@ -112,7 +128,9 @@ export function CollectionCard({ item }: { item: CollectionItem }) {
         </p>
       ) : null}
 
-      {tracked || added ? null : (
+      {removableFrom !== undefined ? (
+        <RemoveButton itemId={item.id} collectionId={removableFrom} />
+      ) : tracked || added ? null : (
         <form action={action}>
           <input type="hidden" name="mal_media_id" value={title.mal_media_id} />
           {/* Discovery adds a title to read later, never one in progress. */}
@@ -140,5 +158,64 @@ export function CollectionCard({ item }: { item: CollectionItem }) {
         </p>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Takes one title out of a collection.
+ *
+ * No confirmation: it removes a reference, the title stays in the library, and
+ * putting it back is the same two clicks it took to add. That is the line
+ * TODO(confirm-destructive) draws — a confirm belongs where the data cannot be
+ * rebuilt, and this can.
+ *
+ * The row disappears on the server refresh, so on success this only reports
+ * and steps aside; a failure has to say so, since nothing else will.
+ */
+function RemoveButton({
+  itemId,
+  collectionId,
+}: {
+  itemId: number;
+  collectionId: number;
+}) {
+  const router = useRouter();
+  const [state, action, pending] = useActionState<CollectionState, FormData>(
+    removeFromCollection,
+    null,
+  );
+  const handled = useRef(false);
+
+  useEffect(() => {
+    if (!state || handled.current) return;
+    handled.current = true;
+
+    if (state.ok) {
+      toast.success(state.message);
+      router.refresh();
+    } else {
+      toast.error(state.error);
+    }
+  }, [state, router]);
+
+  return (
+    <form action={action}>
+      <input type="hidden" name="item_id" value={itemId} />
+      <input type="hidden" name="collection_id" value={collectionId} />
+      <Button
+        type="submit"
+        size="sm"
+        variant="ghost"
+        disabled={pending}
+        className="w-full rounded-pill text-xs text-muted-foreground"
+      >
+        {pending ? (
+          <Loader2 className="size-3.5 animate-spin" />
+        ) : (
+          <X className="size-3.5" />
+        )}
+        Remove
+      </Button>
+    </form>
   );
 }
