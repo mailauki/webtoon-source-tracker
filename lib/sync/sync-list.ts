@@ -48,8 +48,11 @@ function chunk<T>(items: T[], size: number): T[][] {
  * every later sync, and why there is no display_name column and no read-only
  * class of tag: the conflict those would resolve cannot occur.
  *
- * The title_tags links ARE rewritten every sync, so a title newly given a
+ * The title_tags links ARE re-evaluated every sync, so a title newly given a
  * genre by MAL picks it up. Only the tag entity is frozen after creation.
+ * Re-evaluated, not blindly re-inserted: a link already on file for a title
+ * is left alone rather than duplicated (see the dedupe below and migration
+ * 20260909000002 for why a naive upsert doesn't do this on its own).
  *
  * Runs as the service role, which bypasses RLS — this needs no admin and no
  * policy of its own.
@@ -110,13 +113,49 @@ export async function syncGenres(
 
   if (links.length === 0) return;
 
-  for (const batch of chunk(links, BATCH_SIZE)) {
-    const { error } = await admin
+  // Dedupe against the curated rows that already exist, then insert only the
+  // missing links.
+  //
+  // This is NOT `.upsert({ onConflict: "title_id,tag_id" })`. PostgREST's
+  // on_conflict param only ever becomes `ON CONFLICT (columns)` — a bare
+  // column list with no predicate — so it can only target a full unique
+  // constraint on exactly those columns. It cannot express `WHERE owner_id
+  // is null`, so it cannot address title_tags_curated_uniq (see migration
+  // 20260909000002), and title_tags_uniq needs all three columns including
+  // owner_id, which every curated row leaves null and non-colliding (see the
+  // same migration for why that constraint alone doesn't dedupe curated
+  // rows). Confirmed against the actual client: @supabase/postgrest-js's
+  // upsert() does `url.searchParams.set('on_conflict', onConflict)` and nothing
+  // else — there is no options field for an index predicate. PostgREST itself
+  // has no way to accept one either (tracked upstream as
+  // PostgREST/postgrest#2123, still open). So there is no onConflict spelling
+  // that reaches the partial index; read-then-insert is what's left.
+  //
+  // The read is scoped to just the titles in this sync, not the whole table,
+  // and title_id is indexed (title_tags_title_idx), so this stays cheap even
+  // as the catalog grows.
+  const linkedTitleIds = [...new Set(links.map((link) => link.title_id))];
+  const existingLinks = new Set<string>();
+
+  for (const batch of chunk(linkedTitleIds, BATCH_SIZE)) {
+    const { data, error } = await admin
       .from("title_tags")
-      .upsert(batch, {
-        onConflict: "title_id,tag_id,owner_id",
-        ignoreDuplicates: true,
-      });
+      .select("title_id, tag_id")
+      .is("owner_id", null)
+      .in("title_id", batch);
+
+    if (error) throw new Error(`Genre link lookup failed: ${error.message}`);
+    for (const row of data ?? []) existingLinks.add(`${row.title_id}:${row.tag_id}`);
+  }
+
+  const newLinks = links.filter(
+    (link) => !existingLinks.has(`${link.title_id}:${link.tag_id}`),
+  );
+
+  if (newLinks.length === 0) return;
+
+  for (const batch of chunk(newLinks, BATCH_SIZE)) {
+    const { error } = await admin.from("title_tags").insert(batch);
     if (error) throw new Error(`Genre link failed: ${error.message}`);
   }
 }
