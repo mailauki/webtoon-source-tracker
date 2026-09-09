@@ -221,9 +221,9 @@ export async function addTitleToCurated(
     collection_id: parsed.data.collectionId,
     title_id: parsed.data.titleId,
     position: nextPosition((existing ?? []).map((row) => row.position)),
-    // Explicitly null: curated. The insert policy requires it, and a private
-    // user item is a separate action (addToCollection) that never sends one.
-    owner_id: null,
+    // owner_id is omitted on purpose: collection_items_guard derives it from
+    // the parent collection. Sending one would be ignored, and trusting one
+    // would be the hole the trigger exists to close.
   });
 
   if (error) {
@@ -295,10 +295,14 @@ export async function moveCuratedItem(
 
   const supabase = await createClient();
 
+  // .is("owner_id", null) matches collection_items_delete_curated /
+  // collection_items_update_own's boundary: a user's own item can never
+  // appear in `ordered`, so this can only ever reorder curated items.
   const { data: items, error: readError } = await supabase
     .from("collection_items")
     .select("id, position")
     .eq("collection_id", parsed.data.collectionId)
+    .is("owner_id", null)
     .order("position")
     .order("id");
 
@@ -306,11 +310,21 @@ export async function moveCuratedItem(
 
   const ordered = items ?? [];
   const index = ordered.findIndex((row) => row.id === parsed.data.itemId);
+
+  // itemId not found among this collection's curated items: either it
+  // belongs to someone's private collection (an admin also has one and
+  // guessed/reused an id) or it doesn't exist at all. Either way it is not a
+  // legitimate no-op like "already at the end" below, so it gets its own
+  // error rather than folding into the silent-null branch.
+  if (index === -1) {
+    return { error: "That title isn't in this collection." };
+  }
+
   const swapWith = parsed.data.direction === "up" ? index - 1 : index + 1;
 
   // Already at the end it is being moved toward: succeed silently rather than
   // erroring, so a double-click on the top item is a no-op and not a toast.
-  if (index === -1 || swapWith < 0 || swapWith >= ordered.length) {
+  if (swapWith < 0 || swapWith >= ordered.length) {
     return null;
   }
 
@@ -320,8 +334,16 @@ export async function moveCuratedItem(
   const b = ordered[swapWith];
 
   const [{ error: e1 }, { error: e2 }] = await Promise.all([
-    supabase.from("collection_items").update({ position: b.position }).eq("id", a.id),
-    supabase.from("collection_items").update({ position: a.position }).eq("id", b.id),
+    supabase
+      .from("collection_items")
+      .update({ position: b.position })
+      .eq("id", a.id)
+      .is("owner_id", null),
+    supabase
+      .from("collection_items")
+      .update({ position: a.position })
+      .eq("id", b.id)
+      .is("owner_id", null),
   ]);
 
   if (e1 || e2) return { error: (e1 ?? e2)!.message };
