@@ -1,5 +1,6 @@
 import "server-only";
 
+import { slugify } from "@/lib/data/tag-items";
 import { MalClient } from "@/lib/mal/client";
 import { getMangaList } from "@/lib/mal/endpoints";
 import type { MalListEntry } from "@/lib/mal/types";
@@ -35,6 +36,89 @@ function chunk<T>(items: T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
   return out;
+}
+
+/**
+ * Writes MAL's genres into the tag vocabulary.
+ *
+ * MAL seeds; the database owns. Tags are inserted with ignoreDuplicates on
+ * mal_genre_id — `on conflict do nothing`, never `do update` — so MAL can
+ * bring a tag into existence and can never modify one that already exists.
+ * That is what lets an admin rename "Girls Love" and have the new name survive
+ * every later sync, and why there is no display_name column and no read-only
+ * class of tag: the conflict those would resolve cannot occur.
+ *
+ * The title_tags links ARE rewritten every sync, so a title newly given a
+ * genre by MAL picks it up. Only the tag entity is frozen after creation.
+ *
+ * Runs as the service role, which bypasses RLS — this needs no admin and no
+ * policy of its own.
+ */
+export async function syncGenres(
+  admin: ReturnType<typeof createAdminClient>,
+  nodes: { id: number; genres?: { id: number; name: string }[] }[],
+  idMap: Map<number, number>,
+): Promise<void> {
+  // Deduplicate by MAL genre id: the same genre appears on most titles.
+  const genres = new Map<number, string>();
+  for (const node of nodes) {
+    for (const genre of node.genres ?? []) genres.set(genre.id, genre.name);
+  }
+
+  if (genres.size === 0) return;
+
+  const { error: tagError } = await admin.from("tags").upsert(
+    [...genres].map(([id, name]) => ({
+      mal_genre_id: id,
+      slug: slugify(name),
+      name,
+      kind: "genre" as const,
+    })),
+    { onConflict: "mal_genre_id", ignoreDuplicates: true },
+  );
+
+  if (tagError) throw new Error(`Genre upsert failed: ${tagError.message}`);
+
+  // Read back to map MAL genre ids to tag ids. Necessary because
+  // ignoreDuplicates means the upsert returns nothing for rows it skipped.
+  const { data: tagRows, error: readError } = await admin
+    .from("tags")
+    .select("id, mal_genre_id")
+    .in("mal_genre_id", [...genres.keys()]);
+
+  if (readError) throw new Error(`Genre lookup failed: ${readError.message}`);
+
+  const tagIds = new Map(
+    (tagRows ?? [])
+      .filter((row) => row.mal_genre_id !== null)
+      .map((row) => [row.mal_genre_id as number, row.id]),
+  );
+
+  const links = [];
+  for (const node of nodes) {
+    const titleId = idMap.get(node.id);
+    // No catalog row means the title upsert skipped it; a null title_id would
+    // violate the not-null constraint rather than degrade.
+    if (!titleId) continue;
+
+    for (const genre of node.genres ?? []) {
+      const tagId = tagIds.get(genre.id);
+      if (!tagId) continue;
+      links.push({ title_id: titleId, tag_id: tagId, owner_id: null });
+    }
+  }
+
+  if (links.length === 0) return;
+
+  for (const batch of chunk(links, BATCH_SIZE)) {
+    const { error } = await admin
+      .from("title_tags")
+      .upsert(batch, {
+        onConflict: "title_id,tag_id,owner_id",
+        ignoreDuplicates: true,
+      });
+    if (error) throw new Error(`Genre link failed: ${error.message}`);
+  }
 }
 
 export async function syncMalList(
@@ -152,6 +236,16 @@ export async function syncMalList(
 
     if (error) throw new Error(`Catalog lookup failed: ${error.message}`);
     for (const row of data ?? []) idMap.set(row.mal_media_id, row.id);
+  }
+
+  // Genres are catalog-level facts, so they are written with the catalog
+  // rather than per user. A failure here must not fail the sync: the user's
+  // progress is the point of this function, and a missing genre tag is
+  // cosmetic.
+  try {
+    await syncGenres(admin, collected.map((c) => c.node), idMap);
+  } catch (error) {
+    console.error("Genre sync failed:", error);
   }
 
   // --- 3. Upsert this user's entries --------------------------------------

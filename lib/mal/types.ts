@@ -54,6 +54,9 @@ export const malMangaNodeSchema = z.object({
   status: z.string().optional(),
   num_volumes: z.number().optional(),
   num_chapters: z.number().optional(),
+  genres: z
+    .array(z.object({ id: z.number(), name: z.string() }))
+    .optional(),
 });
 
 export const malListEntrySchema = z.object({

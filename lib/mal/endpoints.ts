@@ -15,7 +15,7 @@ import {
 
 /** Fields requested for list entries — enough to render a card without extra calls. */
 const LIST_FIELDS =
-  "list_status,alternative_titles,main_picture,num_chapters,num_volumes,media_type,status";
+  "list_status,alternative_titles,main_picture,num_chapters,num_volumes,media_type,status,genres";
 
 /** Search returns bare nodes, not the {node, list_status} pairs the list uses. */
 const searchResultSchema = z.object({ node: malMangaNodeSchema });
