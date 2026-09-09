@@ -7,6 +7,16 @@ function stubClient(
   options: {
     existingTags?: { id: number; mal_genre_id: number; slug: string; name: string }[];
     existingLinks?: { title_id: number; tag_id: number }[];
+    /**
+     * Makes an insert into `title_tags` fail with the given error code when
+     * one of its rows matches `titleId`. Lets a test force exactly one
+     * title's link write to hit a "someone else already inserted this" race
+     * (23505) or a genuine failure (any other code) without touching the
+     * others.
+     */
+    failInsertForTitleId?: number;
+    failInsertCode?: string;
+    failInsertMessage?: string;
   } = {},
 ) {
   const calls: { table: string; op: string; rows: unknown; opts?: unknown }[] = [];
@@ -25,6 +35,21 @@ function stubClient(
         },
         insert: (rows: unknown) => {
           calls.push({ table, op: "insert", rows });
+          if (
+            table === "title_tags" &&
+            options.failInsertForTitleId !== undefined &&
+            Array.isArray(rows) &&
+            rows.some(
+              (row: { title_id?: number }) => row.title_id === options.failInsertForTitleId,
+            )
+          ) {
+            return Promise.resolve({
+              error: {
+                code: options.failInsertCode ?? "23505",
+                message: options.failInsertMessage ?? "duplicate key value violates unique constraint",
+              },
+            });
+          }
           return Promise.resolve({ error: null });
         },
         select: () => {
@@ -184,5 +209,71 @@ describe("syncGenres", () => {
 
     const linkWrite = client.calls.find((c) => c.table === "title_tags");
     expect(linkWrite?.rows).toEqual([{ title_id: 101, tag_id: 8, owner_id: null }]);
+  });
+
+  it("tolerates a lost race (23505) on one title without failing the sync or other titles", async () => {
+    // Links are written per title, not in one big batch, precisely so a lost
+    // race on title 2 (someone else's concurrent sync inserted the same link
+    // first) can't abort a statement that also carries titles 1 and 3. A
+    // 23505 here means the row we wanted already exists — the desired end
+    // state holds — so it must be swallowed, not thrown, and titles 1 and 3
+    // must still get their links written.
+    const client = stubClient({
+      existingTags: [
+        { id: 7, mal_genre_id: 22, slug: "romance", name: "Romance" },
+        { id: 8, mal_genre_id: 23, slug: "comedy", name: "Comedy" },
+        { id: 9, mal_genre_id: 24, slug: "action", name: "Action" },
+      ],
+      failInsertForTitleId: 102,
+      failInsertCode: "23505",
+    });
+
+    await expect(
+      syncGenres(
+        client as never,
+        [
+          node(1, [{ id: 22, name: "Romance" }]),
+          node(2, [{ id: 23, name: "Comedy" }]),
+          node(3, [{ id: 24, name: "Action" }]),
+        ],
+        new Map([
+          [1, 101],
+          [2, 102],
+          [3, 103],
+        ]),
+      ),
+    ).resolves.toBeUndefined();
+
+    const linkWrites = client.calls.filter((c) => c.table === "title_tags" && c.op === "insert");
+    // One insert attempt per title — title 102's failed with 23505 but the
+    // other two still went through.
+    expect(linkWrites).toHaveLength(3);
+    expect(linkWrites.flatMap((c) => c.rows as { title_id: number }[])).toEqual(
+      expect.arrayContaining([
+        { title_id: 101, tag_id: 7, owner_id: null },
+        { title_id: 103, tag_id: 9, owner_id: null },
+      ]),
+    );
+  });
+
+  it("still propagates a non-23505 error from a link insert", async () => {
+    // Only 23505 (unique_violation) is a "someone else already did this"
+    // signal. Anything else — a dropped connection, a policy change, a
+    // constraint we don't expect — is a genuine failure and must still throw,
+    // or the try/catch at the syncMalList call site would swallow it in
+    // exactly the way this fix exists to stop doing for lost races.
+    const client = stubClient({
+      failInsertForTitleId: 101,
+      failInsertCode: "08006",
+      failInsertMessage: "connection failure",
+    });
+
+    await expect(
+      syncGenres(
+        client as never,
+        [node(1, [{ id: 22, name: "Romance" }])],
+        new Map([[1, 101]]),
+      ),
+    ).rejects.toThrow("connection failure");
   });
 });

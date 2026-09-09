@@ -154,9 +154,40 @@ export async function syncGenres(
 
   if (newLinks.length === 0) return;
 
-  for (const batch of chunk(newLinks, BATCH_SIZE)) {
-    const { error } = await admin.from("title_tags").insert(batch);
-    if (error) throw new Error(`Genre link failed: ${error.message}`);
+  // Write per title, not in one big batch. A single batched insert spanning
+  // many unrelated titles means one lost race — another sync inserting the
+  // same (title_id, tag_id) between our read and our write — aborts the
+  // WHOLE statement: Postgres rolls back every row in a failed INSERT, so
+  // one collision on title 2's genre would silently drop titles 1, 3 and 4's
+  // links too, even though nothing was wrong with them. Verified against
+  // Postgres 17.11: a 4-row insert with one row already present raises
+  // duplicate key value violates unique constraint "title_tags_curated_uniq"
+  // and inserts zero of the four rows.
+  //
+  // Grouping by title_id narrows the blast radius to "the racing title's
+  // links may be incomplete this run" instead of "an arbitrary unrelated
+  // title's links vanished." A title has a handful of genres, so this grain
+  // is small and natural, not an arbitrary chunk boundary.
+  //
+  // A 23505 (unique_violation) on a title's insert means someone else's sync
+  // already wrote the row we wanted — the desired end state (this title
+  // linked to this genre) already holds, so that is success, not failure.
+  // Only 23505 is swallowed: any other code (a dropped connection, an RLS/
+  // policy change, a constraint we don't expect) still throws, exactly as
+  // before — silently ignoring every error is what let the original bug hide
+  // in the first place.
+  const linksByTitle = new Map<number, typeof newLinks>();
+  for (const link of newLinks) {
+    const existing = linksByTitle.get(link.title_id);
+    if (existing) existing.push(link);
+    else linksByTitle.set(link.title_id, [link]);
+  }
+
+  for (const rows of linksByTitle.values()) {
+    const { error } = await admin.from("title_tags").insert(rows);
+    if (error && error.code !== "23505") {
+      throw new Error(`Genre link failed: ${error.message}`);
+    }
   }
 }
 
