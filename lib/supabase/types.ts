@@ -39,6 +39,32 @@ export type Database = {
   }
   public: {
     Tables: {
+      admins: {
+        Row: {
+          granted_at: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          granted_at?: string
+          role?: string
+          user_id: string
+        }
+        Update: {
+          granted_at?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admins_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       collection_items: {
         Row: {
           collection_id: number
@@ -404,6 +430,91 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "sources"
             referencedColumns: ["slug"]
+          },
+        ]
+      }
+      tags: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: number
+          is_active: boolean
+          kind: string
+          mal_genre_id: number | null
+          name: string
+          slug: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: never
+          is_active?: boolean
+          kind?: string
+          mal_genre_id?: number | null
+          name: string
+          slug: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: never
+          is_active?: boolean
+          kind?: string
+          mal_genre_id?: number | null
+          name?: string
+          slug?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      title_tags: {
+        Row: {
+          created_at: string
+          id: number
+          owner_id: string | null
+          tag_id: number
+          title_id: number
+        }
+        Insert: {
+          created_at?: string
+          id?: never
+          owner_id?: string | null
+          tag_id: number
+          title_id: number
+        }
+        Update: {
+          created_at?: string
+          id?: never
+          owner_id?: string | null
+          tag_id?: number
+          title_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "title_tags_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "title_tags_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "tags"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "title_tags_title_id_fkey"
+            columns: ["title_id"]
+            isOneToOne: false
+            referencedRelation: "media_titles"
+            referencedColumns: ["id"]
           },
         ]
       }
