@@ -11,19 +11,28 @@ because RLS gives them no other writer: the insert policy requires
 `owner_id = (select auth.uid())` and `null` never equals a uuid. Adding a shelf
 means editing TypeScript and running a script.
 
-Separately, there is no way to group titles by trope. `media_titles` stores no
-genre or tag data, and the MAL sync never requests the `genres` field. Even if
-it did, MAL would not help with the groupings readers actually browse by:
-"Enemies to Lovers" is a trope, not a MAL genre. MAL offers "Romance" and
-"Drama"; it does not offer enemies-to-lovers, regression, villainess, or
-system. That data is editorial no matter where it comes from.
+Separately, there is no way to group titles by trope or genre. `media_titles`
+stores no tag data, and `LIST_FIELDS` in `lib/mal/endpoints.ts` never requests
+MAL's `genres` field, so the sync discards it.
+
+Those are two different gaps. MAL knows the *genres* — Romance, Fantasy,
+Action — and will hand them over for free; not importing them means hand-typing
+data that already exists. MAL does not know the groupings readers actually
+browse manhwa by: "Enemies to Lovers" is a trope, and so are regression,
+villainess, and system. Those are editorial no matter where they come from.
+
+So tags have two origins, and the design has to hold both without one
+overwriting the other.
 
 ## Goals
 
 - One named admin (initially the project owner) can create, edit, retire, and
   populate curated collections through the app rather than through a script.
-- Titles can carry tags — genres, tropes, themes, formats — assigned by that
-  admin and visible to every reader.
+- Titles can carry tags — genres, tropes, themes, formats — visible to every
+  reader. Genres are imported from MAL; tropes and anything else are created by
+  the admin.
+- An imported tag is an ordinary editable row once it exists. MAL can create a
+  tag; it can never overwrite one.
 - Readers can browse a tag.
 - Admin capability is enforced by the database, not only by application code.
 
@@ -39,6 +48,10 @@ system. That data is editorial no matter where it comes from.
   a catalog-insert path that today only sync owns. Recorded in `TODO.md`.
 - **Admin power over users' private collections.** Every admin policy below is
   scoped `owner_id is null`. Admin means editorial, not omniscient.
+- **Merging several MAL genres into one tag.** `tags.mal_genre_id` is unique,
+  so one tag carries at most one MAL genre. Wanting "Romance" and "Love
+  Polygon" to collapse into one tag needs a `tag_mal_genres (tag_id,
+  mal_genre_id)` table — additive later, and not yet known to be wanted.
 - **Drag-and-drop reordering.** Up/down buttons; a twelve-item shelf does not
   justify a drag library.
 
@@ -105,16 +118,20 @@ that produces a clean error. RLS is what actually stops a forged request.
 
 ```sql
 create table public.tags (
-  id          bigint generated always as identity primary key,
-  slug        text not null unique,
-  name        text not null,
-  description text,
-  kind        text not null default 'trope'
-                check (kind in ('genre', 'trope', 'theme', 'format')),
-  sort_order  int not null default 100,
-  is_active   boolean not null default true,
-  created_at  timestamptz not null default now(),
-  updated_at  timestamptz not null default now()
+  id           bigint generated always as identity primary key,
+  slug         text not null unique,
+  name         text not null,
+  description  text,
+  kind         text not null default 'trope'
+                 check (kind in ('genre', 'trope', 'theme', 'format')),
+  -- Provenance, not a sync target. Records which MAL genre first caused this
+  -- row to exist. Null for tags invented here ("Enemies to Lovers"). Nothing
+  -- ever writes back through it: see "MAL seeds, the database owns" below.
+  mal_genre_id bigint unique,
+  sort_order   int not null default 100,
+  is_active    boolean not null default true,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
 );
 
 create table public.title_tags (
@@ -146,8 +163,56 @@ because Postgres treats NULLs as distinct, which means the constraint already
 permits one curated row plus one private row per user per title — the deferred
 private-tags feature needs a policy and a UI, not a migration of this table.
 
-RLS: any authenticated user selects (active rows filtered by the data layer,
-as with `collections.is_active`); insert, update and delete require
+#### MAL seeds, the database owns
+
+`LIST_FIELDS` in `lib/mal/endpoints.ts` gains `genres`, and
+`malMangaNodeSchema` gains an optional `genres: { id, name }[]` — optional
+because MAL omits fields unpredictably, as the comment atop `lib/mal/types.ts`
+warns. `syncList` then writes genre tags alongside its `media_titles` upsert.
+
+The rule that makes this safe to combine with an editable table is one SQL
+clause:
+
+```sql
+insert into public.tags (mal_genre_id, slug, name, kind)
+values (...)
+on conflict (mal_genre_id) do nothing;
+```
+
+`do nothing`, never `do update`. MAL can bring a tag into existence; it can
+never modify one that already exists. Renaming MAL's "Girls Love" to something
+better is an ordinary update that sticks forever, because no later sync will
+write over it. This is why there is no `display_name` shadow column and no
+read-only class of tag: the conflict those would resolve cannot occur.
+
+`title_tags` rows are still attached on every sync, so a title newly given a
+genre by MAL picks it up. Only the tag *entity* is frozen after creation.
+
+Imported tags land as `kind = 'genre'`; tags created in the admin UI default to
+`'trope'`.
+
+Two consequences follow, and both are intended:
+
+- **Deleting a MAL-linked tag re-creates it on the next sync**, because
+  `do nothing` finds no row and inserts one. `is_active = false` is the real
+  "stop showing this", so the admin UI offers retire as the primary action for
+  MAL-linked tags. Delete means "forget it, and re-import if MAL mentions it
+  again".
+- **Sync runs as the service role**, which bypasses RLS, so importing needs no
+  admin and no policy of its own.
+
+#### Backfill
+
+Adding `genres` to `LIST_FIELDS` only tags a title the next time some user who
+has it syncs. Existing catalog rows stay untagged until then.
+`yarn backfill:genres` walks `media_titles`, fetches each via `getManga()`, and
+writes the tags. It needs a MAL token, so it runs against one connected
+account, and it is a one-off rather than a scheduled job.
+
+#### RLS
+
+Any authenticated user selects (active rows filtered by the data layer, as with
+`collections.is_active`); insert, update and delete require
 `private.is_admin()`.
 
 ### 3. Admin writes on curated collections
@@ -211,11 +276,26 @@ cookie check only; the layout's `verifyAdmin()` is the gate.
   each opening with `verifyAdmin()`, returning the established
   `{ error?, message? } | null` state shape.
 - `scripts/grant-admin.ts` + `yarn grant:admin` — service-role bootstrap.
+- `scripts/backfill-genres.ts` + `yarn backfill:genres` — one-off import for
+  catalog rows that predate the sync change.
+
+Modified:
+
+- `lib/mal/endpoints.ts` — `genres` added to `LIST_FIELDS`.
+- `lib/mal/types.ts` — optional `genres` on `malMangaNodeSchema`.
+- `lib/sync/sync-list.ts` — genre tags and `title_tags` written alongside the
+  existing `media_titles` upsert, with `on conflict (mal_genre_id) do nothing`.
+- `proxy.ts` — `/admin` added to `PROTECTED_PREFIXES`.
 
 ## Testing
 
 - **Vitest, pure logic:** tag shaping in `lib/data/tag-items.ts`, slug
   generation, ordering.
+- **Vitest, sync:** a MAL node carrying `genres` produces the expected tag and
+  `title_tags` rows; a node with `genres` absent syncs unchanged (MAL omits
+  fields, and a missing genre list must not fail a sync); a second run over a
+  tag whose name was edited locally leaves that name intact — the `do nothing`
+  contract, pinned by a test rather than trusted.
 - **Vitest, components:** admin forms and pickers with `@/app/actions/*`
   mocked via `vi.hoisted`/`vi.mock`, following the convention already in
   `entry-card-menu.test.tsx`.
@@ -238,7 +318,9 @@ cookie check only; the layout's `verifyAdmin()` is the gate.
 - `scripts/seed-collections.ts` stays. It is still the fastest way to
   reconstruct the shelves from scratch, and it is how a new environment gets
   content before an admin exists.
-- Two new tables and one function are hand-written into
-  `lib/supabase/types.ts` in the shape `supabase gen types` emits, as the
-  collections tables already are. Regenerating remains an outstanding task for
-  an environment with Supabase credentials.
+- Three new tables (`admins`, `tags`, `title_tags`) and one function are
+  hand-written into `lib/supabase/types.ts` in the shape `supabase gen types`
+  emits, as the collections tables already are. Regenerating remains an
+  outstanding task for an environment with Supabase credentials.
+- Genre coverage grows with syncing, not all at once. Until `backfill:genres`
+  runs, a catalog row is tagged only once one of its readers syncs again.
