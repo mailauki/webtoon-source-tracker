@@ -8,10 +8,21 @@
  * role bypasses RLS, which is why this script exists and why there is no
  * "promote user" button anywhere in the app.
  *
- * Pass --revoke to remove the grant.
+ * Pass --revoke to remove the grant. --revoke requires --yes to actually
+ * delete; without --yes it only prints what would happen.
  */
 import { config } from "dotenv";
 import { createClient } from "@supabase/supabase-js";
+
+const args = process.argv.slice(2);
+const revoke = args.includes("--revoke");
+const confirmed = args.includes("--yes");
+const email = args.find((a) => !a.startsWith("--"));
+
+if (!email) {
+  console.error("Usage: yarn grant:admin <email> [--revoke [--yes]]");
+  process.exit(1);
+}
 
 config({ path: ".env.local" });
 
@@ -20,27 +31,37 @@ const key = process.env.SUPABASE_SECRET_KEY;
 
 if (!url || !key) throw new Error("Supabase env vars missing from .env.local");
 
-const args = process.argv.slice(2);
-const revoke = args.includes("--revoke");
-const email = args.find((a) => !a.startsWith("--"));
-
-if (!email) {
-  console.error("Usage: yarn grant:admin <email> [--revoke]");
-  process.exit(1);
-}
-
 const admin = createClient(url, key, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
 // auth.users is not reachable through PostgREST, so look the account up
 // through the Admin API rather than a table read.
-const { data: list, error: listError } = await admin.auth.admin.listUsers();
-if (listError) throw new Error(`Could not list users: ${listError.message}`);
+//
+// listUsers() is paginated (50 users per page by default) and does NOT
+// auto-paginate. A bare call only ever sees page 1, so on a project with
+// more than 50 accounts it can silently miss a real user and report
+// "No account found" even though the account exists on a later page. Page
+// through until we find a match or run out of pages — do not simplify this
+// back to a single bare call.
+let user: Awaited<
+  ReturnType<typeof admin.auth.admin.listUsers>
+>["data"]["users"][number] | undefined;
 
-const user = list.users.find(
-  (u) => u.email?.toLowerCase() === email.toLowerCase(),
-);
+for (let page = 1; ; page++) {
+  const { data: list, error: listError } = await admin.auth.admin.listUsers({
+    page,
+    perPage: 200,
+  });
+  if (listError) throw new Error(`Could not list users: ${listError.message}`);
+
+  user = list.users.find(
+    (u) => u.email?.toLowerCase() === email.toLowerCase(),
+  );
+  if (user) break;
+
+  if (list.users.length < 200) break;
+}
 
 if (!user) {
   console.error(`No account found for ${email}.`);
@@ -48,6 +69,12 @@ if (!user) {
 }
 
 if (revoke) {
+  if (!confirmed) {
+    console.log(
+      `Would revoke admin from ${email} (user_id: ${user.id}). Re-run with --yes to confirm.`,
+    );
+    process.exit(0);
+  }
   const { error } = await admin.from("admins").delete().eq("user_id", user.id);
   if (error) throw new Error(`Revoke failed: ${error.message}`);
   console.log(`Revoked admin from ${email}.`);
