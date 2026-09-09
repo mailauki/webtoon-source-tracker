@@ -201,7 +201,8 @@ export async function tagTitle(
   });
 
   if (error) {
-    // title_tags_uniq (title_id, tag_id, owner_id).
+    // title_tags_curated_uniq (partial index on curated rows; see migration
+    // 20260909000002 for why a full three-column constraint doesn't work here).
     if (error.code === "23505") return { error: "Already tagged." };
     return { error: error.message };
   }
