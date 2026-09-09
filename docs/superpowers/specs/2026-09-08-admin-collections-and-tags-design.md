@@ -188,8 +188,16 @@ read-only class of tag: the conflict those would resolve cannot occur.
 `title_tags` rows are still attached on every sync, so a title newly given a
 genre by MAL picks it up. Only the tag *entity* is frozen after creation.
 
-Imported tags land as `kind = 'genre'`; tags created in the admin UI default to
-`'trope'`.
+Imported tags land as `kind = 'genre'` and `is_active = true`; tags created in
+the admin UI default to `'trope'`.
+
+Active-by-default is a deliberate choice with a caveat. MAL's genre list
+includes explicit categories, and `lib/mal/endpoints.ts` already passes
+`nsfw: true`, so those will arrive. Importing them inactive would mean
+approving roughly forty legitimate genres by hand to suppress a handful;
+importing them active means retiring that handful once, in the admin UI, after
+the first sync. The second is less work and fails visibly rather than
+silently.
 
 Two consequences follow, and both are intended:
 
