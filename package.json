@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "seed:demo": "node --experimental-strip-types --no-warnings scripts/seed-demo.ts",
-    "seed:collections": "node --experimental-strip-types --no-warnings scripts/seed-collections.ts"
+    "seed:collections": "node --experimental-strip-types --no-warnings scripts/seed-collections.ts",
+    "grant:admin": "node --experimental-strip-types --no-warnings scripts/grant-admin.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",
