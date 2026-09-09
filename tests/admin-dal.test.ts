@@ -1,13 +1,27 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-const { maybeSingle, notFound } = vi.hoisted(() => ({
+// Every test below does `vi.resetModules()` + a dynamic `await import()` of
+// the DAL. That pattern exists to defeat React's `cache()` memoization
+// across tests (each test needs a fresh, uncached call). In practice it is
+// defensive rather than load-bearing here: `cache()` only memoizes within an
+// active render/request context, and Vitest/jsdom does not provide one, so
+// `cache()` is inert in this suite even without resetModules. Concretely,
+// this means these tests do NOT verify that `isAdmin`/`verifyAdmin` are
+// still wrapped in `cache()` at all — a regression that dropped the wrapper
+// would not be caught here. We keep resetModules/dynamic import anyway
+// because it's harmless and would become necessary if a future test in this
+// file gains a real render context. Do not treat this file as proof that
+// cache() is covered when copying its pattern to new DAL tests.
+
+const { maybeSingle, notFound, redirect } = vi.hoisted(() => ({
   maybeSingle: vi.fn(),
   notFound: vi.fn(() => {
     throw new Error("NEXT_NOT_FOUND");
   }),
+  redirect: vi.fn(),
 }));
 
-vi.mock("next/navigation", () => ({ notFound, redirect: vi.fn() }));
+vi.mock("next/navigation", () => ({ notFound, redirect }));
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
@@ -57,6 +71,7 @@ describe("verifyAdmin", () => {
     const { verifyAdmin } = await import("@/lib/auth/dal");
     await expect(verifyAdmin()).rejects.toThrow("NEXT_NOT_FOUND");
     expect(notFound).toHaveBeenCalled();
+    expect(redirect).not.toHaveBeenCalled();
   });
 
   it("returns the user id for an admin", async () => {
