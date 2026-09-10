@@ -4004,6 +4004,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"cn@npm:^0.2.6":
+  version: 0.2.6
+  resolution: "cn@npm:0.2.6"
+  bin:
+    cn: bin/cn.mjs
+  checksum: 10c0/7d5744771e897061e210d5aa49563d254518e7e032ec372991d8e1ebb1d61057b4ec538810de31ac267153e610c141ec54b0befd006c0220e772a652824b9830
+  languageName: node
+  linkType: hard
+
 "code-block-writer@npm:^13.0.3":
   version: 13.0.3
   resolution: "code-block-writer@npm:13.0.3"
@@ -9286,6 +9295,7 @@ __metadata:
     "@vitejs/plugin-react": "npm:^6.1.0"
     class-variance-authority: "npm:^0.7.1"
     clsx: "npm:^2.1.1"
+    cn: "npm:^0.2.6"
     eslint: "npm:^9"
     eslint-config-next: "npm:16.3.1"
     jsdom: "npm:^30.0.1"

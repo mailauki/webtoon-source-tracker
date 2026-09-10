@@ -6,6 +6,7 @@ import { Loader2, RefreshCw } from "lucide-react";
 
 import { runSync, type SyncState } from "@/app/actions/sync";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 function SubmitButton({ stale }: { stale: boolean }) {
   const { pending } = useFormStatus();
@@ -15,18 +16,12 @@ function SubmitButton({ stale }: { stale: boolean }) {
       type="submit"
       size="sm"
       disabled={pending}
-      className={
-        stale
-          ? "rounded-pill bg-brand font-bold text-brand-foreground hover:bg-brand/90"
-          : "rounded-pill"
-      }
+			className={cn("rounded-full", stale && "bg-brand font-bold text-brand-foreground hover:bg-brand/90")}
       variant={stale ? "default" : "outline"}
     >
-      {pending ? (
-        <Loader2 className="size-4 animate-spin" />
-      ) : (
-        <RefreshCw className="size-4" />
-      )}
+			{/* {pending && <Spinner data-icon="inline-start" />} */}
+			{pending && <Loader2 className="animate-spin" data-icon="inline-start" />}
+			{!pending && <RefreshCw />}
       {pending ? "Syncing…" : "Sync"}
     </Button>
   );

@@ -3,7 +3,7 @@
 import { PauseCircle } from "lucide-react";
 
 import { useLibraryFilters } from "@/components/library-grid";
-import { cn } from "@/lib/utils";
+import { Button } from "./ui/button";
 
 /**
  * The "hide hiatus" toggle, sharing the header's secondary row with the sort
@@ -33,22 +33,18 @@ export function HiatusFilter() {
   const { hideHiatus, setHideHiatus, pending } = useLibraryFilters();
 
   return (
-    <button
-      type="button"
+		<Button
       onClick={() => setHideHiatus(!hideHiatus)}
       aria-pressed={hideHiatus}
-      className={cn(
-        "inline-flex shrink-0 items-center gap-1 rounded-pill border px-3 py-1 text-xs font-semibold backdrop-blur transition-colors",
-        hideHiatus
-          ? "border-border bg-muted text-foreground"
-          : "border-border bg-background/60 text-muted-foreground hover:text-foreground",
-        pending && "opacity-60",
-      )}
-    >
-      <PauseCircle className="size-3.5" aria-hidden />
+			variant={hideHiatus ? "secondary" : "outline"}
+			className="rounded-full"
+			disabled={pending}
+		>
+			{/* {pending && <Spinner data-icon="inline-start" />} */}
+			<PauseCircle aria-hidden data-icon="inline-start" />
       {/* The label follows the sort trigger's responsive pattern: the icon
           carries it on a phone, where the row is tightest. */}
       <span className="max-sm:sr-only">Hide hiatus</span>
-    </button>
+		</Button>
   );
 }

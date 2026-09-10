@@ -5,6 +5,7 @@ import { ChevronDown } from "lucide-react";
 
 import { useLibraryFilters } from "@/components/library-grid";
 import { cn } from "@/lib/utils";
+import { Button } from "./ui/button";
 
 export type StatusChip = { value: string; label: string; count?: number };
 
@@ -36,7 +37,7 @@ export function StatusFilter({ statuses }: { statuses: StatusChip[] }) {
   return (
     <div
       className={cn(
-        "flex items-center gap-2 transition-opacity",
+        "flex items-start gap-2 transition-opacity",
         pending && "opacity-60",
       )}
       role="group"
@@ -66,21 +67,21 @@ export function StatusFilter({ statuses }: { statuses: StatusChip[] }) {
         </div>
       ) : null}
 
-      <button
-        type="button"
+			<Button
+				variant="ghost"
+				className="rounded-full sm:hidden"
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
-        aria-label={expanded ? "Hide status filters" : "Show status filters"}
-        className="inline-flex shrink-0 items-center gap-0.5 rounded-pill bg-background/60 backdrop-blur px-2 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground sm:hidden"
-      >
-        {expanded ? "Less" : "Filter"}
+        aria-label={expanded ? "Hide status filters" : "Show status filters"}>
+				{expanded ? "Less" : "Filter"}
         <ChevronDown
-          className={cn(
-            "size-3.5 transition-transform",
+					data-icon="inline-end"
+					className={cn(
+            "transition-transform",
             expanded && "rotate-180",
           )}
-        />
-      </button>
+				/>
+      </Button>
     </div>
   );
 }
@@ -95,22 +96,10 @@ function StatusPill({
   onSelect: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-pressed={active}
-      className={cn(
-        "shrink-0 rounded-pill border bg-background/60 backdrop-blur px-3 py-1 text-xs font-semibold transition-colors",
-        active
-          ? // Tapas uses a cyan->blue gradient for the active chip.
-            "border-transparent bg-gradient-to-r from-cyan-400 to-blue-500 text-white"
-          : "border-border text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {chip.label}
-      {typeof chip.count === "number" ? (
-        <span className="ml-1 opacity-70 tabular-nums">{chip.count}</span>
+		<Button onClick={onSelect} aria-pressed={active} variant={active ? "default" : "outline"} className="rounded-full">{chip.label}
+		{typeof chip.count === "number" ? (
+        <span className="ml-1 text-muted-foreground tabular-nums">{chip.count}</span>
       ) : null}
-    </button>
+		</Button>
   );
 }

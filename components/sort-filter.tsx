@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SORT_OPTIONS, type SortKey } from "@/lib/data/library-prefs";
-import { cn } from "@/lib/utils";
+import { Button } from "./ui/button";
 
 /**
  * Sort control, sharing the header's secondary row with the status chips.
@@ -39,17 +39,18 @@ export function SortFilter() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger
-        className={cn(
-          "inline-flex shrink-0 items-center gap-1 rounded-pill border border-border bg-background/60 px-3 py-1 text-xs font-semibold text-muted-foreground backdrop-blur transition-colors hover:text-foreground data-[state=open]:text-foreground",
-          pending && "opacity-60",
-        )}
-        aria-label={`Sort by ${option.label}, ${directionLabel} first`}
-      >
-        <ArrowUpDown className="size-3.5" />
-        <span className="max-sm:sr-only">{option.label}</span>
-        <span className="text-foreground">{directionLabel}</span>
-      </DropdownMenuTrigger>
+			<DropdownMenuTrigger>
+				<Button
+					variant="outline"
+					className="rounded-full"
+					disabled={pending}
+					aria-label={`Sort by ${option.label}, ${directionLabel} first`}
+				>
+					<ArrowUpDown data-icon="inline-start" />
+					<span className="max-sm:sr-only text-muted-foreground">{option.label}</span>
+					<span>{directionLabel}</span>
+				</Button>
+			</DropdownMenuTrigger>
 
       <DropdownMenuContent align="end" className="min-w-44">
         <DropdownMenuLabel>Sort by</DropdownMenuLabel>
@@ -82,11 +83,11 @@ export function SortFilter() {
           }
         >
           <DropdownMenuRadioItem value="desc">
-            <ArrowDown className="size-3.5" />
+            <ArrowDown data-icon="inline-start" />
             {option.desc} first
           </DropdownMenuRadioItem>
           <DropdownMenuRadioItem value="asc">
-            <ArrowUp className="size-3.5" />
+            <ArrowUp data-icon="inline-start" />
             {option.asc} first
           </DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
