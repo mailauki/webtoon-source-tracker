@@ -189,6 +189,58 @@ their score and list status, drop anything tracked or dismissed.
 over `user_entries` is the tempting third option and the wrong one until there
 is a real userbase — at one user it returns nothing.
 
+### MAL title search for the admin pickers
+
+`TagTitlePicker` and `CuratedTitlePicker` both call `searchCatalogTitles`,
+which searches `media_titles` only. A curated shelf or a tag can only reach
+titles somebody has already synced — an admin cannot add a title the catalog
+has never seen, even though it exists on MAL and the picker's whole job is
+"find a title and attach it."
+
+Fixing this needs two things, not one. First, a MAL search endpoint: MAL's
+`/manga?q=` (already wrapped as `searchManga` in `lib/mal/endpoints.ts`, used
+today only by the signed-in user's own "add to library" search) would have to
+be called from an admin context instead, against some connected account —
+the same "any account works, since this endpoint isn't list-scoped" situation
+`scripts/backfill-genres.ts` is already in. Second, and the part that doesn't
+exist yet: a catalog-insert path that isn't tied to a sync run. Right now the
+only code that ever writes a new `media_titles` row is
+`lib/sync/sync-list.ts`, as a side effect of pulling someone's list — there is
+no standalone "insert this one title MAL told us about" function. The picker
+would need one, upserting on `(media_type, mal_media_id)` exactly as sync
+does, so that searching and then tagging a title that already existed under
+sync's writes still resolves to the same row rather than a duplicate.
+
+Worth doing once the tag/collection vocabulary outgrows whatever a handful of
+seeded accounts happen to have read.
+
+### Merging several MAL genres into one tag
+
+`tags.mal_genre_id` is `unique`, so one tag can carry at most one MAL genre id
+(see the tags migration). That is fine for MAL genres that map cleanly to one
+concept, but MAL splits some concepts across genres an admin would likely want
+shown as one tag — "Romance" and "Love Polygon" both read as romance to a
+reader browsing `/discover/tag/romance`, but today they can only ever be two
+separate tags, two separate pages, and two separate chip sets on the same
+title.
+
+The schema has no room to express "these two MAL genres are the same tag"
+without changing the uniqueness rule on `mal_genre_id`, and changing that rule
+would break the exact guarantee `syncGenres`'s `ignoreDuplicates` upsert
+depends on — one genre id resolving to exactly one tag row. A
+`tag_mal_genres (tag_id, mal_genre_id)` join table sidesteps that: `tags`
+drops the MAL-provenance columns it currently doubles as, `syncGenres` upserts
+into the join table instead (still `do nothing` on `mal_genre_id`, still never
+touching a tag's editable fields), and `getTagsForTitle` / `getTitlesForTag`
+join through it rather than through `tags.mal_genre_id` directly.
+
+Purely additive — nothing above requires removing anything that exists today
+— and not yet known to be wanted: no admin has asked for it, and speculative
+merging in the other direction (splitting a tag MAL treats as one genre into
+two an admin wants distinguished) is a different, harder problem this table
+doesn't solve. Build it when a real MAL genre pair turns out to annoy someone
+browsing the tag pages, not before.
+
 ### Guest demo mode
 
 A signed-out visitor currently sees the landing page and can go no further —

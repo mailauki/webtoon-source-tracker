@@ -22,6 +22,7 @@ const PROTECTED_PREFIXES = [
   "/settings",
   "/discover",
   "/collections",
+  "/admin",
 ];
 const AUTH_PAGES = ["/auth/login", "/auth/signup"];
 

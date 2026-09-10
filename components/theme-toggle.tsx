@@ -17,25 +17,25 @@ export function ThemeToggle() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="rounded-pill">
+        <Button variant="ghost" size="icon" className="rounded-full">
           {/* Both icons render; CSS swaps them so there is no flash or
               hydration mismatch from reading the theme during render. */}
-          <Sun className="h-4 w-4 dark:hidden" />
-          <Moon className="hidden h-4 w-4 dark:block" />
+          <Sun className="dark:hidden" />
+          <Moon className="hidden dark:block" />
           <span className="sr-only">Toggle theme</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem onClick={() => setTheme("light")}>
-          <Sun className="mr-2 h-4 w-4" />
+          <Sun data-icon="inline-start" className="mr-2" />
           Light
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => setTheme("dark")}>
-          <Moon className="mr-2 h-4 w-4" />
+          <Moon data-icon="inline-start" className="mr-2" />
           Dark
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => setTheme("system")}>
-          <Monitor className="mr-2 h-4 w-4" />
+          <Monitor data-icon="inline-start" className="mr-2" />
           System
         </DropdownMenuItem>
       </DropdownMenuContent>

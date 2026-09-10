@@ -17,7 +17,6 @@ import {
   sortEntries,
   type Sort,
 } from "@/lib/data/library-prefs";
-import type { CollectionTarget } from "@/lib/data/collection-items";
 import type { LibraryRow } from "@/lib/data/entries";
 import type { RankedSource } from "@/lib/data/rank-sources";
 import type { Source } from "@/lib/data/rank-sources";
@@ -222,7 +221,6 @@ export function LibraryGrid({
   entries,
   topSources = [],
   catalog = [],
-  collections = [],
   emptyUnfiltered,
   emptyFiltered,
   emptySearch,
@@ -230,7 +228,6 @@ export function LibraryGrid({
   entries: LibraryRow[];
   topSources?: RankedSource[];
   catalog?: Source[];
-  collections?: CollectionTarget[];
   /** Nothing on the shelf at all. */
   emptyUnfiltered: React.ReactNode;
   /** Chips hid everything. */
@@ -276,7 +273,6 @@ export function LibraryGrid({
           entry={entry}
           topSources={topSources}
           catalog={catalog}
-          collections={collections}
         />
       ))}
     </div>

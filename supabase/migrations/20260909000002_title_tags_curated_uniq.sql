@@ -1,0 +1,48 @@
+-- Fixes duplicate curated title_tags rows: every sync re-adds every genre.
+--
+-- title_tags_uniq (from 20260909000000) is `unique (title_id, tag_id,
+-- owner_id)`. That looks like it should stop a curated genre link from being
+-- inserted twice, since every curated row has owner_id null and (title_id,
+-- tag_id) repeats across syncs. It does not, because Postgres treats NULLs as
+-- pairwise distinct for uniqueness purposes: two rows with the same
+-- (title_id, tag_id) and owner_id null do NOT collide under a unique
+-- constraint that includes owner_id, because null is never equal to null.
+-- Verified directly against Postgres 17.11:
+--
+--   create table t (id bigint generated always as identity primary key,
+--     title_id bigint not null, tag_id bigint not null, owner_id uuid,
+--     constraint t_uniq unique (title_id, tag_id, owner_id));
+--   insert into t (title_id, tag_id, owner_id) values (1, 1, null); -- INSERT 0 1
+--   insert into t (title_id, tag_id, owner_id) values (1, 1, null); -- INSERT 0 1  <- not rejected
+--   insert into t (title_id, tag_id, owner_id) values (1, 1, null)
+--     on conflict (title_id, tag_id, owner_id) do nothing;          -- INSERT 0 1  <- also inserted
+--   -- three identical rows exist
+--
+-- syncGenres (lib/sync/sync-list.ts) links every title to its MAL genres on
+-- every sync, and relied on `on conflict (title_id, tag_id, owner_id) do
+-- nothing` to make that idempotent. Because title_tags_uniq never fires for
+-- owner_id is null rows, that on-conflict clause never matches, and every
+-- sync silently appended a fresh copy of every genre link. Ten syncs meant
+-- ten identical Romance chips on a title's entry page.
+--
+-- The fix is a second, PARTIAL unique index scoped to curated rows only:
+create unique index title_tags_curated_uniq
+  on public.title_tags (title_id, tag_id)
+  where owner_id is null;
+
+-- Why this works where the three-column constraint didn't: the predicate
+-- removes owner_id from the compared columns entirely, so there is no NULL
+-- to be "distinct" against — two curated rows for the same (title_id, tag_id)
+-- now genuinely collide, and `on conflict (title_id, tag_id) where owner_id
+-- is null do nothing` correctly no-ops (INSERT 0 0 on the duplicate).
+--
+-- Why title_tags_uniq is NOT removed or altered here (migrations in this repo
+-- are append-only, and this table's original constraint still earns its
+-- keep): once private, per-user tags exist, a user can have at most one
+-- private tag of a given kind on a given title, and that is a THREE-column
+-- constraint (title_id, tag_id, owner_id) — owner_id is part of what must be
+-- unique, not a value to exclude. This new partial index and the old full
+-- constraint police two different rows: title_tags_curated_uniq guards the
+-- owner_id is null slice (the only slice populated today), and
+-- title_tags_uniq continues to guard every owner_id is not null slice once
+-- that feature ships. Neither makes the other redundant.

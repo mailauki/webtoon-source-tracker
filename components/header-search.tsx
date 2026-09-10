@@ -4,8 +4,9 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 
 import { useLibraryFilters } from "@/components/library-grid";
-import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
+import { Button } from "./ui/button";
+import { Field, FieldLabel } from "./ui/field";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "./ui/input-group";
 
 /**
  * Title search, collapsed to an icon in the header until invoked.
@@ -57,65 +58,51 @@ export function HeaderSearch() {
 
   if (!open) {
     return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label="Search titles"
-        aria-expanded={false}
-        className="inline-flex size-9 shrink-0 items-center justify-center rounded-pill text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-      >
-        <Search className="size-4" />
-      </button>
+			<Button
+				variant="ghost"
+				className="rounded-full"
+				onClick={() => setOpen(true)}
+				aria-label="Search titles"
+				aria-expanded={false}
+				size="icon"
+			>
+				<Search />
+			</Button>
     );
   }
 
-  return (
-    // Overlays the nav. `inset-y-0 right-0` anchors it to the row, and the
-    // max-width keeps it from swallowing the wordmark on narrow screens.
-    //
-    // The strip itself is transparent at every width: the header row's own
-    // left padding keeps the field clear of the logo tile below `sm`, so
-    // there is nothing to cover and the header's translucent ground carries
-    // straight through. Only the input is opaque — see its `bg-background`.
-    <div className="absolute inset-y-0 right-0 z-10 flex w-full max-w-md items-center">
-      <label htmlFor={inputId} className="sr-only">
+	return (
+		<Field className="absolute inset-y-3.5 right-0 z-10 flex w-full max-w-md items-center">
+			<FieldLabel htmlFor={inputId} className="sr-only">
         Search titles
-      </label>
-      <div className="relative w-full">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        {/* Controlled, and with no `key`: this element has to survive every
-            keystroke, because unmounting a focused input closes the mobile
-            keyboard. */}
-        <Input
-          id={inputId}
-          ref={inputRef}
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") close();
-          }}
-          onBlur={() => {
-            // Collapse only when it would hide nothing: an active query stays
-            // on screen so the filtered state is never silently invisible.
-            if (!query) setOpen(false);
-          }}
-          placeholder="Search titles to find or add…"
-          className={cn(
-            // `bg-muted` in dark rather than the base ground: against a
-            // near-black header a background-coloured field reads as a hole
-            // with a hairline border, and the lifted fill is what makes it
-            // legible as an input. Light mode keeps the plain ground, where
-            // the border already carries that job.
-            "rounded-pill border-border bg-background pl-9 pr-9 dark:bg-muted",
-            // Hide the WebKit affordance; the X below is the clear control.
-            "[&::-webkit-search-cancel-button]:appearance-none",
-          )}
-        />
-        <button
-          type="button"
-          // Runs before blur, which would otherwise collapse the field first.
-          onMouseDown={(e) => e.preventDefault()}
+      </FieldLabel>
+			<InputGroup className="rounded-full bg-background dark:bg-muted">
+        <InputGroupInput
+					id={inputId}
+					ref={inputRef}
+					type="search"
+					value={query}
+					onChange={(e) => setQuery(e.target.value)}
+					onKeyDown={(e) => {
+						if (e.key === "Escape") close();
+					}}
+					onBlur={() => {
+						// Collapse only when it would hide nothing: an active query stays
+						// on screen so the filtered state is never silently invisible.
+						if (!query) setOpen(false);
+					}}
+					placeholder="Search titles to find or add…"
+					className="min-w-xs"
+				/>
+        <InputGroupAddon>
+          <Search />
+        </InputGroupAddon>
+        <InputGroupAddon align="inline-end">
+          <Button
+					variant="ghost"
+					className="rounded-full"
+					aria-label={query ? "Clear search" : "Close search"}
+					onMouseDown={(e) => e.preventDefault()}
           onClick={() => {
             if (query) {
               setQuery("");
@@ -124,12 +111,11 @@ export function HeaderSearch() {
               close();
             }
           }}
-          aria-label={query ? "Clear search" : "Close search"}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <X className="size-4" />
-        </button>
-      </div>
-    </div>
-  );
+					>
+						<X />
+					</Button> 
+        </InputGroupAddon>
+      </InputGroup>
+    </Field>
+	)
 }

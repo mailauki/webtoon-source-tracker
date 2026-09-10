@@ -1,7 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
@@ -125,4 +125,42 @@ export const getLibraryPrefs = cache(async (): Promise<LibraryPrefs | null> => {
     .maybeSingle();
 
   return data;
+});
+
+/**
+ * Whether the signed-in user is an admin.
+ *
+ * Does not redirect: surfaces that merely *offer* an admin affordance need to
+ * ask without throwing. Use verifyAdmin() to gate a page or an action.
+ *
+ * A failed query returns false. Denying on error is the only safe direction,
+ * and the admins table is readable by its own row under admins_select_self, so
+ * an error here means something is wrong rather than that access was refused.
+ */
+export const isAdmin = cache(async (): Promise<boolean> => {
+  const { userId } = await verifySession();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("admins")
+    .select("user_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) return false;
+  return data !== null;
+});
+
+/**
+ * Gates an admin page or server action.
+ *
+ * notFound(), not redirect(): a 404 does not confirm that /admin exists. And
+ * this is defence in depth that produces a clean error — RLS is what actually
+ * stops a forged request, since every admin write policy calls
+ * private.is_admin() independently of anything decided here.
+ */
+export const verifyAdmin = cache(async (): Promise<{ userId: string }> => {
+  const { userId } = await verifySession();
+  if (!(await isAdmin())) notFound();
+  return { userId };
 });

@@ -2,6 +2,7 @@
 
 import { useLibraryFilters } from "@/components/library-grid";
 import { cn } from "@/lib/utils";
+import { Button } from "./ui/button";
 
 type Chip = { value: string; label: string; count?: number };
 
@@ -59,25 +60,18 @@ function ChipRow({
       {chips.map((chip) => {
         const isActive = active === chip.value;
         return (
-          <button
-            key={chip.value || "all"}
-            type="button"
+					<Button
+						key={chip.value || "all"}
             onClick={() => onSelect(chip.value)}
             aria-pressed={isActive}
-            className={cn(
-              "shrink-0 rounded-pill border px-3 py-1 text-xs font-semibold transition-colors",
-              isActive
-                ? // Tapas uses a cyan->blue gradient for the active chip.
-                  "border-transparent bg-gradient-to-r from-cyan-400 to-blue-500 text-white"
-                : "border-border text-muted-foreground hover:text-foreground",
-              chip.value === "none" && !isActive && "border-alert/40 text-alert",
-            )}
-          >
+						className={cn("rounded-full", isActive && "bg-gradient-to-r from-cyan-400 to-blue-500 hover:opacity-90")}
+						variant={isActive ? "default" : chip.value === "none" ? "destructive" : "outline"}
+					>
             {chip.label}
             {typeof chip.count === "number" ? (
               <span className="ml-1 opacity-70">{chip.count}</span>
             ) : null}
-          </button>
+					</Button>
         );
       })}
     </div>

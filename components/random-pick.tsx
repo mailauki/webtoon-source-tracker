@@ -118,8 +118,8 @@ export function RandomPick() {
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-lg border border-border bg-card px-4 py-3">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 rounded-lg border border-border bg-card px-4 py-3">
+        <div className="flex min-w-50 flex-1 items-center gap-3">
           <Dices className="size-5 shrink-0 text-brand" aria-hidden />
           <div className="min-w-0">
             <p className="font-display text-sm font-semibold">
@@ -143,28 +143,22 @@ export function RandomPick() {
             const primary = m === "surprise";
 
             return (
-              <button
+              <Button
                 key={m}
                 type="button"
+								size="sm"
                 onClick={() => roll(m)}
                 disabled={disabled}
+								variant={primary ? "default" : "outline"}
                 title={
                   disabled
                     ? "Not enough titles here to pick from"
                     : `Pick from ${candidates.length} titles`
                 }
-                className={cn(
-                  "inline-flex shrink-0 items-center rounded-pill px-3 py-1.5 text-xs font-semibold transition-colors",
-                  primary
-                    ? "bg-brand font-bold text-brand-foreground hover:bg-brand/90"
-                    : "border border-border text-muted-foreground hover:text-foreground",
-                  disabled && "opacity-40",
-                  disabled && !primary && "hover:text-muted-foreground",
-                  disabled && primary && "hover:bg-brand",
-                )}
+								className={cn("rounded-full", primary && "bg-brand font-bold text-brand-foreground hover:bg-brand/90")}
               >
                 {label}
-              </button>
+              </Button>
             );
           })}
         </div>

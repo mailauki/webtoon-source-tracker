@@ -1,4 +1,4 @@
-import { Compass, Library, LibraryBig, LogOut, Settings } from "lucide-react";
+import { Compass, Library, LibraryBig, LogOut, Settings, ShieldUser } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -6,7 +6,8 @@ import { HeaderSearch } from "@/components/header-search";
 import { PullToRefresh } from "@/components/pull-to-refresh";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
-import { getProfile } from "@/lib/auth/dal";
+import { getProfile, isAdmin } from "@/lib/auth/dal";
+import NavLink from "./nav-link";
 
 /**
  * Chrome for the signed-in pages (library, settings, entry).
@@ -42,6 +43,7 @@ export async function AppShell({
   searchable?: boolean;
 }) {
   const profile = await getProfile();
+  const admin = await isAdmin();
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -67,7 +69,7 @@ export async function AppShell({
 						    The image stays `alt=""` and the text carries the link's
 						    accessible name at every width — it only toggles between
 						    sr-only and visible, so the name never doubles up. */}
-						<Link href="/library" className="flex shrink-0 items-center gap-2">
+						<Link href="/" className="flex shrink-0 items-center gap-2">
 							<Image
 								src="/icon-1024x1024.png"
 								alt=""
@@ -81,55 +83,12 @@ export async function AppShell({
 							</span>
 						</Link>
 
-						{/* Below `sm` each control collapses to its icon: the label is
-						    hidden and the button squares off, so the row still fits a
-						    narrow screen without the nav wrapping. The text stays in the
-						    DOM as an accessible name at every width. */}
 						<nav className="flex items-center gap-1">
-							<Button
-								asChild
-								variant="ghost"
-								size="sm"
-								className="rounded-pill max-sm:size-9 max-sm:px-0"
-							>
-								<Link href="/library">
-									<LibraryBig className="size-4 sm:size-3.5" />
-									<span className="max-sm:sr-only">Library</span>
-								</Link>
-							</Button>
-							<Button
-								asChild
-								variant="ghost"
-								size="sm"
-								className="rounded-pill max-sm:size-9 max-sm:px-0"
-							>
-								<Link href="/discover">
-									<Compass className="size-4 sm:size-3.5" />
-									<span className="max-sm:sr-only">Discover</span>
-								</Link>
-							</Button>
-							<Button
-								asChild
-								variant="ghost"
-								size="sm"
-								className="rounded-pill max-sm:size-9 max-sm:px-0"
-							>
-								<Link href="/collections">
-									<Library className="size-4 sm:size-3.5" />
-									<span className="max-sm:sr-only">Collections</span>
-								</Link>
-							</Button>
-							<Button
-								asChild
-								variant="ghost"
-								size="sm"
-								className="rounded-pill max-sm:size-9 max-sm:px-0"
-							>
-								<Link href="/settings">
-									<Settings className="size-4 sm:size-3.5" />
-									<span className="max-sm:sr-only">Settings</span>
-								</Link>
-							</Button>
+							<NavLink icon={<LibraryBig data-icon="inline-start" />} label="Library" url="/library" />
+							<NavLink icon={<Compass data-icon="inline-start" />} label="Discover" url="/discover" />
+							<NavLink icon={<Library data-icon="inline-start" />} label="Collections" url="/collections" />
+							<NavLink icon={<Settings data-icon="inline-start" />} label="Settings" url="/settings" />
+							{admin && <NavLink icon={<ShieldUser data-icon="inline-start" />} label="Admin" url="/admin" />}
 						</nav>
 					</div>
 					<div className="flex items-center gap-1">
@@ -140,10 +99,10 @@ export async function AppShell({
 								type="submit"
 								variant="ghost"
 								size="sm"
-								className="rounded-pill text-muted-foreground max-sm:size-9 max-sm:px-0"
+								className="rounded-full text-muted-foreground max-sm:size-9 max-sm:px-0"
 							>
-								<LogOut className="size-4 sm:size-3.5" />
-								<span className="max-sm:sr-only">Sign out</span>
+								<LogOut data-icon="inline-start" />
+								<span className="max-md:sr-only">Sign out</span>
 							</Button>
 						</form>
 					</div>
