@@ -145,6 +145,13 @@ export async function updateCuratedCollection(
   // outcome an admin can't easily diagnose after the fact, so the check is
   // made explicit here instead: reject a rename that collides with another
   // curated row's name before it can happen.
+  //
+  // Read-then-write, so two admins renaming to the same name at the same
+  // instant can both pass this and both commit. Deliberately not closed: the
+  // only real fix is a partial unique index on (name) where owner_id is null,
+  // which would also forbid names that already collide today, and there is
+  // exactly one admin. The cost of losing that race is two shelves to rename,
+  // not corruption.
   const { data: collision, error: collisionError } = await supabase
     .from("collections")
     .select("id")
