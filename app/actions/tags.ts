@@ -39,6 +39,37 @@ const descriptionSchema = z
 const kindSchema = z.enum(["genre", "trope", "theme", "format"]);
 const idSchema = z.coerce.number().int().positive();
 
+/**
+ * Revalidates the reader-facing tag page for one tag id.
+ *
+ * /discover/tag/[slug] is a dynamic route, and revalidatePath has two
+ * incompatible modes for that: a literal concrete path (e.g.
+ * "/discover/tag/isekai") needs no second argument, while the bracketed
+ * pattern itself ("/discover/tag/[slug]") requires `{ type: "page" }` and
+ * revalidates every tag page at once rather than just this one (see
+ * node_modules/next/dist/docs/.../revalidatePath.md). Every caller here only
+ * has a tag id, not its slug, so this fetches the slug first and revalidates
+ * the literal path — the same shape updateTag already uses for
+ * /admin/tags/${id}. This is one extra read per write, on actions that are
+ * already several round trips deep, not a hot path.
+ *
+ * A lookup failure (tag deleted concurrently, or query error) is swallowed:
+ * the write this is cleaning up after has already succeeded, and the reader
+ * page will still refresh eventually the next time someone touches this tag.
+ */
+async function revalidateTagPage(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  tagId: number,
+): Promise<void> {
+  const { data } = await supabase
+    .from("tags")
+    .select("slug")
+    .eq("id", tagId)
+    .maybeSingle();
+
+  if (data?.slug) revalidatePath(`/discover/tag/${data.slug}`);
+}
+
 export async function createTag(
   _prev: TagState,
   formData: FormData,
@@ -149,6 +180,10 @@ export async function updateTag(
 
   revalidatePath("/admin/tags");
   revalidatePath(`/admin/tags/${parsed.data.id}`);
+  // Name, description, kind and is_active can all change what the reader page
+  // shows (is_active decides whether it 404s at all), so it needs the same
+  // treatment as the admin paths above.
+  await revalidateTagPage(supabase, parsed.data.id);
   return { message: "Saved." };
 }
 
@@ -163,6 +198,15 @@ export async function deleteTag(
 
   const supabase = await createClient();
 
+  // Read the slug before the row is gone — there is nothing left to look up
+  // afterward, and the reader page for a deleted tag should stop being
+  // served from cache just as surely as a retired one.
+  const { data: doomed } = await supabase
+    .from("tags")
+    .select("slug")
+    .eq("id", parsed.data)
+    .maybeSingle();
+
   // title_tags cascades from tags, so one delete is enough. Note that deleting
   // a MAL-linked tag is not permanent: the next sync's `do nothing` insert
   // finds no row and re-creates it. Retiring (is_active = false) is the real
@@ -172,6 +216,7 @@ export async function deleteTag(
   if (error) return { error: error.message };
 
   revalidatePath("/admin/tags");
+  if (doomed?.slug) revalidatePath(`/discover/tag/${doomed.slug}`);
   return { message: "Tag deleted." };
 }
 
@@ -208,6 +253,7 @@ export async function tagTitle(
   }
 
   revalidatePath(`/admin/tags/${parsed.data.tagId}`);
+  await revalidateTagPage(supabase, parsed.data.tagId);
   return { message: "Tagged." };
 }
 
@@ -238,5 +284,6 @@ export async function untagTitle(
   if (error) return { error: error.message };
 
   revalidatePath(`/admin/tags/${parsed.data.tagId}`);
+  await revalidateTagPage(supabase, parsed.data.tagId);
   return { message: "Removed." };
 }

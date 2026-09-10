@@ -68,7 +68,7 @@ export type {
  * Collections hold a dozen titles, so the extra round trip is not the cost
  * worth optimising away.
  */
-async function getTrackedEntries(): Promise<Map<number, number>> {
+export async function getTrackedEntries(): Promise<Map<number, number>> {
   const supabase = await createClient();
 
   const { data, error } = await supabase
