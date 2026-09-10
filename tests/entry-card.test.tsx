@@ -11,9 +11,6 @@ vi.mock("@/app/actions/entry-sources", () => ({
   updateEntrySource: vi.fn(async () => ({ message: "Source updated." })),
   removeEntrySource: vi.fn(async () => ({ message: "Source removed." })),
 }));
-vi.mock("@/app/actions/collections", () => ({
-  addToCollection: vi.fn(async () => ({ message: "Added." })),
-}));
 vi.mock("sonner", () => ({
   toast: { error: vi.fn(), success: vi.fn() },
 }));

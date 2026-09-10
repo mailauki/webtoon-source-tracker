@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   collectionMembership,
-  collectionsForTitle,
   hydrateCollection,
   nextPosition,
   summariseCollection,
@@ -203,34 +202,6 @@ describe("nextPosition", () => {
 
   it("survives the duplicate positions a lost race can leave behind", () => {
     expect(nextPosition([10, 10, 20])).toBe(30);
-  });
-});
-
-describe("collectionsForTitle", () => {
-  const targets = [
-    { id: 1, name: "Comfort rereads", titleIds: [10, 20] },
-    { id: 2, name: "To recommend", titleIds: [] },
-  ];
-
-  it("marks the collections that already hold the title", () => {
-    expect(collectionsForTitle(targets, 10)).toEqual([
-      { id: 1, name: "Comfort rereads", has: true },
-      { id: 2, name: "To recommend", has: false },
-    ]);
-  });
-
-  it("keeps a collection that has the title rather than dropping it", () => {
-    // The menu ticks and disables it. Dropping it would make "already in this
-    // collection" indistinguishable from "no such collection".
-    expect(collectionsForTitle(targets, 20)).toHaveLength(2);
-  });
-
-  it("marks nothing when the title is in none of them", () => {
-    expect(collectionsForTitle(targets, 999).every((c) => !c.has)).toBe(true);
-  });
-
-  it("returns nothing when the viewer has no collections", () => {
-    expect(collectionsForTitle([], 10)).toEqual([]);
   });
 });
 

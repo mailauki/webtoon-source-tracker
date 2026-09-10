@@ -167,32 +167,12 @@ export type CollectionTarget = {
 };
 
 /**
- * The collections worth offering for one title, for the card menu.
- *
- * A collection that already holds it comes back as `has: true` rather than
- * being dropped: the menu shows it ticked and disabled, so "is this filed
- * anywhere" is answerable without opening each collection. Dropping it would
- * make a collection that has the title and a collection that does not exist
- * look identical.
- */
-export function collectionsForTitle(
-  targets: CollectionTarget[],
-  titleId: number,
-): { id: number; name: string; has: boolean }[] {
-  return targets.map((target) => ({
-    id: target.id,
-    name: target.name,
-    has: target.titleIds.includes(titleId),
-  }));
-}
-
-/**
  * The membership of one title across the viewer's collections, for the entry
  * page's section.
  *
- * Where `collectionsForTitle` answers "which of these can I add it to", this
- * answers "which is it in, and by which item" — removing needs the
- * collection_items id, which the menu never has to know because it only adds.
+ * Answers "which is it in, and by which item" — removing needs the
+ * collection_items id, so unlike a surface that only ever adds, this one has
+ * to carry it.
  *
  * Every collection comes back, in or out, so the section can render a stable
  * order: a collection does not jump position when the title goes into it.
