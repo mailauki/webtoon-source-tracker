@@ -1,4 +1,3 @@
-import { AppShell } from "@/components/app-shell";
 import { verifyAdmin } from "@/lib/auth/dal";
 
 /**
@@ -8,6 +7,10 @@ import { verifyAdmin } from "@/lib/auth/dal";
  * than a redirect — a redirect would confirm the route exists. This gate
  * covers the pages; each server action re-checks independently, because a
  * layout does not protect an action.
+ *
+ * The chrome is not rendered here: each admin page renders <AppShell> itself,
+ * so it can fill the sticky row with its own back link and primary action.
+ * A layout would have to hoist that state out of the client lists that own it.
  *
  * Awaited directly in the layout body (not inside a Suspense boundary further
  * down), so the check runs before anything under it renders or streams —
@@ -21,5 +24,5 @@ export default async function AdminLayout({
   children: React.ReactNode;
 }) {
   await verifyAdmin();
-  return <AppShell>{children}</AppShell>;
+  return children;
 }

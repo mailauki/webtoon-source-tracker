@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useRef, useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -25,7 +25,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -42,38 +41,30 @@ import type { AdminCollectionSummary } from "@/lib/data/admin";
  * Retiring is the edit form's checkbox. Deleting is separate and confirmed,
  * because it cascades to the items and their hand-made ordering — the same
  * unrecoverable-by-resync data CollectionHeader confirms for.
+ *
+ * Creating is not here: "New collection" sits in the shell's sticky row, so it
+ * lives in NewCollectionButton alongside the dialog it opens. Nothing in this
+ * list reads that open state.
  */
 export function CuratedCollectionList({
   collections,
 }: {
   collections: AdminCollectionSummary[];
 }) {
-  const router = useRouter();
-  const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<AdminCollectionSummary | null>(null);
   const [deleting, setDeleting] = useState<AdminCollectionSummary | null>(null);
 
   return (
     <div className="grid gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="grid gap-1">
-          <h1 className="font-display text-2xl font-bold tracking-tight">
-            Curated collections
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {collections.length === 0
-              ? "No curated collections yet."
-              : `${collections.length} ${collections.length === 1 ? "shelf" : "shelves"}, retired ones included.`}
-          </p>
-        </div>
-        <Button
-          type="button"
-          onClick={() => setCreating(true)}
-          className="rounded-pill bg-brand font-bold text-brand-foreground hover:bg-brand/90"
-        >
-          <Plus className="size-4" />
-          New collection
-        </Button>
+      <div className="grid gap-1">
+        <h1 className="font-display text-2xl font-bold tracking-tight">
+          Curated collections
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          {collections.length === 0
+            ? "No curated collections yet."
+            : `${collections.length} ${collections.length === 1 ? "shelf" : "shelves"}, retired ones included.`}
+        </p>
       </div>
 
       {collections.length === 0 ? (
@@ -136,36 +127,6 @@ export function CuratedCollectionList({
           ))}
         </ul>
       )}
-
-      <Dialog open={creating} onOpenChange={setCreating}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>New curated collection</DialogTitle>
-            <DialogDescription>
-              An editorial shelf on Discover. Its slug goes in the URL and
-              can&rsquo;t be changed afterwards.
-            </DialogDescription>
-          </DialogHeader>
-          {/* Mounted only while open, so each new collection starts from a
-              blank form and a blank action state. On success this navigates
-              to the new shelf rather than closing back to the list — a
-              collection is made in order to put something in it, and the only
-              place to do that is its own page. */}
-          {creating ? (
-            <CuratedCollectionForm
-              onDone={(collectionId) => {
-                setCreating(false);
-                // createCuratedCollection always returns a collectionId on
-                // success; the guard is only for the type, which has to allow
-                // the edit form calling the same prop with none.
-                if (collectionId !== undefined) {
-                  router.push(`/admin/collections/${collectionId}`);
-                }
-              }}
-            />
-          ) : null}
-        </DialogContent>
-      </Dialog>
 
       <Dialog
         open={editing !== null}

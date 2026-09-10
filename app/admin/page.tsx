@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { Library, Tags } from "lucide-react";
+import { Layers, Tags } from "lucide-react";
 
+import { AppShell } from "@/components/app-shell";
 import { getAdminCounts } from "@/lib/data/admin";
 
 export const metadata = { title: "Admin" };
@@ -27,7 +28,8 @@ export default async function AdminPage() {
   const counts = await getAdminCounts();
 
   return (
-    <div className="grid gap-8">
+    <AppShell>
+      <div className="grid gap-8">
       <div className="grid gap-1">
         <h1 className="font-display text-2xl font-bold tracking-tight">
           Admin
@@ -45,7 +47,7 @@ export default async function AdminPage() {
         >
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <Library className="size-4 text-muted-foreground" />
+              <Layers className="size-4 text-muted-foreground" />
               <h2 className="font-display text-base font-bold">
                 Collections
               </h2>
@@ -77,7 +79,8 @@ export default async function AdminPage() {
             {counts.taggedTitles === 1 ? "" : "s"} across the catalog.
           </p>
         </Link>
+        </div>
       </div>
-    </div>
+    </AppShell>
   );
 }

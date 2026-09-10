@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
+import { AppShell } from "@/components/app-shell";
 import { CuratedCollectionList } from "@/components/admin/curated-collection-list";
+import { NewCollectionButton } from "@/components/admin/new-collection-button";
+import { Button } from "@/components/ui/button";
 import { getAllCuratedCollections } from "@/lib/data/admin";
 
 export const metadata = { title: "Collections · Admin" };
@@ -18,16 +21,20 @@ export default async function AdminCollectionsPage() {
   const collections = await getAllCuratedCollections();
 
   return (
-    <div className="grid gap-6">
-      <Link
-        href="/admin"
-        className="inline-flex w-fit items-center gap-1 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeft className="size-3.5" />
-        Admin
-      </Link>
-
+    <AppShell
+      secondaryRow={
+        <div className="flex items-center justify-between gap-2">
+          <Button asChild variant="ghost">
+            <Link href="/admin">
+              <ArrowLeft data-icon="inline-start" />
+              Admin
+            </Link>
+          </Button>
+          <NewCollectionButton />
+        </div>
+      }
+    >
       <CuratedCollectionList collections={collections} />
-    </div>
+    </AppShell>
   );
 }

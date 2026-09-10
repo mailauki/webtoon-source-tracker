@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
+import { AppShell } from "@/components/app-shell";
+import { NewTagButton } from "@/components/admin/new-tag-button";
 import { TagList } from "@/components/admin/tag-list";
 import { getAllTags } from "@/lib/data/admin";
+import { Button } from "@/components/ui/button";
 
 export const metadata = { title: "Tags · Admin" };
 
@@ -21,16 +24,22 @@ export default async function AdminTagsPage() {
   const tags = await getAllTags();
 
   return (
-    <div className="grid gap-6">
-      <Link
-        href="/admin"
-        className="inline-flex w-fit items-center gap-1 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeft className="size-3.5" />
-        Admin
-      </Link>
-
+    <AppShell
+      // Back out and the one thing this page creates, justified apart on the
+      // sticky row — the same shape the collection detail page uses.
+      secondaryRow={
+        <div className="flex items-center justify-between gap-2">
+          <Button asChild variant="ghost">
+            <Link href="/admin">
+              <ArrowLeft data-icon="inline-start" />
+              Admin
+            </Link>
+          </Button>
+          <NewTagButton />
+        </div>
+      }
+    >
       <TagList tags={tags} />
-    </div>
+    </AppShell>
   );
 }

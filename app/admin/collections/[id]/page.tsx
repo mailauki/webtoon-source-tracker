@@ -2,9 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
+import { AppShell } from "@/components/app-shell";
 import { CuratedItemList } from "@/components/admin/curated-item-list";
 import { CuratedTitlePicker } from "@/components/admin/curated-title-picker";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   getCuratedCollectionForAdmin,
   searchCatalogTitles,
@@ -65,15 +67,21 @@ export default async function AdminCollectionPage({
   if (!collection) notFound();
 
   return (
+    <AppShell
+      // Only the way out on this row: adding titles here is an inline search
+      // form, not a button, so it stays with the results it filters.
+      secondaryRow={
+        <div className="flex items-center justify-between gap-2">
+          <Button asChild variant="ghost" size="sm" className="rounded-pill text-muted-foreground">
+            <Link href="/admin/collections">
+              <ArrowLeft data-icon="inline-start" />
+              Collections
+            </Link>
+          </Button>
+        </div>
+      }
+    >
     <div className="grid gap-6">
-      <Link
-        href="/admin/collections"
-        className="inline-flex w-fit items-center gap-1 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeft className="size-3.5" />
-        Collections
-      </Link>
-
       <div className="grid gap-1">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="font-display text-2xl font-bold tracking-tight">
@@ -109,5 +117,6 @@ export default async function AdminCollectionPage({
         />
       </section>
     </div>
+    </AppShell>
   );
 }

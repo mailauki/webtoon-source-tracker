@@ -2,10 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
+import { AppShell } from "@/components/app-shell";
 import { TagForm } from "@/components/admin/tag-form";
 import { TagTitlePicker } from "@/components/admin/tag-title-picker";
 import { TaggedTitleList } from "@/components/admin/tagged-title-list";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   getTagForAdmin,
   getTaggedTitlesForAdmin,
@@ -52,15 +54,19 @@ export default async function AdminTagPage({
   if (!tag) notFound();
 
   return (
+    <AppShell
+      secondaryRow={
+        <div className="flex items-center justify-between gap-2">
+          <Button asChild variant="ghost" size="sm" className="rounded-pill text-muted-foreground">
+            <Link href="/admin/tags">
+              <ArrowLeft data-icon="inline-start" />
+              Tags
+            </Link>
+          </Button>
+        </div>
+      }
+    >
     <div className="grid gap-6">
-      <Link
-        href="/admin/tags"
-        className="inline-flex w-fit items-center gap-1 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeft className="size-3.5" />
-        Tags
-      </Link>
-
       <div className="grid gap-1">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="font-display text-2xl font-bold tracking-tight">
@@ -95,5 +101,6 @@ export default async function AdminTagPage({
         <TaggedTitleList tagId={tag.id} titles={titles} />
       </section>
     </div>
+    </AppShell>
   );
 }

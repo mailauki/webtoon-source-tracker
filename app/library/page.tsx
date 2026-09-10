@@ -126,6 +126,10 @@ export default async function LibraryPage() {
             </div>
           </div>
         }
+        // The source chips stick as a second tier under the status row rather
+        // than scrolling away above the shelf: they narrow the same grid the
+        // status chips do, and reaching one meant scrolling back to the top.
+        tertiaryRow={<SourceFilter sources={sourceChips} />}
       >
         <div className="grid gap-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -161,8 +165,6 @@ export default async function LibraryPage() {
               </Link>
             </p>
           ) : null}
-
-          <SourceFilter sources={sourceChips} />
 
           <LibraryGrid
             entries={entries}
