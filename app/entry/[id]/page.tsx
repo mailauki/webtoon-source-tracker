@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { Button } from "@/components/ui/button";
 import { EntryCollections } from "@/components/entry-collections";
 import { EntrySourceEditor } from "@/components/entry-source-editor";
 import { EntryTags } from "@/components/entry-tags";
@@ -70,19 +71,20 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
 
   return (
     <AppShell
+      // Sticky under the header, like the library's status chips: the way back
+      // stays one tap away however far down the page the reader is. The row
+      // paints nothing of its own; the ghost button picks up its translucent,
+      // blurred ground from the chrome it sits in, rather than sitting flat
+      // over the content scrolling beneath it.
       secondaryRow={
-        // Sticky under the header, like the library's status chips: the way
-        // back stays one tap away however far down the page the reader is.
-        // The row paints nothing of its own, so the link carries the same
-        // translucent pill the chips do rather than sitting over the content
-        // scrolling beneath it.
-        <Link
-          href="/library"
-          className="inline-flex items-center gap-1 rounded-pill border border-border bg-background/60 px-3 py-1 text-xs font-semibold text-muted-foreground backdrop-blur transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="size-3.5" />
-          Back to library
-        </Link>
+        <div className="flex items-center justify-between gap-2">
+          <Button asChild variant="ghost" size="sm" className="rounded-pill text-muted-foreground">
+            <Link href="/library">
+              <ArrowLeft data-icon="inline-start" />
+              Back to library
+            </Link>
+          </Button>
+        </div>
       }
     >
       <div className="grid gap-8">

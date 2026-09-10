@@ -8,7 +8,6 @@ import {
   ArchiveRestore,
   MoreVertical,
   Pencil,
-  Plus,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -29,7 +28,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -60,33 +58,22 @@ export type AdminTag = Tag & { titleCount: number };
  * a direct delete button.
  */
 export function TagList({ tags }: { tags: AdminTag[] }) {
-  const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<AdminTag | null>(null);
   const [deleting, setDeleting] = useState<AdminTag | null>(null);
 
   const groups = groupByKind(tags) as { kind: string; tags: AdminTag[] }[];
 
   return (
-    <div className="grid gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="grid gap-1">
-          <h1 className="font-display text-2xl font-bold tracking-tight">
-            Tags
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {tags.length === 0
-              ? "No tags yet."
-              : `${tags.length} ${tags.length === 1 ? "tag" : "tags"}, retired ones included.`}
-          </p>
-        </div>
-        <Button
-          type="button"
-          onClick={() => setCreating(true)}
-          className="rounded-pill bg-brand font-bold text-brand-foreground hover:bg-brand/90"
-        >
-          <Plus className="size-4" />
-          New tag
-        </Button>
+    <div className="flex flex-col gap-6">
+      <div className="grid gap-1">
+        <h1 className="font-display text-2xl font-bold tracking-tight">
+          Tags
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          {tags.length === 0
+            ? "No tags yet."
+            : `${tags.length} ${tags.length === 1 ? "tag" : "tags"}, retired ones included.`}
+        </p>
       </div>
 
       {tags.length === 0 ? (
@@ -96,11 +83,11 @@ export function TagList({ tags }: { tags: AdminTag[] }) {
         </p>
       ) : (
         groups.map((group) => (
-          <section key={group.kind} className="grid gap-2">
+          <section key={group.kind} className="flex flex-col gap-2">
             <h2 className="font-display text-sm font-bold uppercase tracking-wide text-muted-foreground">
               {group.kind}
             </h2>
-            <ul className="grid gap-1">
+            <ul className="flex flex-col gap-1">
               {group.tags.map((tag) => (
                 <li
                   key={tag.id}
@@ -187,20 +174,6 @@ export function TagList({ tags }: { tags: AdminTag[] }) {
           </section>
         ))
       )}
-
-      <Dialog open={creating} onOpenChange={setCreating}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>New tag</DialogTitle>
-            <DialogDescription>
-              A trope, theme or format readers can browse Discover by.
-            </DialogDescription>
-          </DialogHeader>
-          {/* Mounted only while open, so each new tag starts from a blank form
-              and a blank action state rather than the last one's result. */}
-          {creating ? <TagForm onDone={() => setCreating(false)} /> : null}
-        </DialogContent>
-      </Dialog>
 
       <Dialog
         open={editing !== null}

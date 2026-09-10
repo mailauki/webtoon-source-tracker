@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { Button } from "@/components/ui/button";
 import { CollectionCard } from "@/components/collection-card";
 import { verifySession } from "@/lib/auth/dal";
 import { getTrackedEntries } from "@/lib/data/collections";
@@ -42,13 +43,14 @@ export default async function TagPage({
   return (
     <AppShell
       secondaryRow={
-        <Link
-          href="/discover"
-          className="inline-flex items-center gap-1 rounded-pill border border-border bg-background/60 px-3 py-1 text-xs font-semibold text-muted-foreground backdrop-blur transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="size-3.5" />
-          Discover
-        </Link>
+        <div className="flex items-center justify-between gap-2">
+          <Button asChild variant="ghost" size="sm" className="rounded-pill text-muted-foreground">
+            <Link href="/discover">
+              <ArrowLeft data-icon="inline-start" />
+              Discover
+            </Link>
+          </Button>
+        </div>
       }
     >
       <div className="grid gap-6">

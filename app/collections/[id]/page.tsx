@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { Button } from "@/components/ui/button";
 import { CollectionCard } from "@/components/collection-card";
 import { AddTitlesDialog } from "@/components/collections/add-titles-dialog";
 import { CollectionHeader } from "@/components/collections/collection-header";
@@ -45,14 +46,25 @@ export default async function MyCollectionPage({
 
   return (
     <AppShell
+      // The way out and the one way in sit on the same sticky row, justified
+      // apart: adding titles is this page's whole job, so the control follows
+      // the reader down a long shelf rather than scrolling off the top.
       secondaryRow={
-        <Link
-          href="/collections"
-          className="inline-flex items-center gap-1 rounded-pill border border-border bg-background/60 px-3 py-1 text-xs font-semibold text-muted-foreground backdrop-blur transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="size-3.5" />
-          Collections
-        </Link>
+        <div className="flex items-center justify-between gap-2">
+          <Button asChild variant="ghost" size="sm" className="rounded-pill text-muted-foreground">
+            <Link href="/collections">
+              <ArrowLeft data-icon="inline-start" />
+              Collections
+            </Link>
+          </Button>
+          <AddTitlesDialog
+            collectionId={collection.id}
+            library={library}
+            presentTitleIds={collection.items.map(
+              (item) => item.media_titles.id,
+            )}
+          />
+        </div>
       }
     >
       <div className="grid gap-6">
@@ -64,16 +76,6 @@ export default async function MyCollectionPage({
           }}
           itemCount={collection.items.length}
         />
-
-        <div className="flex flex-wrap gap-2">
-          <AddTitlesDialog
-            collectionId={collection.id}
-            library={library}
-            presentTitleIds={collection.items.map(
-              (item) => item.media_titles.id,
-            )}
-          />
-        </div>
 
         {collection.items.length === 0 ? (
           <div className="flex min-h-[30vh] flex-col items-center justify-center gap-2 text-center">

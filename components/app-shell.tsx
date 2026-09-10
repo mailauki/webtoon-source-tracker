@@ -1,4 +1,4 @@
-import { Compass, Library, LibraryBig, LogOut, Settings, ShieldUser } from "lucide-react";
+import { Compass, Layers, LibraryBig, LogOut, Settings, ShieldUser } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -27,8 +27,15 @@ import NavLink from "./nav-link";
  * other pages would throw away. The entry page fills it with the back link,
  * which stays reachable the same way while the page scrolls.
  *
- * The row itself paints nothing: content scrolls under it, so whatever a page
- * puts here carries its own translucent background (see StatusPill).
+ * `tertiaryRow` is a second tier under it, inside the same sticky container so
+ * the two move together rather than stacking two independent sticky offsets.
+ * The library uses it for the source chips, under its status row.
+ *
+ * Neither row paints anything: content scrolls under them, so whatever a page
+ * puts here carries its own translucent background (see StatusPill). A ghost
+ * button is transparent at rest, so a back link in these rows reads against
+ * whatever passes beneath it — give it a ground of its own if that ever needs
+ * to stop being true.
  *
  * `searchable` gates the search control for the same reason: it filters the
  * library shelf, which only /library renders.
@@ -36,10 +43,12 @@ import NavLink from "./nav-link";
 export async function AppShell({
   children,
   secondaryRow,
+  tertiaryRow,
   searchable = false,
 }: {
   children: React.ReactNode;
   secondaryRow?: React.ReactNode;
+  tertiaryRow?: React.ReactNode;
   searchable?: boolean;
 }) {
   const profile = await getProfile();
@@ -86,7 +95,7 @@ export async function AppShell({
 						<nav className="flex items-center gap-1">
 							<NavLink icon={<LibraryBig data-icon="inline-start" />} label="Library" url="/library" />
 							<NavLink icon={<Compass data-icon="inline-start" />} label="Discover" url="/discover" />
-							<NavLink icon={<Library data-icon="inline-start" />} label="Collections" url="/collections" />
+							<NavLink icon={<Layers data-icon="inline-start" />} label="Collections" url="/collections" />
 							<NavLink icon={<Settings data-icon="inline-start" />} label="Settings" url="/settings" />
 							{admin && <NavLink icon={<ShieldUser data-icon="inline-start" />} label="Admin" url="/admin" />}
 						</nav>
@@ -113,6 +122,12 @@ export async function AppShell({
         {secondaryRow && (
           <div className="mx-auto max-w-6xl px-4 py-2">{secondaryRow}</div>
         )}
+        {/* Tertiary row: a second tier that sticks with the one above it
+            rather than under it, so the two move as one block. The library
+            puts the source chips here, below its status row. */}
+        {tertiaryRow && (
+          <div className="mx-auto max-w-6xl px-4 pb-2">{tertiaryRow}</div>
+        )}
 			</div>
 
       {/* The indicator hangs below the chrome. How much chrome there is
@@ -124,7 +139,7 @@ export async function AppShell({
         {children}
       </main>
 
-      <footer className="border-t border-border px-4 py-4">
+      <footer className="border-t border-border px-4 py-6">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-muted-foreground">
           <p>Signed in as {profile?.display_name ?? "your account"}</p>
           <nav className="flex gap-4">
