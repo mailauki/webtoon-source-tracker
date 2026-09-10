@@ -120,11 +120,15 @@ export async function updateCuratedCollection(
       id: idSchema,
       name: nameSchema,
       description: descriptionSchema,
+      isActive: z.coerce.boolean(),
     })
     .safeParse({
       id: formData.get("id"),
       name: formData.get("name"),
       description: formData.get("description") ?? "",
+      // A checkbox sends nothing at all when unchecked, so an absent field is
+      // "retired" rather than a missing value — the same read updateTag makes.
+      isActive: formData.get("is_active") === "on",
     });
 
   if (!parsed.success) return { error: parsed.error.issues[0].message };
@@ -135,6 +139,10 @@ export async function updateCuratedCollection(
   // (/discover/collection/<slug>), and this action mirrors updateTag's choice
   // to keep renames of the name separate from renames of the URL.
   //
+  // is_active IS editable, and is how a curated shelf is withdrawn from
+  // /discover without deleting it and its hand-ordered items. Deleting is the
+  // separate, confirmed act below.
+  //
   // .is("owner_id", null) matches the RLS policy's own condition. It changes
   // nothing RLS wouldn't already refuse — a user collection has no matching
   // curated row to update — but it means a bad id fails the same way a
@@ -144,6 +152,7 @@ export async function updateCuratedCollection(
     .update({
       name: parsed.data.name,
       description: parsed.data.description || null,
+      is_active: parsed.data.isActive,
     })
     .eq("id", parsed.data.id)
     .is("owner_id", null);

@@ -16,6 +16,12 @@ export const metadata = { title: "Admin" };
  * Retired collections are included in the collections count (see
  * getAdminCounts / getAllCuratedCollections), so this number can be larger
  * than what /discover shows — that is the point of an admin-facing count.
+ *
+ * `taggedTitles` counts rows in title_tags, not distinct titles: a title
+ * wearing three tags contributes three. The label says "tag assignments" for
+ * that reason. The query is deliberately left alone — as a measure of how
+ * much tagging has been done it is the more useful of the two numbers, and it
+ * is one cheap count instead of a distinct scan.
  */
 export default async function AdminPage() {
   const counts = await getAdminCounts();
@@ -67,7 +73,7 @@ export default async function AdminPage() {
             </span>
           </div>
           <p className="text-sm text-muted-foreground">
-            {counts.taggedTitles} tagged title
+            {counts.taggedTitles} tag assignment
             {counts.taggedTitles === 1 ? "" : "s"} across the catalog.
           </p>
         </Link>
