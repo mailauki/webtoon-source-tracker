@@ -153,9 +153,14 @@ export function CuratedCollectionList({
               place to do that is its own page. */}
           {creating ? (
             <CuratedCollectionForm
-              onCreated={(collectionId) => {
+              onDone={(collectionId) => {
                 setCreating(false);
-                router.push(`/admin/collections/${collectionId}`);
+                // createCuratedCollection always returns a collectionId on
+                // success; the guard is only for the type, which has to allow
+                // the edit form calling the same prop with none.
+                if (collectionId !== undefined) {
+                  router.push(`/admin/collections/${collectionId}`);
+                }
               }}
             />
           ) : null}
@@ -176,7 +181,11 @@ export function CuratedCollectionList({
               remounts the form with that shelf's values and a fresh action
               state, rather than the first one's defaults and stale result. */}
           {editing ? (
-            <CuratedCollectionForm key={editing.id} collection={editing} />
+            <CuratedCollectionForm
+              key={editing.id}
+              collection={editing}
+              onDone={() => setEditing(null)}
+            />
           ) : null}
         </DialogContent>
       </Dialog>

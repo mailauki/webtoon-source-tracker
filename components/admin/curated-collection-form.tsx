@@ -26,11 +26,15 @@ import type { AdminCollectionSummary } from "@/lib/data/admin";
  */
 export function CuratedCollectionForm({
   collection,
-  /** Called after a create settles, so the list can close its dialog. */
-  onCreated,
+  /**
+   * Called after a create or a save settles, so the list can close its
+   * dialog. On create, `collectionId` carries the new shelf's id — the list
+   * uses it to navigate straight there instead of just closing.
+   */
+  onDone,
 }: {
   collection?: AdminCollectionSummary;
-  onCreated?: (collectionId: number) => void;
+  onDone?: (collectionId?: number) => void;
 }) {
   const router = useRouter();
   const editing = collection !== undefined;
@@ -52,8 +56,8 @@ export function CuratedCollectionForm({
     if (state.error) return; // rendered inline, below the fields
     toast.success(state.message ?? "Saved.");
     router.refresh();
-    if (state.collectionId !== undefined) onCreated?.(state.collectionId);
-  }, [state, router, onCreated]);
+    onDone?.(state.collectionId);
+  }, [state, router, onDone]);
 
   const id = editing ? `curated-${collection.id}` : "curated-new";
 

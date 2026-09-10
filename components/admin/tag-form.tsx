@@ -30,11 +30,11 @@ import { TAG_KINDS, type Tag } from "@/lib/data/tag-items";
  */
 export function TagForm({
   tag,
-  /** Called after a create settles, so the list can close its dialog. */
-  onCreated,
+  /** Called after a create or a save settles, so the list can close its dialog. */
+  onDone,
 }: {
   tag?: Tag;
-  onCreated?: () => void;
+  onDone?: () => void;
 }) {
   const router = useRouter();
   const editing = tag !== undefined;
@@ -59,8 +59,8 @@ export function TagForm({
     if (state.error) return; // rendered inline, below the fields
     toast.success(state.message ?? "Saved.");
     router.refresh();
-    if (!editing) onCreated?.();
-  }, [state, router, editing, onCreated]);
+    onDone?.();
+  }, [state, router, onDone]);
 
   const id = editing ? `tag-${tag.id}` : "tag-new";
 

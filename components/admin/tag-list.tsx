@@ -3,10 +3,17 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useRef, useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  Archive,
+  ArchiveRestore,
+  MoreVertical,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 
-import { deleteTag, type TagState } from "@/app/actions/tags";
+import { deleteTag, updateTag, type TagState } from "@/app/actions/tags";
 import { TagForm } from "@/components/admin/tag-form";
 import {
   AlertDialog,
@@ -26,6 +33,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { groupByKind, type Tag } from "@/lib/data/tag-items";
 
 export type AdminTag = Tag & { titleCount: number };
@@ -38,9 +51,13 @@ export type AdminTag = Tag & { titleCount: number };
  * marked instead, which is what `is_active` means: withdrawn from Discover,
  * not gone.
  *
- * Retiring is the edit form's checkbox rather than its own button. Deleting is
- * separate and confirmed, because for a MAL-imported tag it is not even
- * permanent — the next sync re-creates the row, having found nothing to skip.
+ * Retiring is the row's direct action — a single click toggles `is_active`
+ * through updateTag — because it is the correct "stop showing this" for every
+ * tag, not just MAL-imported ones. Deleting is confirmed and, for a MAL-linked
+ * tag, tucked into the overflow menu instead of sitting on the row: syncGenres
+ * inserts with `on conflict do nothing`, so deleting one is not durable and the
+ * next sync just re-creates it. A hand-made tag has no such trap, so it keeps
+ * a direct delete button.
  */
 export function TagList({ tags }: { tags: AdminTag[] }) {
   const [creating, setCreating] = useState(false);
@@ -112,6 +129,8 @@ export function TagList({ tags }: { tags: AdminTag[] }) {
                     {tag.titleCount === 1 ? "title" : "titles"}
                   </span>
 
+                  <RetireTagButton tag={tag} />
+
                   <Button
                     type="button"
                     variant="ghost"
@@ -122,16 +141,46 @@ export function TagList({ tags }: { tags: AdminTag[] }) {
                   >
                     <Pencil className="size-4" />
                   </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="shrink-0 rounded-pill text-muted-foreground hover:text-alert"
-                    onClick={() => setDeleting(tag)}
-                    aria-label={`Delete ${tag.name}`}
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
+
+                  {tag.mal_genre_id !== null ? (
+                    // Delete is not a durable action on a MAL-linked row —
+                    // the next sync re-creates whatever it removes — so it is
+                    // demoted into an overflow rather than sitting next to
+                    // retire as if it were an equally reasonable choice.
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="shrink-0 rounded-pill"
+                          aria-label={`More actions for ${tag.name}`}
+                        >
+                          <MoreVertical className="size-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={() => setDeleting(tag)}
+                        >
+                          <Trash2 className="size-4" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="shrink-0 rounded-pill text-muted-foreground hover:text-alert"
+                      onClick={() => setDeleting(tag)}
+                      aria-label={`Delete ${tag.name}`}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -149,7 +198,7 @@ export function TagList({ tags }: { tags: AdminTag[] }) {
           </DialogHeader>
           {/* Mounted only while open, so each new tag starts from a blank form
               and a blank action state rather than the last one's result. */}
-          {creating ? <TagForm onCreated={() => setCreating(false)} /> : null}
+          {creating ? <TagForm onDone={() => setCreating(false)} /> : null}
         </DialogContent>
       </Dialog>
 
@@ -166,12 +215,82 @@ export function TagList({ tags }: { tags: AdminTag[] }) {
           {/* Keyed on the tag: opening the dialog for a second tag remounts
               the form with that tag's values and a fresh action state, rather
               than showing the first tag's defaults and its stale result. */}
-          {editing ? <TagForm key={editing.id} tag={editing} /> : null}
+          {editing ? (
+            <TagForm
+              key={editing.id}
+              tag={editing}
+              onDone={() => setEditing(null)}
+            />
+          ) : null}
         </DialogContent>
       </Dialog>
 
       <DeleteTagDialog tag={deleting} onClose={() => setDeleting(null)} />
     </div>
+  );
+}
+
+/**
+ * The single-click retire/unretire control, driven through updateTag rather
+ * than a dedicated action: updateTag already takes is_active alongside the
+ * rest of the row, and a toggle button posting the tag's current fields with
+ * that one bit flipped is simpler than a new server action that would only
+ * ever set one column.
+ *
+ * updateTag's schema requires the whole row (name, kind, description), so
+ * this sends them back unchanged rather than partially. Kept as its own
+ * useActionState/useEffect pair — separate from the row's edit dialog — so a
+ * retire click can't be confused with, or clobbered by, a save in flight from
+ * the pencil.
+ */
+function RetireTagButton({ tag }: { tag: AdminTag }) {
+  const router = useRouter();
+
+  const [state, action, pending] = useActionState<TagState, FormData>(
+    updateTag,
+    null,
+  );
+
+  const handled = useRef<TagState>(null);
+
+  useEffect(() => {
+    if (!state || handled.current === state) return;
+    handled.current = state;
+
+    if (state.error) {
+      toast.error(state.error);
+      return;
+    }
+    toast.success(tag.is_active ? "Tag retired." : "Tag unretired.");
+    router.refresh();
+  }, [state, router, tag.is_active]);
+
+  return (
+    <form action={action}>
+      <input type="hidden" name="id" value={tag.id} />
+      <input type="hidden" name="name" value={tag.name} />
+      <input type="hidden" name="kind" value={tag.kind} />
+      <input type="hidden" name="description" value={tag.description ?? ""} />
+      {/* Flipping the current state: an absent is_active field is what
+          updateTag reads as false, so retiring sends nothing and unretiring
+          sends "on" — the same convention the checkbox in TagForm relies on. */}
+      {tag.is_active ? null : <input type="hidden" name="is_active" value="on" />}
+      <Button
+        type="submit"
+        variant="ghost"
+        size="icon"
+        disabled={pending}
+        className="shrink-0 rounded-pill"
+        aria-label={tag.is_active ? `Retire ${tag.name}` : `Unretire ${tag.name}`}
+        title={tag.is_active ? "Retire" : "Unretire"}
+      >
+        {tag.is_active ? (
+          <Archive className="size-4" />
+        ) : (
+          <ArchiveRestore className="size-4" />
+        )}
+      </Button>
+    </form>
   );
 }
 
