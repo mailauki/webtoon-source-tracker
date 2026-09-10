@@ -29,26 +29,45 @@
  * the genre upsert (lib/sync/sync-list.ts's syncGenres) are reimplemented
  * below against the same tables and the same two RPCs, deliberately kept in
  * lockstep with those modules. If either changes shape, update both sides.
+ *
+ * syncGenresBatch below is exported and takes `admin` as a parameter so
+ * tests/backfill-genres.test.ts can exercise it with a stub client without
+ * ever running the rest of this script. That requires the direct-run guard
+ * at the bottom (`import.meta.main`) to gate not just main()'s invocation but
+ * ALL of this script's side effects — reading .env.local, validating env
+ * vars, and constructing a real Supabase client all now happen inside
+ * run(), called only under that guard. Importing this module does none of
+ * that: it only defines functions and types.
  */
 import { config } from "dotenv";
 import { createClient } from "@supabase/supabase-js";
+// Type-only: erased entirely by --experimental-strip-types before Node ever
+// tries to resolve the module, so this does NOT hit the `server-only` /
+// "@/*" path-mapping problems described above — those only bite real
+// (value) imports. A relative path is used because tsconfig's "@/*" alias
+// isn't set for plain `node`, same reason as everywhere else in this file.
+import type { Database } from "../lib/supabase/types";
 
-config({ path: ".env.local" });
-
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const key = process.env.SUPABASE_SECRET_KEY;
-
-if (!url || !key) throw new Error("Supabase env vars missing from .env.local");
-
-const admin = createClient(url, key, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
-
-const MAL_CLIENT_ID = process.env.MAL_CLIENT_ID;
-const MAL_CLIENT_SECRET = process.env.MAL_CLIENT_SECRET;
-if (!MAL_CLIENT_ID || !MAL_CLIENT_SECRET) {
-  throw new Error("MAL_CLIENT_ID / MAL_CLIENT_SECRET missing from .env.local");
+// `import.meta.main` is a real, stable Node API since v24 (verified against
+// this repo's actual Node 25.2.1 runtime under --experimental-strip-types —
+// see the guard at the bottom of this file), but this project pins
+// "@types/node": "^20", whose ImportMeta declaration predates it. This
+// augmentation only adds the missing type; it changes no runtime behaviour.
+declare global {
+  interface ImportMeta {
+    readonly main: boolean;
+  }
 }
+
+// `ReturnType<typeof createClient>` (no explicit generic) does NOT reproduce
+// a usable type: createClient's Database/SchemaName type parameters have
+// interdependent conditional defaults that only resolve correctly against a
+// concrete call site, so a bare ReturnType collapses `.from(...)` row types
+// to `never`. Pinning the real generated Database type (imported type-only
+// above) both fixes that and gives this script the same row typing
+// lib/supabase/admin.ts's createAdminClient gets — stronger than the `any`
+// an untyped inline call would otherwise infer.
+type SupabaseAdmin = ReturnType<typeof createClient<Database>>;
 
 const TOKEN_URL = "https://myanimelist.net/v1/oauth2/token";
 const API_BASE = "https://api.myanimelist.net/v2";
@@ -69,7 +88,7 @@ type StoredTokens = { access_token: string; refresh_token: string };
 
 /** One connected account's tokens — see the header comment for why this
  *  duplicates lib/mal/token-store.ts rather than importing it. */
-async function getAnyConnectedAccount(): Promise<{
+async function getAnyConnectedAccount(admin: SupabaseAdmin): Promise<{
   userId: string;
   tokens: StoredTokens;
 }> {
@@ -112,10 +131,14 @@ async function getAnyConnectedAccount(): Promise<{
 }
 
 /** Mirrors lib/mal/oauth.ts's refreshTokens, minus the parts this script never needs. */
-async function refreshAccessToken(refreshToken: string): Promise<StoredTokens> {
+async function refreshAccessToken(
+  malClientId: string,
+  malClientSecret: string,
+  refreshToken: string,
+): Promise<StoredTokens> {
   const body = new URLSearchParams({
-    client_id: MAL_CLIENT_ID!,
-    client_secret: MAL_CLIENT_SECRET!,
+    client_id: malClientId,
+    client_secret: malClientSecret,
     grant_type: "refresh_token",
     refresh_token: refreshToken,
   });
@@ -153,6 +176,9 @@ type MangaNode = {
  * since MAL invalidates the old one on every refresh.
  */
 async function fetchGenres(
+  admin: SupabaseAdmin,
+  malClientId: string,
+  malClientSecret: string,
   userId: string,
   tokens: StoredTokens,
   malMediaId: number,
@@ -176,7 +202,7 @@ async function fetchGenres(
 
     if (response.status === 401 && !refreshedOnce) {
       refreshedOnce = true;
-      current = await refreshAccessToken(current.refresh_token);
+      current = await refreshAccessToken(malClientId, malClientSecret, current.refresh_token);
       const { error } = await admin.rpc("mal_tokens_upsert", {
         p_user_id: userId,
         p_access_token: current.access_token,
@@ -216,8 +242,13 @@ async function fetchGenres(
  * against title_tags_curated_uniq (a partial unique index PostgREST's
  * on_conflict cannot target), same per-title insert grouping so one race
  * against a concurrent sync only costs that title's links, not the batch's.
+ *
+ * Exported (and taking `admin` as a parameter, mirroring syncGenres(admin,
+ * nodes, idMap) in lib/sync/sync-list.ts) so tests/backfill-genres.test.ts
+ * can drive it with a stub client without executing the rest of the script.
  */
-async function syncGenresBatch(
+export async function syncGenresBatch(
+  admin: SupabaseAdmin,
   nodes: MangaNode[],
   idMap: Map<number, number>,
 ): Promise<void> {
@@ -230,6 +261,13 @@ async function syncGenresBatch(
   const slugify = (name: string) =>
     name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
+  // Ownership contract: `ignoreDuplicates: true` is `on conflict do nothing`,
+  // never `do update`. MAL may create a tag; it may never modify one that
+  // already exists — that's what lets an admin rename a genre and have it
+  // survive every future backfill. This line is the script's copy of the
+  // same contract lib/sync/sync-list.ts's syncGenres enforces (see its
+  // comment above the identical upsert); this copy is pinned by
+  // tests/backfill-genres.test.ts. grep mal_genre_id to find the sibling.
   const { error: tagError } = await admin.from("tags").upsert(
     [...genres].map(([id, name]) => ({
       mal_genre_id: id,
@@ -294,8 +332,8 @@ async function syncGenresBatch(
   }
 }
 
-async function main() {
-  const { userId, tokens: initialTokens } = await getAnyConnectedAccount();
+async function main(admin: SupabaseAdmin, malClientId: string, malClientSecret: string) {
+  const { userId, tokens: initialTokens } = await getAnyConnectedAccount(admin);
   let tokens = initialTokens;
 
   let page = 0;
@@ -318,7 +356,14 @@ async function main() {
 
     for (const row of rows) {
       try {
-        const result = await fetchGenres(userId, tokens, row.mal_media_id);
+        const result = await fetchGenres(
+          admin,
+          malClientId,
+          malClientSecret,
+          userId,
+          tokens,
+          row.mal_media_id,
+        );
         tokens = result.tokens;
         nodes.push(result.node);
       } catch (err) {
@@ -332,7 +377,7 @@ async function main() {
       await sleep(REQUEST_DELAY_MS);
     }
 
-    await syncGenresBatch(nodes, idMap);
+    await syncGenresBatch(admin, nodes, idMap);
 
     totalTitles += rows.length;
     totalTagged += nodes.filter((n) => (n.genres?.length ?? 0) > 0).length;
@@ -347,7 +392,41 @@ async function main() {
   );
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exit(1);
-});
+/**
+ * Reads env, builds the real Supabase client, and runs main(). Split out from
+ * main() itself so that ALL of the script's side effects — not just the
+ * network calls in main() — are gated behind the direct-run guard below.
+ * Nothing above this point runs on import.
+ */
+function run(): Promise<void> {
+  config({ path: ".env.local" });
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SECRET_KEY;
+  if (!url || !key) throw new Error("Supabase env vars missing from .env.local");
+
+  const admin: SupabaseAdmin = createClient<Database>(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  const malClientId = process.env.MAL_CLIENT_ID;
+  const malClientSecret = process.env.MAL_CLIENT_SECRET;
+  if (!malClientId || !malClientSecret) {
+    throw new Error("MAL_CLIENT_ID / MAL_CLIENT_SECRET missing from .env.local");
+  }
+
+  return main(admin, malClientId, malClientSecret);
+}
+
+// Direct-run guard: `import.meta.main` (stable in Node 24+, verified under
+// this repo's `--experimental-strip-types` runner — see
+// tests/backfill-genres.test.ts's header comment) is true only when this file
+// is the process's entry point, false when another module imports it. The
+// more common `require.main === module` idiom does not exist in ESM, and
+// there is no CommonJS `module` here to compare against.
+if (import.meta.main) {
+  run().catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  });
+}

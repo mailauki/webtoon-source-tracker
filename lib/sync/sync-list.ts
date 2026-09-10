@@ -70,6 +70,11 @@ export async function syncGenres(
 
   if (genres.size === 0) return;
 
+  // This contract has a second, deliberately duplicated copy in
+  // scripts/backfill-genres.ts's syncGenresBatch (that file can't import this
+  // module — see its header comment), pinned there by
+  // tests/backfill-genres.test.ts. If you touch this line, check that one
+  // too. grep mal_genre_id to find it.
   const { error: tagError } = await admin.from("tags").upsert(
     [...genres].map(([id, name]) => ({
       mal_genre_id: id,
