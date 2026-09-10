@@ -57,6 +57,30 @@ afterEach(() => {
   refresh.mockClear();
 });
 
+/**
+ * Renders as an admin and turns edit mode on.
+ *
+ * The editing controls are behind an Edit toggle, so every admin test starts
+ * by pressing it. Kept as a helper rather than repeated so that a change to
+ * how edit mode is entered is one edit here, not nine.
+ */
+async function renderEditing(props: {
+  tags: Tag[];
+  allTags: Tag[];
+}) {
+  const user = userEvent.setup();
+  const result = render(
+    <EntryTags
+      titleId={TITLE_ID}
+      tags={props.tags}
+      allTags={props.allTags}
+      isAdmin
+    />,
+  );
+  await user.click(screen.getByRole("button", { name: /^Edit$/ }));
+  return { user, ...result };
+}
+
 describe("tags on the entry page", () => {
   it("renders nothing for a reader when the title has no tags", () => {
     const { container } = render(
@@ -95,10 +119,8 @@ describe("tags on the entry page", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows the editor for an admin even when the title has no tags", () => {
-    render(
-      <EntryTags titleId={TITLE_ID} tags={[]} allTags={[ISEKAI]} isAdmin />,
-    );
+  it("shows the editor for an admin even when the title has no tags", async () => {
+    await renderEditing({ tags: [], allTags: [ISEKAI] });
 
     expect(
       screen.getByRole("combobox", { name: /add a tag/i }),
@@ -106,15 +128,10 @@ describe("tags on the entry page", () => {
   });
 
   it("lets an admin remove a tag, calling untagTitle with its ids", async () => {
-    const user = userEvent.setup();
-    render(
-      <EntryTags
-        titleId={TITLE_ID}
-        tags={[ROMANCE]}
-        allTags={[ROMANCE]}
-        isAdmin
-      />,
-    );
+    const { user } = await renderEditing({
+      tags: [ROMANCE],
+      allTags: [ROMANCE],
+    });
 
     await user.click(screen.getByRole("button", { name: /Remove tag Romance/i }));
 
@@ -125,15 +142,10 @@ describe("tags on the entry page", () => {
   });
 
   it("lets an admin add an untagged tag, calling tagTitle with its ids", async () => {
-    const user = userEvent.setup();
-    render(
-      <EntryTags
-        titleId={TITLE_ID}
-        tags={[ROMANCE]}
-        allTags={[ROMANCE, ISEKAI]}
-        isAdmin
-      />,
-    );
+    const { user } = await renderEditing({
+      tags: [ROMANCE],
+      allTags: [ROMANCE, ISEKAI],
+    });
 
     await user.selectOptions(
       screen.getByRole("combobox", { name: /add a tag/i }),
@@ -147,15 +159,8 @@ describe("tags on the entry page", () => {
     expect(formData.get("title_id")).toBe(String(TITLE_ID));
   });
 
-  it("offers only tags not already on the title", () => {
-    render(
-      <EntryTags
-        titleId={TITLE_ID}
-        tags={[ROMANCE]}
-        allTags={[ROMANCE, ISEKAI]}
-        isAdmin
-      />,
-    );
+  it("offers only tags not already on the title", async () => {
+    await renderEditing({ tags: [ROMANCE], allTags: [ROMANCE, ISEKAI] });
 
     const select = screen.getByRole("combobox", { name: /add a tag/i });
     expect(
@@ -164,15 +169,8 @@ describe("tags on the entry page", () => {
     expect(select).toHaveTextContent("Isekai");
   });
 
-  it("tells the admin there is nothing left to add once every tag is applied", () => {
-    render(
-      <EntryTags
-        titleId={TITLE_ID}
-        tags={[ROMANCE]}
-        allTags={[ROMANCE]}
-        isAdmin
-      />,
-    );
+  it("tells the admin there is nothing left to add once every tag is applied", async () => {
+    await renderEditing({ tags: [ROMANCE], allTags: [ROMANCE] });
 
     expect(screen.getByText(/no more tags to add/i)).toBeInTheDocument();
     expect(
@@ -183,18 +181,89 @@ describe("tags on the entry page", () => {
   it("reports a failure when removing a tag fails", async () => {
     untagTitle.mockResolvedValueOnce({ error: "Something went wrong." });
 
-    const user = userEvent.setup();
-    render(
-      <EntryTags
-        titleId={TITLE_ID}
-        tags={[ROMANCE]}
-        allTags={[ROMANCE]}
-        isAdmin
-      />,
-    );
+    const { user } = await renderEditing({
+      tags: [ROMANCE],
+      allTags: [ROMANCE],
+    });
 
     await user.click(screen.getByRole("button", { name: /Remove tag Romance/i }));
 
     expect(toastError).toHaveBeenCalledWith("Something went wrong.");
+  });
+
+  // --- the Edit toggle -----------------------------------------------------
+
+  it("shows no Edit button to a reader", () => {
+    render(
+      <EntryTags
+        titleId={TITLE_ID}
+        tags={[ROMANCE]}
+        allTags={[ROMANCE, ISEKAI]}
+        isAdmin={false}
+      />,
+    );
+
+    // Absent, not merely disabled: a reader has no business seeing the
+    // control at all.
+    expect(
+      screen.queryByRole("button", { name: /^Edit$/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides the editing controls until an admin presses Edit", () => {
+    render(
+      <EntryTags
+        titleId={TITLE_ID}
+        tags={[ROMANCE]}
+        allTags={[ROMANCE, ISEKAI]}
+        isAdmin
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /^Edit$/ })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("combobox", { name: /add a tag/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Remove tag Romance/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows chips as links until editing, and as remove buttons after", async () => {
+    const { user } = await renderEditing({
+      tags: [ROMANCE],
+      allTags: [ROMANCE],
+    });
+
+    // In edit mode the chip is a remove button, not a link — so a stray click
+    // on what looks like a link cannot delete a tag.
+    expect(
+      screen.getByRole("button", { name: /Remove tag Romance/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Romance" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^Done$/ }));
+
+    // Back to the reader's view, which is the point of the toggle: an admin
+    // can follow the chip through to its tag page.
+    expect(screen.getByRole("link", { name: "Romance" })).toHaveAttribute(
+      "href",
+      "/discover/tag/romance",
+    );
+  });
+
+  it("marks the toggle pressed so a screen reader announces the mode", async () => {
+    const { user } = await renderEditing({ tags: [], allTags: [ISEKAI] });
+
+    const done = screen.getByRole("button", { name: /^Done$/ });
+    expect(done).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(done);
+    expect(screen.getByRole("button", { name: /^Edit$/ })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
   });
 });

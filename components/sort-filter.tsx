@@ -39,7 +39,7 @@ export function SortFilter() {
 
   return (
     <DropdownMenu>
-			<DropdownMenuTrigger>
+			<DropdownMenuTrigger asChild>
 				<Button
 					variant="outline"
 					className="rounded-full"

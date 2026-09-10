@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useRef } from "react";
-import { Loader2, Tag as TagIcon, X } from "lucide-react";
+import { useActionState, useEffect, useRef, useState } from "react";
+import { Check, Loader2, Pencil, Tag as TagIcon, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { tagTitle, untagTitle, type TagState } from "@/app/actions/tags";
@@ -21,8 +21,20 @@ import type { Tag } from "@/lib/data/tag-items";
  * page, not a check that runs on every render everywhere AppShell appears.
  *
  * A reader with no tags on this title sees nothing at all — no empty heading,
- * no "No tags" row. Chips are a garnish; an absent garnish is not a gap. Only
- * an admin, who has something to do about an empty list, sees the editor.
+ * no "No tags" row. Chips are a garnish; an absent garnish is not a gap.
+ *
+ * An admin sees an Edit button, and the editing controls only after pressing
+ * it. Two reasons it is a toggle rather than always-on:
+ *
+ *   1. Off is the reader's view, so an admin can see the page as it actually
+ *      ships — and can follow a chip through to /discover/tag/<slug>, which
+ *      an always-on remove button made impossible.
+ *   2. Remove is a one-press destructive action sitting on a page whose job
+ *      is reading. A mode you opt into keeps it off the path of someone who
+ *      came here to check a chapter number.
+ *
+ * The button is rendered only when isAdmin — a reader never sees the control,
+ * not even disabled.
  */
 export function EntryTags({
   titleId,
@@ -37,6 +49,11 @@ export function EntryTags({
   allTags: Tag[];
   isAdmin: boolean;
 }) {
+  // Hooks run before the early return: a component may not call fewer hooks on
+  // one render than another. The reader's "nothing to show" case is decided
+  // after, not by skipping useState.
+  const [editing, setEditing] = useState(false);
+
   if (tags.length === 0 && !isAdmin) return null;
 
   const taggedIds = new Set(tags.map((tag) => tag.id));
@@ -44,25 +61,49 @@ export function EntryTags({
 
   return (
     <section className="grid gap-3">
-      {tags.length > 0 ? (
-        <ul className="flex flex-wrap gap-2">
-          {tags.map((tag) => (
-            <li key={tag.id}>
-              {isAdmin ? (
-                <RemovableTagChip titleId={titleId} tag={tag} />
-              ) : (
-                <Link href={`/discover/tag/${tag.slug}`}>
-                  <Badge variant="outline" className="hover:bg-muted">
-                    {tag.name}
-                  </Badge>
-                </Link>
-              )}
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      <div className="flex flex-wrap items-center gap-2">
+        {tags.length > 0 ? (
+          <ul className="flex flex-wrap gap-2">
+            {tags.map((tag) => (
+              <li key={tag.id}>
+                {editing ? (
+                  <RemovableTagChip titleId={titleId} tag={tag} />
+                ) : (
+                  <Link href={`/discover/tag/${tag.slug}`}>
+                    <Badge variant="outline" className="hover:bg-muted">
+                      {tag.name}
+                    </Badge>
+                  </Link>
+                )}
+              </li>
+            ))}
+          </ul>
+        ) : null}
 
-      {isAdmin ? (
+        {/* Rendered only for an admin — a reader never gets the control, not
+            even disabled. aria-pressed rather than a label that says "on":
+            this is a toggle, and that is the attribute a screen reader
+            already knows how to announce. */}
+        {isAdmin ? (
+          <Button
+            type="button"
+            size="sm"
+            variant={editing ? "secondary" : "ghost"}
+            aria-pressed={editing}
+            onClick={() => setEditing((on) => !on)}
+            className="rounded-pill"
+          >
+            {editing ? (
+              <Check className="size-3.5" />
+            ) : (
+              <Pencil className="size-3.5" />
+            )}
+            {editing ? "Done" : "Edit"}
+          </Button>
+        ) : null}
+      </div>
+
+      {isAdmin && editing ? (
         <AddTagPicker titleId={titleId} options={untagged} />
       ) : null}
     </section>
@@ -70,7 +111,12 @@ export function EntryTags({
 }
 
 /**
- * One applied tag, as a link that doubles as a remove button for an admin.
+ * One applied tag in edit mode, as a button that removes it.
+ *
+ * Only rendered while editing is on; the same tag renders as a plain link to
+ * its tag page otherwise. Keeping those two as separate branches rather than
+ * one element that changes behaviour means the remove action cannot be
+ * reached by a stray click on what looks like a link.
  *
  * Its own useActionState rather than one shared by the list: a single hook
  * would carry the previous chip's result into this one and fire its effect on
