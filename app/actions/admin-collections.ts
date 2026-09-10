@@ -95,11 +95,14 @@ export async function createCuratedCollection(
     .single();
 
   if (error) {
-    // Either collections_owner_name_uniq (curated rows all share owner_id
-    // null, so two curated rows can't share a name either) or the slug's
-    // unique index — both mean "a curated collection like this exists".
+    // collections_owner_name_uniq is (owner_id, name), and every curated row
+    // shares owner_id null — Postgres treats NULLs as distinct, so that
+    // constraint is trivially satisfied by any number of curated rows sharing
+    // a name and never fires here. The slug's unique index is the only thing
+    // that actually constrains a curated row, so a 23505 here always means
+    // "that slug is taken", not "that name is taken".
     if (error.code === "23505") {
-      return { error: "A collection with that name or slug already exists." };
+      return { error: "A collection with that slug already exists." };
     }
     return { error: error.message };
   }
@@ -135,6 +138,26 @@ export async function updateCuratedCollection(
 
   const supabase = await createClient();
 
+  // No database constraint stops two curated collections from sharing a name
+  // (see the comment on the 23505 branch in createCuratedCollection above),
+  // and this action never touches slug, so no unique index is even in reach
+  // of this update. Two indistinguishable shelves on /discover is a bad
+  // outcome an admin can't easily diagnose after the fact, so the check is
+  // made explicit here instead: reject a rename that collides with another
+  // curated row's name before it can happen.
+  const { data: collision, error: collisionError } = await supabase
+    .from("collections")
+    .select("id")
+    .is("owner_id", null)
+    .eq("name", parsed.data.name)
+    .neq("id", parsed.data.id)
+    .maybeSingle();
+
+  if (collisionError) return { error: collisionError.message };
+  if (collision) {
+    return { error: "A collection with that name already exists." };
+  }
+
   // The slug is deliberately NOT editable here: it is in URLs
   // (/discover/collection/<slug>), and this action mirrors updateTag's choice
   // to keep renames of the name separate from renames of the URL.
@@ -157,12 +180,7 @@ export async function updateCuratedCollection(
     .eq("id", parsed.data.id)
     .is("owner_id", null);
 
-  if (error) {
-    if (error.code === "23505") {
-      return { error: "A collection with that name already exists." };
-    }
-    return { error: error.message };
-  }
+  if (error) return { error: error.message };
 
   revalidatePath("/discover");
   revalidatePath("/admin/collections");
@@ -240,9 +258,14 @@ export async function addTitleToCurated(
     if (error.code === "23505") {
       return { error: "That title is already in this collection." };
     }
-    // RLS rejects the insert when the target collection isn't curated
-    // (owner_id is not null), which surfaces the same as any other denial.
-    return { error: "That collection isn't a curated one." };
+    // Every other error falls through to the database's own message, the same
+    // convention every sibling action in this file and in
+    // app/actions/collections.ts follows. A bad title_id raises 23503
+    // (collection_items_title_id_fkey), and RLS rejecting the insert because
+    // the target collection isn't curated is a different failure again — both
+    // deserve their own message rather than being flattened into "that
+    // collection isn't a curated one," which is only true for the second.
+    return { error: error.message };
   }
 
   revalidatePath("/discover");

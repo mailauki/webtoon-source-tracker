@@ -6,12 +6,14 @@ import { ArrowLeft, ExternalLink } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { EntryCollections } from "@/components/entry-collections";
 import { EntrySourceEditor } from "@/components/entry-source-editor";
+import { EntryTags } from "@/components/entry-tags";
 import { ProgressEditor } from "@/components/progress-editor";
 import { Badge } from "@/components/ui/badge";
-import { verifySession } from "@/lib/auth/dal";
+import { isAdmin, verifySession } from "@/lib/auth/dal";
 import { getCollectionTargets } from "@/lib/data/collections";
 import { getEntry } from "@/lib/data/entries";
 import { getSources } from "@/lib/data/sources";
+import { getActiveTags, getTagsForTitle } from "@/lib/data/tags";
 
 const STATUS_LABELS: Record<string, string> = {
   reading: "Reading",
@@ -36,12 +38,16 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
   const entryId = Number(id);
   if (!Number.isInteger(entryId) || entryId <= 0) notFound();
 
-  const [entry, catalog, collections] = await Promise.all([
+  // isAdmin() is called here and only here: the spec deliberately avoids an
+  // admin check on every page render (AppShell included), so this is the one
+  // place — the reader's own entry page — that asks.
+  const [entry, catalog, collections, admin] = await Promise.all([
     getEntry(entryId),
     getSources(),
     // withItemIds: this page can take a title back out of a collection, and
     // removing needs the collection_items id.
     getCollectionTargets({ withItemIds: true }),
+    isAdmin(),
   ]);
 
   // RLS makes "does not exist" and "belongs to someone else" indistinguishable
@@ -54,6 +60,13 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
     total && total > 0
       ? Math.min(100, Math.round((entry.num_chapters_read / total) * 100))
       : null;
+
+  // allTags is only fetched for an admin — a reader never sees the picker, so
+  // there is nothing for the full tag vocabulary to do on their render.
+  const [tags, allTags] = await Promise.all([
+    getTagsForTitle(title.id),
+    admin ? getActiveTags() : Promise.resolve([]),
+  ]);
 
   return (
     <AppShell
@@ -117,6 +130,13 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
                 </Badge>
               ) : null}
             </div>
+
+            <EntryTags
+              titleId={title.id}
+              tags={tags}
+              allTags={allTags}
+              isAdmin={admin}
+            />
 
             <div className="grid gap-1">
               <p className="text-sm">

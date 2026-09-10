@@ -45,8 +45,9 @@ const idSchema = z.coerce.number().int().positive();
  * /discover/tag/[slug] is a dynamic route, and revalidatePath has two
  * incompatible modes for that: a literal concrete path (e.g.
  * "/discover/tag/isekai") needs no second argument, while the bracketed
- * pattern itself ("/discover/tag/[slug]") requires `{ type: "page" }` and
- * revalidates every tag page at once rather than just this one (see
+ * pattern itself ("/discover/tag/[slug]") takes "page" as the second,
+ * positional argument (revalidatePath(path, type?)) and revalidates every tag
+ * page at once rather than just this one (see
  * node_modules/next/dist/docs/.../revalidatePath.md). Every caller here only
  * has a tag id, not its slug, so this fetches the slug first and revalidates
  * the literal path — the same shape updateTag already uses for
