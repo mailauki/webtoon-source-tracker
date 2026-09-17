@@ -1,12 +1,12 @@
 "use client";
 
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useRef } from "react";
 import { Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { untagTitle, type TagState } from "@/app/actions/tags";
+import { CoverImage } from "@/components/cover-image";
 import type { CollectionTitle } from "@/lib/data/collection-items";
 
 /**
@@ -82,15 +82,12 @@ function TaggedTitleRow({
   return (
     <div className="flex items-center gap-3 rounded-lg border border-border px-3 py-2">
       <div className="relative h-14 w-9 shrink-0 overflow-hidden rounded bg-muted">
-        {title.main_picture_url ? (
-          <Image
-            src={title.main_picture_url}
-            alt=""
-            fill
-            sizes="36px"
-            className="object-cover"
-          />
-        ) : null}
+        <CoverImage
+          src={title.main_picture_url}
+          fallback="icon"
+          sizes="36px"
+          className="object-cover"
+        />
       </div>
       <span className="min-w-0 flex-1 truncate text-sm font-medium">
         {title.title}

@@ -1,12 +1,12 @@
 "use client";
 
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useRef } from "react";
 import { Check, Loader2, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { tagTitle, type TagState } from "@/app/actions/tags";
+import { CoverImage } from "@/components/cover-image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { CollectionTitle } from "@/lib/data/collection-items";
@@ -152,15 +152,12 @@ function TagTitleRow({
         className="flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted disabled:opacity-60"
       >
         <div className="relative h-14 w-9 shrink-0 overflow-hidden rounded bg-muted">
-          {title.main_picture_url ? (
-            <Image
-              src={title.main_picture_url}
-              alt=""
-              fill
-              sizes="36px"
-              className="object-cover"
-            />
-          ) : null}
+          <CoverImage
+            src={title.main_picture_url}
+            fallback="icon"
+            sizes="36px"
+            className="object-cover"
+          />
         </div>
         <span className="min-w-0 flex-1 truncate text-sm font-medium">
           {title.title}

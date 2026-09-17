@@ -1,9 +1,9 @@
-import Image from "next/image";
 import Link from "next/link";
 import { Library } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { NewCollection } from "@/components/collections/new-collection";
+import { CoverImage } from "@/components/cover-image";
 import { verifySession } from "@/lib/auth/dal";
 import { getMyCollections } from "@/lib/data/collections";
 import type { CollectionSummary } from "@/lib/data/collections";
@@ -92,10 +92,9 @@ function CollectionCardLink({
           return (
             <div key={i} className="relative bg-muted">
               {cover ? (
-                <Image
+                <CoverImage
                   src={cover}
-                  alt=""
-                  fill
+                  fallback="icon"
                   sizes="(max-width: 640px) 25vw, 120px"
                   className="object-cover transition-transform duration-200 group-hover:scale-105"
                 />

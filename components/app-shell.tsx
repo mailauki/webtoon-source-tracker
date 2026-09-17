@@ -77,14 +77,19 @@ export async function AppShell({
 
 						    The image stays `alt=""` and the text carries the link's
 						    accessible name at every width — it only toggles between
-						    sr-only and visible, so the name never doubles up. */}
+						    sr-only and visible, so the name never doubles up.
+
+						    It points at the 192px asset and skips the image optimizer:
+						    at 32px even a 3x screen wants only 96px, and CoverImage
+						    explains why nothing here depends on the optimizer. */}
 						<Link href="/" className="flex shrink-0 items-center gap-2">
 							<Image
-								src="/icon-1024x1024.png"
+								src="/android-chrome-192x192.png"
 								alt=""
-								width={2048}
-								height={2048}
-								priority
+								width={192}
+								height={192}
+								preload
+								unoptimized
 								className="size-8 rounded-md"
 							/>
 							<span className="font-display text-lg font-bold tracking-tight max-sm:sr-only">

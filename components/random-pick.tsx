@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { Dices, ExternalLink } from "lucide-react";
 import { useState } from "react";
 
+import { CoverImage } from "@/components/cover-image";
 import { useLibraryFilters } from "@/components/library-grid";
 import { SourceBadge } from "@/components/source-badge";
 import { Button } from "@/components/ui/button";
@@ -243,15 +243,12 @@ function PickedTitle({
 
       <div className="flex gap-4">
         <div className="relative aspect-[3/4] w-24 shrink-0 overflow-hidden rounded-md bg-muted">
-          {title.main_picture_url ? (
-            <Image
-              src={title.main_picture_url}
-              alt=""
-              fill
-              sizes="96px"
-              className="object-cover"
-            />
-          ) : null}
+          <CoverImage
+            src={title.main_picture_url}
+            title={title.title}
+            sizes="96px"
+            className="object-cover"
+          />
         </div>
 
         <div className="grid content-start gap-1.5">
