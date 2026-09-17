@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useRef, useState } from "react";
@@ -11,6 +10,7 @@ import {
   removeFromCollection,
   type CollectionState,
 } from "@/app/actions/collections";
+import { CoverImage } from "@/components/cover-image";
 import { Button } from "@/components/ui/button";
 import type { CollectionItem } from "@/lib/data/collection-items";
 
@@ -74,21 +74,12 @@ export function CollectionCard({
 
   const cover = (
     <div className="relative aspect-[1/2] overflow-hidden rounded-md bg-muted ring-offset-background group-focus-visible:ring-2 group-focus-visible:ring-ring group-focus-visible:ring-offset-2">
-      {title.main_picture_url ? (
-        <Image
-          src={title.main_picture_url}
-          alt=""
-          fill
-          sizes="(max-width: 640px) 40vw, (max-width: 1024px) 25vw, 150px"
-          className="object-cover transition-transform duration-200 group-hover/card:scale-105"
-        />
-      ) : (
-        <div className="flex h-full items-center justify-center p-2">
-          <span className="text-center font-display text-xs font-semibold text-muted-foreground">
-            {title.title}
-          </span>
-        </div>
-      )}
+      <CoverImage
+        src={title.main_picture_url}
+        title={title.title}
+        sizes="(max-width: 640px) 40vw, (max-width: 1024px) 25vw, 150px"
+        className="object-cover transition-transform duration-200 group-hover/card:scale-105"
+      />
 
       {/* Bottom-up scrim so white text stays legible over any artwork. */}
       <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/90 via-black/50 to-transparent" />

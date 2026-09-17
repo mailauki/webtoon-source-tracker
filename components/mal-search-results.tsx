@@ -1,11 +1,11 @@
 "use client";
 
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { Check, Loader2, Plus, Search } from "lucide-react";
 
 import { addEntry, type AddEntryState } from "@/app/actions/add-entry";
+import { CoverImage } from "@/components/cover-image";
 import { useLibraryFilters } from "@/components/library-grid";
 import { Button } from "@/components/ui/button";
 
@@ -232,21 +232,12 @@ function MalResultCard({
   return (
     <li className="grid gap-1.5">
       <div className="relative aspect-[1/2] overflow-hidden rounded-md bg-muted">
-        {result.main_picture_url ? (
-          <Image
-            src={result.main_picture_url}
-            alt=""
-            fill
-            sizes="(max-width: 640px) 33vw, (max-width: 1024px) 20vw, 130px"
-            className="object-cover"
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center p-2">
-            <span className="text-center font-display text-xs font-semibold text-muted-foreground">
-              {result.title}
-            </span>
-          </div>
-        )}
+        <CoverImage
+          src={result.main_picture_url}
+          title={result.title}
+          sizes="(max-width: 640px) 33vw, (max-width: 1024px) 20vw, 130px"
+          className="object-cover"
+        />
 
         <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/90 via-black/50 to-transparent" />
 

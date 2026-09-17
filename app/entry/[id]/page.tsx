@@ -1,9 +1,9 @@
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { CoverImage } from "@/components/cover-image";
 import { Button } from "@/components/ui/button";
 import { EntryCollections } from "@/components/entry-collections";
 import { EntrySourceEditor } from "@/components/entry-source-editor";
@@ -90,16 +90,13 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
       <div className="grid gap-8">
         <div className="grid gap-6 sm:grid-cols-[160px_1fr]">
           <div className="relative aspect-[1/2] w-full max-w-[160px] overflow-hidden rounded-md bg-muted">
-            {title.main_picture_url ? (
-              <Image
-                src={title.main_picture_url}
-                alt=""
-                fill
-                sizes="160px"
-                className="object-cover"
-                priority
-              />
-            ) : null}
+            <CoverImage
+              src={title.main_picture_url}
+              title={title.title}
+              sizes="160px"
+              className="object-cover"
+              preload
+            />
           </div>
 
           <div className="grid content-start gap-3">

@@ -69,13 +69,16 @@ export default async function RootPage({ searchParams }: PageProps<"/">) {
     <div className="flex min-h-screen flex-col">
       <header className="flex items-center justify-between px-6 py-4">
         <div className="flex items-center gap-2">
-          {/* One icon in both themes, matching AppShell. */}
+          {/* One icon in both themes, matching AppShell. The 192px asset,
+          served as-is: see CoverImage for why nothing here leans on the image
+          optimizer, and note that at 32px even a 3x screen wants only 96px. */}
           <Image
-            src="/icon-1024x1024.png"
+            src="/android-chrome-192x192.png"
             alt=""
-            width={2048}
-            height={2048}
-            priority
+            width={192}
+            height={192}
+            preload
+            unoptimized
             className="size-8 rounded-md"
           />
           <span className="font-display text-lg font-bold tracking-tight">
