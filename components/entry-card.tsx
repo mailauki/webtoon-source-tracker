@@ -17,6 +17,7 @@ import {
   SourceBadge,
 } from "@/components/source-badge";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
+import { chapterTotal } from "@/lib/data/chapter-totals";
 import type { LibraryRow } from "@/lib/data/entries";
 import { isOnHiatus, isOwned } from "@/lib/data/pick-random";
 import type { RankedSource } from "@/lib/data/rank-sources";
@@ -202,6 +203,9 @@ export function EntryCard({
         request={dialog}
         attached={entry.entry_sources}
         catalog={catalog}
+        // The row already carries MAL's count, so the quick-edit dialog can
+        // offer the same "own all" shortcut the entry page does.
+        total={chapterTotal(title)}
         onClose={() => setDialog(null)}
       />
     </ContextMenu>

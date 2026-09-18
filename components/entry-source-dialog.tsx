@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import type { ChapterTotal } from "@/lib/data/chapter-totals";
 import type { Source } from "@/lib/data/rank-sources";
 
 /**
@@ -35,6 +36,7 @@ export function EntrySourceDialog({
   request,
   attached,
   catalog,
+  total = null,
   onClose,
 }: {
   entryId: number;
@@ -42,6 +44,8 @@ export function EntrySourceDialog({
   request: { mode: "add" } | { mode: "edit"; entrySourceId: number } | null;
   attached: EntrySource[];
   catalog: Source[];
+  /** MAL's chapter count for this title, for the "own all" shortcut. */
+  total?: ChapterTotal | null;
   onClose: () => void;
 }) {
   const editing =
@@ -129,7 +133,15 @@ export function EntrySourceDialog({
             </div>
           )}
 
-          <SourceFields source={editing ?? undefined} />
+          {/* Keyed on the row being edited so the reveal state resets when
+              the dialog is pointed at a different source. The dialog usually
+              unmounts between openings, which would reset it anyway — this is
+              what makes that incidental rather than load-bearing. */}
+          <SourceFields
+            key={editing?.id ?? "new"}
+            source={editing ?? undefined}
+            total={total}
+          />
 
           {state?.error ? (
             <p role="alert" className="text-sm text-alert">
