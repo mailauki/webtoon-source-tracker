@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
-import { ExternalLink } from "lucide-react";
+import { Ellipsis, ExternalLink } from "lucide-react";
 
 import { CoverImage } from "@/components/cover-image";
 import {
@@ -15,10 +16,8 @@ import {
   OwnedBadge,
   SourceBadge,
 } from "@/components/source-badge";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { EntryCardSheet } from "@/components/entry-card-sheet";
+import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { ownsEveryChapter } from "@/lib/data/chapter-ranges";
 import { chapterTotal } from "@/lib/data/chapter-totals";
 import type { LibraryRow } from "@/lib/data/entries";
@@ -35,30 +34,6 @@ const STATUS_LABELS: Record<string, string> = {
   plan_to_read: "Plan to read",
 };
 
-/**
- * Whether this click means "open it somewhere else" rather than "act here".
- *
- * The modifier combinations are what actually reach here — cmd on macOS, ctrl
- * elsewhere, shift for a new window. Middle-click dispatches `auxclick` rather
- * than `click` in current browsers, so the button check is insurance against
- * one that does not, and costs a comparison.
- */
-function opensElsewhere(event: {
-  button: number;
-  metaKey: boolean;
-  ctrlKey: boolean;
-  shiftKey: boolean;
-  altKey: boolean;
-}): boolean {
-  return (
-    event.button !== 0 ||
-    event.metaKey ||
-    event.ctrlKey ||
-    event.shiftKey ||
-    event.altKey
-  );
-}
-
 /** "42 / 179" — an em dash stands in for an unknown total (ongoing series). */
 function progressLabel(read: number, total: number | null): string {
   return `${read} / ${total && total > 0 ? total : "—"}`;
@@ -73,30 +48,10 @@ export function EntryCard({
   topSources?: RankedSource[];
   catalog?: Source[];
 }) {
-  // The dialog lives outside <DropdownMenu> — Radix unmounts menu content on
-  // close and would take the dialog with it.
+  // Both live outside <ContextMenuContent> — Radix unmounts menu content on
+  // close and would take them with it.
   const [dialog, setDialog] = useState<SourceDialogRequest | null>(null);
-
-  // Controlled, so that opening is this component's decision rather than
-  // Radix's. See `closeOnly` and the anchor's onClick below.
-  const [menuOpen, setMenuOpen] = useState(false);
-
-  /**
-   * Accepts Radix's requests to *close*, and declines its requests to open.
-   *
-   * `DropdownMenuTrigger` opens from `pointerdown`, which on touch fires the
-   * moment a finger lands — before the browser knows whether the gesture is a
-   * tap or the start of a scroll. Scrolling the shelf therefore opened a menu
-   * under the thumb on nearly every swipe.
-   *
-   * Opening moves to `click`, which the browser does not fire when a touch
-   * turns into a scroll — so the distinction is made by the platform, with no
-   * movement threshold of our own to tune. Every *close* still comes from
-   * Radix: outside press, Escape, and selecting an item all route here.
-   */
-  function closeOnly(next: boolean) {
-    if (!next) setMenuOpen(false);
-  }
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   const title = entry.media_titles;
   const sources = entry.entry_sources;
@@ -134,46 +89,22 @@ export function EntryCard({
       : 0;
 
   return (
-    // The read link cannot live inside the trigger: an anchor nested in a
-    // button is invalid, the parser hoists it out, and the server markup then
-    // disagrees with the client tree so hydration fails. The two sit side by
-    // side under this wrapper instead, which is what the cover's hover zoom
-    // keys off and what the read link positions against.
-    <div className="group/card relative">
-      <DropdownMenu open={menuOpen} onOpenChange={closeOnly}>
-        <DropdownMenuTrigger asChild>
-          {/* A real link that opens the menu on a completed click.
-
-          Every gesture that means "open this somewhere else" is left to the
-          browser: right-click gets the native menu, middle-click and the
-          modifier combinations get a new tab or window. None of them produces
-          a plain `click`, so none of them opens the menu — the check below is
-          what keeps a cmd-click from doing both.
-
-          A plain click is the reverse: the menu opens, so the navigation has
-          to be cancelled or the card would do both.
-
-          Keyboard opens it here too. Radix asks to toggle on Enter, Space and
-          ArrowDown, but `closeOnly` declines every open it is asked for, so
-          `onKeyDown` does it directly — Radix still cancels the navigation
-          those keys would otherwise cause on an anchor.
-
-          The href is real, which is the point — a card can be opened in a new
-          tab, and its destination is visible in the status bar on hover. */}
-          <a
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        {/* The corner controls cannot live inside the card link: the parser
+        hoists a nested anchor out of its parent, so the server markup and the
+        client tree disagree and hydration fails. They sit side by side under
+        this wrapper instead, which is what the cover's hover zoom keys off,
+        what the corner controls position against, and what right-click
+        triggers the menu from. */}
+        <div className="group/card relative">
+          <Link
             href={`/entry/${entry.id}`}
-            onClick={(event) => {
-              if (opensElsewhere(event)) return;
-              event.preventDefault();
-              setMenuOpen(true);
-            }}
-            onKeyDown={(event) => {
-              if (["Enter", " ", "ArrowDown"].includes(event.key)) {
-                setMenuOpen(true);
-              }
-            }}
-            className="group block w-full text-left focus-visible:outline-none"
-            aria-label={`${title.title} — open quick actions`}
+            // Labelled with the title alone. Without it the accessible name is
+            // everything inside — cover alt, badges, status, progress — read
+            // out as one run-on string.
+            aria-label={title.title}
+            className="group block focus-visible:outline-none"
           >
             {/* 1:2 portrait, matching Tapas. MAL covers are ~2:3, so object-cover
             crops rather than distorts. */}
@@ -252,42 +183,76 @@ export function EntryCard({
                 </div>
               ) : null}
             </div>
-          </a>
-        </DropdownMenuTrigger>
+          </Link>
 
-        <EntryCardMenu
-          entry={entry}
-          topSources={topSources}
-          onOpenDialog={setDialog}
-        />
-      </DropdownMenu>
+          {/* The corner controls, in one cluster opposite the status badges
+          rather than over the title.
 
-      {/* The cover owns the tap; this owns the read. Both are on the card so
-      neither needs the menu, and the button sits opposite the status badges
-      rather than over the title. Always visible: on touch there is no hover to
-      reveal it, and "where do I read this" is the question the shelf exists to
-      answer.
+          Both overlay cover art, so every pixel they grow is artwork they
+          hide — the read link is sized for a finger on touch and left alone on
+          a pointer, and the ⋯ button exists only on touch. */}
+          <div className="absolute right-1.5 top-1.5 flex items-center gap-1">
+            {/* The card owns the tap; this owns the read. Always visible: on
+            touch there is no hover to reveal it, and "where do I read this" is
+            the question the shelf exists to answer.
 
-      Sized for a finger on touch and left alone on a pointer — it overlays
-      cover art, so every pixel it grows is artwork it hides.
+            Only the primary source gets a button. The rest are in the menu,
+            which is the surface built for the full list. */}
+            {readAt ? (
+              <a
+                href={readAt.url!}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={`Read on ${readAt.sources!.name}`}
+                aria-label={`Read ${title.title} on ${readAt.sources!.name}`}
+                className="inline-flex size-7 items-center justify-center rounded-full bg-slate-900/70 text-white backdrop-blur-sm transition-colors hover:bg-slate-900/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background pointer-coarse:size-10 pointer-coarse:[&_svg]:size-5"
+              >
+                <ExternalLink className="size-3.5" />
+              </a>
+            ) : null}
 
-      Only the primary source gets a button. The rest stay one tap away in the
-      menu, which is the surface built for the full list. */}
-      {readAt ? (
-        <a
-          href={readAt.url!}
-          target="_blank"
-          rel="noopener noreferrer"
-          title={`Read on ${readAt.sources!.name}`}
-          aria-label={`Read ${title.title} on ${readAt.sources!.name}`}
-          className="absolute right-1.5 top-1.5 inline-flex size-7 items-center justify-center rounded-full bg-slate-900/70 text-white backdrop-blur-sm transition-colors hover:bg-slate-900/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background pointer-coarse:size-10 pointer-coarse:[&_svg]:size-5"
-        >
-          <ExternalLink className="size-3.5" />
-        </a>
-      ) : null}
+            {/* Visible on touch, and on a mouse only once focused.
 
-      {/* Outside the DropdownMenu: Radix unmounts menu content on close and
-      would take the dialog with it. */}
+            A pointer reaches these actions by right-clicking the card, so a
+            button sitting there permanently would be clutter over the
+            artwork. But `hidden` would take it out of the tab order too, and
+            a keyboard has no right-click — leaving Shift+F10 as the only way
+            in. `sr-only` keeps it reachable by Tab and announced by a screen
+            reader while showing nothing, and focus brings it back into view so
+            a sighted keyboard user can see where they are.
+
+            Gated by media query rather than by measuring the pointer in JS,
+            which keeps it out of the hydration path — no pop-in on the first
+            paint of a phone. */}
+            <button
+              type="button"
+              onClick={() => setSheetOpen(true)}
+              aria-label={`Actions for ${title.title}`}
+              className="inline-flex size-10 items-center justify-center rounded-full bg-slate-900/70 text-white backdrop-blur-sm transition-colors hover:bg-slate-900/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background pointer-fine:sr-only pointer-fine:focus-visible:not-sr-only"
+            >
+              <Ellipsis className="size-5" />
+            </button>
+          </div>
+        </div>
+      </ContextMenuTrigger>
+
+      <EntryCardMenu
+        entry={entry}
+        topSources={topSources}
+        onOpenDialog={setDialog}
+      />
+
+      {/* Both sit outside <ContextMenuContent>: Radix unmounts menu content on
+      close and would take them with it. */}
+      <EntryCardSheet
+        entry={entry}
+        entryTitle={title.title}
+        topSources={topSources}
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        onOpenDialog={setDialog}
+      />
+
       <EntrySourceDialog
         entryId={entry.id}
         entryTitle={title.title}
@@ -299,6 +264,6 @@ export function EntryCard({
         total={malTotal}
         onClose={() => setDialog(null)}
       />
-    </div>
+    </ContextMenu>
   );
 }
