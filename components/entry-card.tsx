@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { ExternalLink } from "lucide-react";
 
@@ -16,7 +15,10 @@ import {
   OwnedBadge,
   SourceBadge,
 } from "@/components/source-badge";
-import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { chapterTotal } from "@/lib/data/chapter-totals";
 import type { LibraryRow } from "@/lib/data/entries";
 import { isOnHiatus, isOwned } from "@/lib/data/pick-random";
@@ -46,7 +48,7 @@ export function EntryCard({
   topSources?: RankedSource[];
   catalog?: Source[];
 }) {
-  // The dialog lives outside <ContextMenu> — Radix unmounts menu content on
+  // The dialog lives outside <DropdownMenu> — Radix unmounts menu content on
   // close and would take the dialog with it.
   const [dialog, setDialog] = useState<SourceDialogRequest | null>(null);
 
@@ -77,17 +79,23 @@ export function EntryCard({
       : 0;
 
   return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>
-        {/* The read button cannot live inside the card link: the HTML parser
-        hoists a nested anchor out of its parent, so the server markup and the
-        client tree disagree and hydration fails. The two sit side by side
-        under this wrapper instead, which is now what the context menu triggers
-        from and what the cover's hover zoom keys off. */}
-        <div className="group/card relative">
-          <Link
-            href={`/entry/${entry.id}`}
-            className="group block focus-visible:outline-none"
+    // The read link cannot live inside the trigger: an anchor nested in a
+    // button is invalid, the parser hoists it out, and the server markup then
+    // disagrees with the client tree so hydration fails. The two sit side by
+    // side under this wrapper instead, which is what the cover's hover zoom
+    // keys off and what the read link positions against.
+    <div className="group/card relative">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          {/* A button, not a link. Tapping the cover opens the quick menu —
+          "Go to entry" is its first item, so the old destination is one tap
+          further rather than gone. The cost is that a card can no longer be
+          cmd- or middle-clicked into a new tab; that moves to the menu item,
+          which is still a real anchor. */}
+          <button
+            type="button"
+            className="group block w-full text-left focus-visible:outline-none"
+            aria-label={`${title.title} — open quick actions`}
           >
             {/* 1:2 portrait, matching Tapas. MAL covers are ~2:3, so object-cover
             crops rather than distorts. */}
@@ -166,37 +174,42 @@ export function EntryCard({
                 </div>
               ) : null}
             </div>
-          </Link>
+          </button>
+        </DropdownMenuTrigger>
 
-          {/* The card link owns the tap; this owns the read. Both are on the
-          card so neither needs the context menu, and the button sits opposite
-          the status badges rather than over the title. Always visible: on
-          touch there is no hover to reveal it, and "where do I read this" is
-          the question the shelf exists to answer.
+        <EntryCardMenu
+          entry={entry}
+          topSources={topSources}
+          onOpenDialog={setDialog}
+        />
+      </DropdownMenu>
 
-          Only the primary source gets a button. The rest stay one right-click
-          away in the menu, which is the surface built for the full list. */}
-          {readAt ? (
-            <a
-              href={readAt.url!}
-              target="_blank"
-              rel="noopener noreferrer"
-              title={`Read on ${readAt.sources!.name}`}
-              aria-label={`Read ${title.title} on ${readAt.sources!.name}`}
-              className="absolute right-1.5 top-1.5 inline-flex size-7 items-center justify-center rounded-full bg-slate-900/70 text-white backdrop-blur-sm transition-colors hover:bg-slate-900/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-            >
-              <ExternalLink className="size-3.5" />
-            </a>
-          ) : null}
-        </div>
-      </ContextMenuTrigger>
+      {/* The cover owns the tap; this owns the read. Both are on the card so
+      neither needs the menu, and the button sits opposite the status badges
+      rather than over the title. Always visible: on touch there is no hover to
+      reveal it, and "where do I read this" is the question the shelf exists to
+      answer.
 
-      <EntryCardMenu
-        entry={entry}
-        topSources={topSources}
-        onOpenDialog={setDialog}
-      />
+      Sized for a finger on touch and left alone on a pointer — it overlays
+      cover art, so every pixel it grows is artwork it hides.
 
+      Only the primary source gets a button. The rest stay one tap away in the
+      menu, which is the surface built for the full list. */}
+      {readAt ? (
+        <a
+          href={readAt.url!}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={`Read on ${readAt.sources!.name}`}
+          aria-label={`Read ${title.title} on ${readAt.sources!.name}`}
+          className="absolute right-1.5 top-1.5 inline-flex size-7 items-center justify-center rounded-full bg-slate-900/70 text-white backdrop-blur-sm transition-colors hover:bg-slate-900/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background pointer-coarse:size-10 pointer-coarse:[&_svg]:size-5"
+        >
+          <ExternalLink className="size-3.5" />
+        </a>
+      ) : null}
+
+      {/* Outside the DropdownMenu: Radix unmounts menu content on close and
+      would take the dialog with it. */}
       <EntrySourceDialog
         entryId={entry.id}
         entryTitle={title.title}
@@ -208,6 +221,6 @@ export function EntryCard({
         total={chapterTotal(title)}
         onClose={() => setDialog(null)}
       />
-    </ContextMenu>
+    </div>
   );
 }

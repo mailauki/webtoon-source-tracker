@@ -57,20 +57,23 @@ function row(overrides: Partial<LibraryRow> = {}): LibraryRow {
   } as unknown as LibraryRow;
 }
 
-/** Radix opens on a real contextmenu event; userEvent has no helper for it. */
 const TOP_SOURCES = [
   { id: 1, name: "Tapas", count: 9 },
   { id: 2, name: "Webtoon", count: 4 },
 ];
 
+/**
+ * The card opens its menu on a plain tap now, not a right-click — the cover is
+ * a menu trigger rather than a link.
+ */
+function cardTrigger() {
+  return screen.getByRole("button", { name: /^Tower of God/ });
+}
+
 async function openMenu(entry: LibraryRow = row()) {
   const user = userEvent.setup();
   render(<EntryCard entry={entry} topSources={TOP_SOURCES} />);
-  await user.pointer({
-    keys: "[MouseRight]",
-    // Anchored: the card also carries a "Read … on …" link now.
-    target: screen.getByRole("link", { name: /^Tower of God/ }),
-  });
+  await user.click(cardTrigger());
   return user;
 }
 
@@ -82,14 +85,34 @@ afterEach(() => {
 });
 
 describe("entry card quick-access menu", () => {
-  it("stays closed until the card is right-clicked", () => {
+  it("stays closed until the card is tapped", () => {
     render(<EntryCard entry={row()} />);
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
-  it("opens a menu on right-click", async () => {
+  it("opens a menu when the card is tapped", async () => {
     await openMenu();
     expect(await screen.findByRole("menu")).toBeInTheDocument();
+  });
+
+  // The card used to navigate here directly. It must not still be a link, or
+  // a tap would race the menu against a navigation.
+  it("makes the card a menu trigger rather than a link", () => {
+    render(<EntryCard entry={row()} />);
+
+    expect(
+      screen.queryByRole("link", { name: /^Tower of God/ }),
+    ).not.toBeInTheDocument();
+    expect(cardTrigger()).toHaveAttribute("aria-haspopup", "menu");
+  });
+
+  // The destination the tap used to have is the menu's first item, so nothing
+  // became unreachable — it just moved one tap further in.
+  it("keeps the entry page one tap away, as a real link", async () => {
+    await openMenu();
+
+    const item = await screen.findByRole("menuitem", { name: /Go to entry/ });
+    expect(item).toHaveAttribute("href", "/entry/7");
   });
 
   it("submits one more chapter than the entry has read", async () => {

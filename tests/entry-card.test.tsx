@@ -1,4 +1,5 @@
 import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // The card pulls in the menu and the dialog, which reach through to
@@ -58,12 +59,14 @@ function row(sources: Attachment[] = []): LibraryRow {
 afterEach(cleanup);
 
 describe("card read button", () => {
-  it("puts the reading link on the card, next to the link to the entry page", () => {
+  it("puts the reading link on the card, beside the menu trigger", () => {
     render(<EntryCard entry={row([source({ is_primary: true })])} />);
 
+    // The cover opens the quick menu; the corner link goes straight to the
+    // source. Two controls, neither nested in the other.
     expect(
-      screen.getByRole("link", { name: /^Tower of God/ }),
-    ).toHaveAttribute("href", "/entry/7");
+      screen.getByRole("button", { name: /^Tower of God/ }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Read Tower of God on Tapas" }),
     ).toHaveAttribute("href", "https://tapas.io/series/tog");
@@ -81,15 +84,27 @@ describe("card read button", () => {
     render(<EntryCard entry={row([source({ url: null })])} />);
 
     expect(screen.queryByRole("link", { name: /^Read / })).not.toBeInTheDocument();
-    // The card itself still goes to the entry page, where the URL gets filled in.
+    // The card itself still opens the menu, which is where the URL gets
+    // filled in from.
     expect(
-      screen.getByRole("link", { name: /^Tower of God/ }),
+      screen.getByRole("button", { name: /^Tower of God/ }),
     ).toBeInTheDocument();
   });
 
   it("offers no read button when the entry has no sources at all", () => {
     render(<EntryCard entry={row()} />);
     expect(screen.queryByRole("link", { name: /^Read / })).not.toBeInTheDocument();
+  });
+
+  // The read link sits over the cover, which is now the menu trigger. It is a
+  // sibling rather than a child, so a tap on it must reach the source and not
+  // open the menu underneath.
+  it("does not open the menu when the read link is tapped", async () => {
+    const user = userEvent.setup();
+    render(<EntryCard entry={row([source({ is_primary: true })])} />);
+
+    await user.click(screen.getByRole("link", { name: /^Read / }));
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 });
 

@@ -7,10 +7,10 @@ import { toast } from "sonner";
 import { addEntrySource } from "@/app/actions/entry-sources";
 import { updateProgress } from "@/app/actions/progress";
 import {
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-} from "@/components/ui/context-menu";
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import type { LibraryRow } from "@/lib/data/entries";
 import type { RankedSource } from "@/lib/data/rank-sources";
 import { linkableSources } from "@/lib/data/source-links";
@@ -95,11 +95,16 @@ export type SourceDialogRequest =
 type ActionResult = { ok?: boolean; error?: string; message?: string } | null;
 
 /**
- * Quick actions for a library card, opened by right-click or long-press.
+ * Quick actions for a library card, opened by tapping the card.
+ *
+ * A dropdown rather than a context menu: tapping the cover is the gesture
+ * everyone already has, where a long-press is one most people never try and
+ * right-click does not exist on a phone at all. Navigating to the entry page
+ * is the first item, so the thing the tap used to do is still one tap away.
  *
  * Deliberately flat. Radix drives submenu selection off pointer geometry that
  * jsdom does not compute, so anything nested was unreachable in tests and
- * fiddly under a long-press on touch; every item here is one click deep.
+ * fiddly on touch; every item here is one tap deep.
  *
  * Writes go through the same actions the entry page uses, so MAL and the
  * source table stay the single source of truth. Failures surface as a toast —
@@ -134,8 +139,8 @@ export function EntryCardMenu({
   }
 
   return (
-    <ContextMenuContent className="w-56">
-      <ContextMenuItem
+    <DropdownMenuContent className="w-56">
+      <DropdownMenuItem
         disabled={atEnd || isPending}
         onSelect={() =>
           run(() =>
@@ -147,55 +152,55 @@ export function EntryCardMenu({
       >
         <Plus />
         Add 1 chapter
-      </ContextMenuItem>
+      </DropdownMenuItem>
 
       {status ? (
-        <ContextMenuItem
+        <DropdownMenuItem
           disabled={isPending}
           onSelect={() => run(() => submitStatus(entry, status.value))}
         >
           <Check />
           {status.label}
-        </ContextMenuItem>
+        </DropdownMenuItem>
       ) : null}
 
-      <ContextMenuSeparator />
+      <DropdownMenuSeparator />
 
-      <ContextMenuItem asChild>
+      <DropdownMenuItem asChild>
         <a href={`/entry/${entry.id}`}>
           <BookOpen />
           Go to entry
         </a>
-      </ContextMenuItem>
+      </DropdownMenuItem>
 
       {/* Reading links open away from the app, so they get the new tab and the
           noreferrer that goes with it. */}
       {linkable.map((es) => (
-        <ContextMenuItem key={es.id} asChild>
+        <DropdownMenuItem key={es.id} asChild>
           <a href={es.url!} target="_blank" rel="noopener noreferrer">
             <ExternalLink />
             Go to {es.sources!.name}
           </a>
-        </ContextMenuItem>
+        </DropdownMenuItem>
       ))}
 
-      <ContextMenuSeparator />
+      <DropdownMenuSeparator />
 
       {/* With nothing attached, the shortcuts are the whole point of the menu;
           once something is, editing it matters more than attaching another. */}
       {attached.length === 0
         ? addable.map((source) => (
-            <ContextMenuItem
+            <DropdownMenuItem
               key={source.id}
               disabled={isPending}
               onSelect={() => run(() => quickAddSource(entry, source.id))}
             >
               <Plus />
               Add {source.name}
-            </ContextMenuItem>
+            </DropdownMenuItem>
           ))
         : attached.map((es) => (
-            <ContextMenuItem
+            <DropdownMenuItem
               key={es.id}
               onSelect={() =>
                 onOpenDialog({ mode: "edit", entrySourceId: es.id })
@@ -203,14 +208,14 @@ export function EntryCardMenu({
             >
               <Pencil />
               Edit {es.sources?.name ?? "source"}
-            </ContextMenuItem>
+            </DropdownMenuItem>
           ))}
 
-      <ContextMenuItem onSelect={() => onOpenDialog({ mode: "add" })}>
+      <DropdownMenuItem onSelect={() => onOpenDialog({ mode: "add" })}>
         <Plus />
         Add source…
-      </ContextMenuItem>
+      </DropdownMenuItem>
 
-    </ContextMenuContent>
+    </DropdownMenuContent>
   );
 }
