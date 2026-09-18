@@ -1,16 +1,23 @@
 "use client";
 
 import { useTransition } from "react";
-import { BookOpen, Check, ExternalLink, Pencil, Plus } from "lucide-react";
+import {
+  BookOpen,
+  Check,
+  ExternalLink,
+  Pencil,
+  Plus,
+  type LucideIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { addEntrySource } from "@/app/actions/entry-sources";
 import { updateProgress } from "@/app/actions/progress";
 import {
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+} from "@/components/ui/context-menu";
 import type { LibraryRow } from "@/lib/data/entries";
 import type { RankedSource } from "@/lib/data/rank-sources";
 import { linkableSources } from "@/lib/data/source-links";
@@ -95,23 +102,45 @@ export type SourceDialogRequest =
 type ActionResult = { ok?: boolean; error?: string; message?: string } | null;
 
 /**
- * Quick actions for a library card, opened by tapping the card.
+ * One row of the quick-actions list.
  *
- * A dropdown rather than a context menu: tapping the cover is the gesture
- * everyone already has, where a long-press is one most people never try and
- * right-click does not exist on a phone at all. Navigating to the entry page
- * is the first item, so the thing the tap used to do is still one tap away.
+ * The list is described rather than rendered so that the two surfaces that
+ * show it — a context menu on a mouse, a sheet on a phone — cannot drift
+ * apart. Adding an action means adding it here once.
+ */
+export type CardAction =
+  | { kind: "separator"; key: string }
+  | {
+      kind: "run";
+      key: string;
+      Icon: LucideIcon;
+      label: string;
+      disabled: boolean;
+      run: () => void;
+    }
+  | {
+      kind: "link";
+      key: string;
+      Icon: LucideIcon;
+      label: string;
+      href: string;
+      /** Leaves the app, so it gets a new tab and the rel that goes with it. */
+      external?: boolean;
+    };
+
+/**
+ * The quick actions for one library card.
  *
  * Deliberately flat. Radix drives submenu selection off pointer geometry that
  * jsdom does not compute, so anything nested was unreachable in tests and
- * fiddly on touch; every item here is one tap deep.
+ * fiddly on touch; every action here is one press deep.
  *
- * Writes go through the same actions the entry page uses, so MAL and the
- * source table stay the single source of truth. Failures surface as a toast —
- * the menu has closed by the time one arrives, so there is nowhere left in it
- * to show them.
+ * Writes go through the same server actions the entry page uses, so MyAnimeList
+ * and the source table stay the single source of truth. Failures surface as a
+ * toast — whichever surface opened has closed by the time one arrives, so there
+ * is nowhere left in it to show them.
  */
-export function EntryCardMenu({
+export function useEntryCardActions({
   entry,
   topSources,
   onOpenDialog,
@@ -119,7 +148,7 @@ export function EntryCardMenu({
   entry: LibraryRow;
   topSources: RankedSource[];
   onOpenDialog: (request: SourceDialogRequest) => void;
-}) {
+}): CardAction[] {
   const [isPending, startTransition] = useTransition();
   const total = entry.media_titles.num_chapters;
 
@@ -138,84 +167,144 @@ export function EntryCardMenu({
     });
   }
 
+  const actions: CardAction[] = [
+    {
+      kind: "run",
+      key: "add-chapter",
+      Icon: Plus,
+      label: "Add 1 chapter",
+      disabled: atEnd || isPending,
+      run: () =>
+        run(() =>
+          submitPatch(entry, {
+            num_chapters_read: String(entry.num_chapters_read + 1),
+          }),
+        ),
+    },
+  ];
+
+  if (status) {
+    actions.push({
+      kind: "run",
+      key: "status",
+      Icon: Check,
+      label: status.label,
+      disabled: isPending,
+      run: () => run(() => submitStatus(entry, status.value)),
+    });
+  }
+
+  actions.push(
+    { kind: "separator", key: "sep-go" },
+    {
+      kind: "link",
+      key: "entry",
+      Icon: BookOpen,
+      label: "Go to entry",
+      href: `/entry/${entry.id}`,
+    },
+    ...linkable.map(
+      (es): CardAction => ({
+        kind: "link",
+        key: `source-${es.id}`,
+        Icon: ExternalLink,
+        label: `Go to ${es.sources!.name}`,
+        href: es.url!,
+        external: true,
+      }),
+    ),
+    { kind: "separator", key: "sep-sources" },
+  );
+
+  // With nothing attached, the shortcuts are the whole point of the list; once
+  // something is, editing it matters more than attaching another.
+  if (attached.length === 0) {
+    actions.push(
+      ...addable.map(
+        (source): CardAction => ({
+          kind: "run",
+          key: `add-${source.id}`,
+          Icon: Plus,
+          label: `Add ${source.name}`,
+          disabled: isPending,
+          run: () => run(() => quickAddSource(entry, source.id)),
+        }),
+      ),
+    );
+  } else {
+    actions.push(
+      ...attached.map(
+        (es): CardAction => ({
+          kind: "run",
+          key: `edit-${es.id}`,
+          Icon: Pencil,
+          label: `Edit ${es.sources?.name ?? "source"}`,
+          disabled: false,
+          run: () => onOpenDialog({ mode: "edit", entrySourceId: es.id }),
+        }),
+      ),
+    );
+  }
+
+  actions.push({
+    kind: "run",
+    key: "add-source",
+    Icon: Plus,
+    label: "Add source…",
+    disabled: false,
+    run: () => onOpenDialog({ mode: "add" }),
+  });
+
+  return actions;
+}
+
+/**
+ * The quick actions as a context menu — the mouse surface.
+ *
+ * Right-click is where a secondary action belongs on a desktop: the card's own
+ * click is a link to the entry page, and nothing has to be given up to reach
+ * the menu. On a phone the same actions open as a sheet instead, from the ⋯
+ * button; see EntryCardSheet.
+ */
+export function EntryCardMenu({
+  entry,
+  topSources,
+  onOpenDialog,
+}: {
+  entry: LibraryRow;
+  topSources: RankedSource[];
+  onOpenDialog: (request: SourceDialogRequest) => void;
+}) {
+  const actions = useEntryCardActions({ entry, topSources, onOpenDialog });
+
   return (
-    <DropdownMenuContent className="w-56">
-      <DropdownMenuItem
-        disabled={atEnd || isPending}
-        onSelect={() =>
-          run(() =>
-            submitPatch(entry, {
-              num_chapters_read: String(entry.num_chapters_read + 1),
-            }),
-          )
-        }
-      >
-        <Plus />
-        Add 1 chapter
-      </DropdownMenuItem>
-
-      {status ? (
-        <DropdownMenuItem
-          disabled={isPending}
-          onSelect={() => run(() => submitStatus(entry, status.value))}
-        >
-          <Check />
-          {status.label}
-        </DropdownMenuItem>
-      ) : null}
-
-      <DropdownMenuSeparator />
-
-      <DropdownMenuItem asChild>
-        <a href={`/entry/${entry.id}`}>
-          <BookOpen />
-          Go to entry
-        </a>
-      </DropdownMenuItem>
-
-      {/* Reading links open away from the app, so they get the new tab and the
-          noreferrer that goes with it. */}
-      {linkable.map((es) => (
-        <DropdownMenuItem key={es.id} asChild>
-          <a href={es.url!} target="_blank" rel="noopener noreferrer">
-            <ExternalLink />
-            Go to {es.sources!.name}
-          </a>
-        </DropdownMenuItem>
-      ))}
-
-      <DropdownMenuSeparator />
-
-      {/* With nothing attached, the shortcuts are the whole point of the menu;
-          once something is, editing it matters more than attaching another. */}
-      {attached.length === 0
-        ? addable.map((source) => (
-            <DropdownMenuItem
-              key={source.id}
-              disabled={isPending}
-              onSelect={() => run(() => quickAddSource(entry, source.id))}
+    <ContextMenuContent className="w-56">
+      {actions.map((action) =>
+        action.kind === "separator" ? (
+          <ContextMenuSeparator key={action.key} />
+        ) : action.kind === "link" ? (
+          <ContextMenuItem key={action.key} asChild>
+            <a
+              href={action.href}
+              {...(action.external
+                ? { target: "_blank", rel: "noopener noreferrer" }
+                : {})}
             >
-              <Plus />
-              Add {source.name}
-            </DropdownMenuItem>
-          ))
-        : attached.map((es) => (
-            <DropdownMenuItem
-              key={es.id}
-              onSelect={() =>
-                onOpenDialog({ mode: "edit", entrySourceId: es.id })
-              }
-            >
-              <Pencil />
-              Edit {es.sources?.name ?? "source"}
-            </DropdownMenuItem>
-          ))}
-
-      <DropdownMenuItem onSelect={() => onOpenDialog({ mode: "add" })}>
-        <Plus />
-        Add source…
-      </DropdownMenuItem>
-
-    </DropdownMenuContent>
+              <action.Icon />
+              {action.label}
+            </a>
+          </ContextMenuItem>
+        ) : (
+          <ContextMenuItem
+            key={action.key}
+            disabled={action.disabled}
+            onSelect={action.run}
+          >
+            <action.Icon />
+            {action.label}
+          </ContextMenuItem>
+        ),
+      )}
+    </ContextMenuContent>
   );
 }

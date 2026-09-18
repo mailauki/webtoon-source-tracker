@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -62,18 +68,32 @@ const TOP_SOURCES = [
   { id: 2, name: "Webtoon", count: 4 },
 ];
 
-/**
- * The cover is both a link to the entry page and the menu's trigger: a plain
- * tap opens the menu, while the new-tab gestures reach the browser.
- */
+/** The cover: a plain link to the entry page, and the menu's trigger. */
 function cardTrigger() {
-  return screen.getByRole("link", { name: /^Tower of God/ });
+  return screen.getByRole("link", { name: /^Tower of God$/ });
 }
 
+/** The touch-only overflow button that opens the sheet. */
+function sheetButton() {
+  return screen.getByRole("button", { name: /^Actions for/ });
+}
+
+/**
+ * Radix opens a context menu on a real `contextmenu` event, which userEvent
+ * produces from a right-click. This is the mouse surface.
+ */
 async function openMenu(entry: LibraryRow = row()) {
   const user = userEvent.setup();
   render(<EntryCard entry={entry} topSources={TOP_SOURCES} />);
-  await user.click(cardTrigger());
+  await user.pointer({ keys: "[MouseRight]", target: cardTrigger() });
+  return user;
+}
+
+/** The same actions, reached the way a phone reaches them. */
+async function openSheet(entry: LibraryRow = row()) {
+  const user = userEvent.setup();
+  render(<EntryCard entry={entry} topSources={TOP_SOURCES} />);
+  await user.click(sheetButton());
   return user;
 }
 
@@ -128,27 +148,34 @@ describe("entry card quick-access menu", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
-  // Keyboard still reaches the menu — Radix toggles on these keys, and the
-  // controlled open has to let that through rather than swallowing it.
-  it.each(["{Enter}", "{ }", "{ArrowDown}"])(
-    "opens from the keyboard with %s",
-    async (key) => {
-      const user = userEvent.setup();
-      render(<EntryCard entry={row()} topSources={TOP_SOURCES} />);
+  /**
+   * A keyboard has no right-click, so the actions reach it through the same
+   * overflow button touch uses. It is `sr-only` on a fine pointer rather than
+   * hidden, which keeps it in the tab order — a `hidden` button would leave
+   * Shift+F10 as the only way in.
+   *
+   * jsdom applies no CSS, so what this can assert is that the button is in the
+   * document, focusable and operable; the media-query gating is checked
+   * against the built stylesheet instead.
+   */
+  it("reaches the actions from the keyboard, through the overflow button", async () => {
+    const user = userEvent.setup();
+    render(<EntryCard entry={row()} topSources={TOP_SOURCES} />);
 
-      cardTrigger().focus();
-      await user.keyboard(key);
+    sheetButton().focus();
+    expect(sheetButton()).toHaveFocus();
 
-      expect(await screen.findByRole("menu")).toBeInTheDocument();
-    },
-  );
+    await user.keyboard("{Enter}");
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
 
-  it("is a real link to the entry page as well as the menu trigger", () => {
+  it("is a plain link to the entry page", () => {
     render(<EntryCard entry={row()} />);
 
-    // The href is what makes "open in a new tab" work from the card itself.
+    // Nothing is intercepted: the card navigates, and the menu is the
+    // secondary gesture on top of it.
     expect(cardTrigger()).toHaveAttribute("href", "/entry/7");
-    expect(cardTrigger()).toHaveAttribute("aria-haspopup", "menu");
+    expect(cardTrigger()).not.toHaveAttribute("aria-haspopup");
   });
 
   /**
@@ -170,17 +197,17 @@ describe("entry card quick-access menu", () => {
     };
   }
 
-  // A plain click has to cancel the navigation, or the card would open the
-  // menu and leave the page at the same time.
-  it("cancels the navigation on a plain click", async () => {
+  // The card navigates again. A left click must reach the entry page and must
+  // not raise a menu on the way.
+  it("navigates on a plain click, without opening a menu", async () => {
     const user = userEvent.setup();
     render(<EntryCard entry={row()} />);
     const nav = watchNavigation();
 
     await user.click(cardTrigger());
 
-    expect(nav.prevented).toBe(true);
-    expect(await screen.findByRole("menu")).toBeInTheDocument();
+    expect(nav.prevented).toBe(false);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     nav.stop();
   });
 
@@ -429,5 +456,96 @@ describe("nextStatus", () => {
 
   it("offers nothing for a status it does not know", () => {
     expect(nextStatus("something_else")).toBeNull();
+  });
+});
+
+/**
+ * The touch surface: the same actions, in a sheet rather than a popup.
+ *
+ * These assert the sheet carries and performs the identical list, since the
+ * two surfaces render from one `useEntryCardActions` and the failure mode
+ * worth guarding is them drifting apart.
+ */
+describe("the actions sheet", () => {
+  it("does not exist until the overflow button is pressed", () => {
+    render(<EntryCard entry={row()} topSources={TOP_SOURCES} />);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("opens from the overflow button", async () => {
+    await openSheet();
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("names the card it belongs to", async () => {
+    await openSheet();
+    expect(
+      await screen.findByRole("heading", { name: "Tower of God" }),
+    ).toBeInTheDocument();
+  });
+
+  // The whole reason the action list is described once and rendered twice.
+  it("carries the same actions the context menu does", async () => {
+    const entry = row({
+      entry_sources: [
+        {
+          id: 3,
+          url: "https://tapas.io/x",
+          is_primary: true,
+          sources: { id: 1, name: "Tapas" },
+        },
+      ],
+    } as Partial<LibraryRow>);
+
+    await openMenu(entry);
+    const fromMenu = screen
+      .getAllByRole("menuitem")
+      .map((n) => n.textContent?.trim());
+    cleanup();
+
+    await openSheet(entry);
+    const sheet = await screen.findByRole("dialog");
+    const fromSheet = [
+      ...sheet.querySelectorAll("button[type='button'], a"),
+    ].map((n) => n.textContent?.trim());
+
+    expect(fromSheet).toEqual(fromMenu);
+  });
+
+  it("submits a chapter from the sheet", async () => {
+    const user = await openSheet();
+
+    await user.click(await screen.findByRole("button", { name: /Add 1 chapter/ }));
+
+    await vi.waitFor(() => expect(updateProgress).toHaveBeenCalled());
+    const formData = updateProgress.mock.calls[0][1];
+    expect(formData.get("num_chapters_read")).toBe("42");
+  });
+
+  it("closes once an action is taken, rather than sitting over the shelf", async () => {
+    const user = await openSheet();
+
+    await user.click(await screen.findByRole("button", { name: /Add 1 chapter/ }));
+
+    await vi.waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("keeps the entry page reachable as a real link", async () => {
+    await openSheet();
+    const sheet = await screen.findByRole("dialog");
+
+    expect(
+      within(sheet).getByRole("link", { name: /Go to entry/ }),
+    ).toHaveAttribute("href", "/entry/7");
+  });
+
+  it("disables Add 1 chapter at the end of a finished series", async () => {
+    await openSheet(row({ num_chapters_read: 179 } as Partial<LibraryRow>));
+
+    expect(
+      await screen.findByRole("button", { name: /Add 1 chapter/ }),
+    ).toBeDisabled();
   });
 });
