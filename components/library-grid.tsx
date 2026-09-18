@@ -278,8 +278,10 @@ export function LibraryGrid({
   }
 
   return (
-    // Tapas packs ~8 across at desktop width with tight gutters.
-    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+    // Fewer, wider columns than the old bare-cover grid: the card now carries
+    // a title, a chip row and a stat strip over the art, and at 8-across none
+    // of them had the width to be legible.
+    <div className="grid grid-cols-2 items-stretch gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
       {ordered.map((entry) => (
         <EntryCard
           key={entry.id}

@@ -26,7 +26,8 @@ import type { RankedSource } from "@/lib/data/rank-sources";
 import type { Source } from "@/lib/data/rank-sources";
 import { readingLink } from "@/lib/data/source-links";
 
-const STATUS_LABELS: Record<string, string> = {
+/** Shared with EntryRow, which shows the same status wording in list view. */
+export const STATUS_LABELS: Record<string, string> = {
   reading: "Reading",
   completed: "Completed",
   on_hold: "On hold",
@@ -35,7 +36,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 /** "42 / 179" — an em dash stands in for an unknown total (ongoing series). */
-function progressLabel(read: number, total: number | null): string {
+export function progressLabel(read: number, total: number | null): string {
   return `${read} / ${total && total > 0 ? total : "—"}`;
 }
 
@@ -104,85 +105,136 @@ export function EntryCard({
             // everything inside — cover alt, badges, status, progress — read
             // out as one run-on string.
             aria-label={title.title}
-            className="group block focus-visible:outline-none"
+            // Overlay style: the art IS the card. Everything — title, chips,
+            // stats — sits on top of it, so the frame is just a clipping
+            // boundary with a radius rather than a surface of its own.
+            className="group relative block overflow-hidden rounded-xl bg-muted shadow-sm ring-offset-background transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
-            {/* 1:2 portrait, matching Tapas. MAL covers are ~2:3, so object-cover
-            crops rather than distorts. */}
-            <div className="relative aspect-[1/2] overflow-hidden rounded-md bg-muted ring-offset-background group-focus-visible:ring-2 group-focus-visible:ring-ring group-focus-visible:ring-offset-2">
+            {/* 9/16 portrait — taller than it is wide, close to the ~2:3 MAL
+            covers already come in, so object-cover barely has to crop. The
+            overlay rows stack up the lower third rather than across. */}
+            <div className="relative aspect-[9/16] overflow-hidden">
               <CoverImage
                 src={title.main_picture_url}
                 title={title.title}
-                sizes="(max-width: 640px) 33vw, (max-width: 1024px) 20vw, 130px"
-                className="object-cover transition-transform duration-200 group-hover/card:scale-105"
+                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 320px"
+                // `object-top` so what little a 9/16 window crops off a ~2:3
+                // cover comes off the bottom: webtoon covers put the title
+                // logo and the character's face up top.
+                className="object-cover object-top transition-transform duration-200 group-hover/card:scale-105"
               />
 
-              {/* Bottom-up scrim so white text stays legible over any artwork. */}
-              <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/90 via-black/50 to-transparent" />
-
-              <div className="absolute inset-x-0 top-0 flex flex-wrap gap-1 p-1.5">
-                {sources.length === 0 ? <NoSourceBadge overlay /> : null}
-                {onHiatus ? <HiatusBadge overlay /> : null}
-                {/* Last of the three, so the states that need acting on —
-                    nothing recorded, or nothing updating — stay leftmost.
-                    Owning something is settled news. */}
-                {ownedOutright ? <OwnedBadge overlay /> : null}
-              </div>
-
-              <div className="absolute inset-x-0 bottom-0 flex flex-col gap-1 p-2">
-                <h3 className="line-clamp-3 text-center font-display text-sm font-bold leading-tight text-white drop-shadow">
-                  {title.title}
-                </h3>
-
-                <div className="flex flex-wrap items-center justify-center gap-1">
-                  {visible.map((es) =>
-                    es.sources ? (
-                      <SourceBadge
-                        key={es.id}
-                        overlay
-                        source={{
-                          name: es.sources.name,
-                          isPrimary: es.is_primary,
-                          isPaid: es.is_paid,
-                          isOfficial: es.is_official,
-                          isHiatus: es.is_hiatus,
-                          isOwned: es.is_owned,
-                        }}
-                      />
-                    ) : null,
-                  )}
-                  {overflow > 0 ? (
-                    <span className="rounded-badge bg-white/20 px-1 text-[10px] font-bold text-white backdrop-blur-sm">
-                      +{overflow}
-                    </span>
-                  ) : null}
-                </div>
-              </div>
+              {/* Two layers, because white text over unknown artwork needs
+              both. The gradient darkens; the blur, faded in from its own
+              midpoint by the mask, kills the high-frequency detail that would
+              otherwise fight the text. A gradient heavy enough to beat busy
+              art on its own buried the cover. */}
+              <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+              <div className="absolute inset-x-0 bottom-0 h-60 backdrop-blur-lg mask-t-from-50%" />
             </div>
 
-            <div className="mt-1.5 space-y-1">
-              <p className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-                <span>
+            {/* Status badges, top-left — the reference's "Active" pill. */}
+            <div className="absolute inset-x-0 top-0 flex flex-wrap gap-1 p-2">
+              {sources.length === 0 ? <NoSourceBadge overlay /> : null}
+              {onHiatus ? <HiatusBadge overlay /> : null}
+              {/* Last of the three, so the states that need acting on —
+                  nothing recorded, or nothing updating — stay leftmost.
+                  Owning something is settled news. */}
+              {ownedOutright ? <OwnedBadge overlay /> : null}
+            </div>
+
+            {/* The content stack, bottom-anchored over the art: status and
+            title, then the chips, then the stat strip — the reference's title
+            block, spec row and footer in that order. */}
+            <div className="absolute inset-x-0 bottom-0 flex flex-col p-2 pb-3.5">
+              {/* Status over title, in a fixed-height block so the chips and
+              the strip below start on the same line whether a title runs to
+              one line or two. */}
+              <div className="flex h-17 flex-col items-start justify-between">
+                <span className="shrink-0 text-xs font-medium text-white/80 drop-shadow">
                   {STATUS_LABELS[entry.list_status] ?? entry.list_status}
                 </span>
-                <span className="tabular-nums">
-                  {progressLabel(entry.num_chapters_read, total)}
-                </span>
-              </p>
+                {/* Two lines at most — `h-17` above is what that second line
+                is budgeted against. */}
+                <h3 className="line-clamp-2 text-balance font-display text-xl font-semibold leading-tight text-white drop-shadow">
+                  {title.title}
+                </h3>
+              </div>
 
-              {/* Only meaningful when the total is known; ongoing series have none. */}
-              {total && total > 0 ? (
-                <div
-                  className="h-0.5 w-full overflow-hidden rounded-full bg-muted"
-                  role="progressbar"
-                  aria-valuenow={pct}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-label={`${pct}% read`}
-                >
-                  <div className="h-full bg-brand" style={{ width: `${pct}%` }} />
+              {/* The source chips, standing where the reference runs its
+              icon-heavy bed/bath/sqft row. `flex-nowrap` + `overflow-hidden`:
+              on a narrow card a pill is clipped rather than wrapped onto a
+              line that would push the strip off the art. */}
+              <div className="flex flex-nowrap items-center gap-1 overflow-hidden pt-1">
+                {visible.map((es) =>
+                  es.sources ? (
+                    <SourceBadge
+                      key={es.id}
+                      overlay
+                      source={{
+                        name: es.sources.name,
+                        isPrimary: es.is_primary,
+                        isPaid: es.is_paid,
+                        isOfficial: es.is_official,
+                        isHiatus: es.is_hiatus,
+                        isOwned: es.is_owned,
+                      }}
+                    />
+                  ) : null,
+                )}
+                {overflow > 0 ? (
+                  <span className="shrink-0 rounded-badge bg-white/20 px-1 text-xs font-bold text-white backdrop-blur-sm">
+                    +{overflow}
+                  </span>
+                ) : null}
+              </div>
+
+              {/* The stat strip. No ground of its own: the masked blur behind
+              the whole stack already lifts it off the artwork, and a second
+              translucent panel on top of that read as a smudge. */}
+              <div className="grid grid-cols-2 divide-x divide-white/20 rounded-md pt-1 text-center">
+                <div className="px-1 py-1">
+                  <p className="text-xs leading-none text-white/70">Read</p>
+                  <p className="mt-0.5 truncate text-sm font-bold leading-none whitespace-nowrap text-white tabular-nums">
+                    {progressLabel(entry.num_chapters_read, total)}
+                  </p>
                 </div>
-              ) : null}
+                <div className="px-1 py-1">
+                  <p className="text-xs leading-none text-white/70">Left</p>
+                  <p className="mt-0.5 truncate text-sm font-bold leading-none whitespace-nowrap text-white tabular-nums">
+                    {/* What is left to read. Unknown when the total is. */}
+                    {total && total > 0
+                      ? Math.max(0, total - entry.num_chapters_read)
+                      : "—"}
+                  </p>
+                </div>
+              </div>
             </div>
+
+            {/* The bar, along the card's bottom edge.
+
+            A series with no known total has no percentage to draw, but the
+            empty track still renders so every card ends on the same line. Only
+            the fill is conditional, and without one the element is decorative,
+            so it drops the progressbar role rather than reporting a
+            meaningless 0%. */}
+            {total && total > 0 ? (
+              <div
+                className="absolute inset-x-0 bottom-0 h-1 overflow-hidden bg-white/20"
+                role="progressbar"
+                aria-valuenow={pct}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label={`${pct}% read`}
+              >
+                <div className="h-full bg-brand" style={{ width: `${pct}%` }} />
+              </div>
+            ) : (
+              <div
+                className="absolute inset-x-0 bottom-0 h-1 bg-white/20"
+                aria-hidden
+              />
+            )}
           </Link>
 
           {/* The corner controls, in one cluster opposite the status badges
@@ -191,7 +243,7 @@ export function EntryCard({
           Both overlay cover art, so every pixel they grow is artwork they
           hide — the read link is sized for a finger on touch and left alone on
           a pointer, and the ⋯ button exists only on touch. */}
-          <div className="absolute right-1.5 top-1.5 flex items-center gap-1">
+          <div className="absolute right-2 top-2 flex flex-col items-center gap-1">
             {/* The card owns the tap; this owns the read. Always visible: on
             touch there is no hover to reveal it, and "where do I read this" is
             the question the shelf exists to answer.
