@@ -1,10 +1,17 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  countChapters,
+  formatRanges,
+  formatRangesForInput,
+  fromMultirange,
+  parseRanges,
+} from "@/lib/data/chapter-ranges";
 import { ownAllLabel, type ChapterTotal } from "@/lib/data/chapter-totals";
 /**
  * One attached source, narrowed to the fields these inputs actually read.
@@ -23,7 +30,7 @@ export type EntrySource = {
   is_paid: boolean;
   is_hiatus: boolean;
   is_owned: boolean;
-  chapters_owned: number | null;
+  chapters_owned: string | null;
   sources: { id: number; name: string } | null;
 };
 
@@ -50,11 +57,28 @@ export function SourceFields({
   // mirror of it rather than the thing submitted.
   const [owned, setOwned] = useState(source?.is_owned ?? false);
 
-  // A ref, not controlled state: the "own all" button writes straight to the
-  // DOM value, which is what an uncontrolled input submits. Holding the count
-  // in state instead would add a second source of truth for a number the form
-  // already owns, and would need resetting every time `source` changed.
-  const ownedCount = useRef<HTMLInputElement>(null);
+  // The one controlled field in this form. It has to be: the preview below
+  // reads what has been typed, and the own-all button writes to it. Seeded
+  // from the stored multirange in the hyphen form the parser accepts, so what
+  // is shown re-submits as exactly what it came from.
+  const [ownedText, setOwnedText] = useState(() =>
+    formatRangesForInput(fromMultirange(source?.chapters_owned)),
+  );
+  const parsed = parseRanges(ownedText);
+
+  // What the line under the field says. Pulled out of the JSX because three
+  // nested ternaries in a template read as a puzzle.
+  let hint: string;
+  if (!parsed.ok) {
+    hint = parsed.error;
+  } else if (parsed.ranges.length === 0) {
+    hint = total
+      ? "A range, or single chapters — or fill it from MyAnimeList."
+      : "A range, or single chapters. MyAnimeList has no chapter count for this title yet.";
+  } else {
+    const n = countChapters(parsed.ranges);
+    hint = `${n} ${n === 1 ? "chapter" : "chapters"}: ${formatRanges(parsed.ranges)}`;
+  }
 
   const id = source?.id ?? "new";
 
@@ -103,20 +127,22 @@ export function SourceFields({
       <div hidden={!owned} className={owned ? "grid gap-2" : undefined}>
         <Label htmlFor={`chapters-owned-${id}`}>Chapters owned</Label>
 
-        {/* Left blank the count stays null, which reads as "owned, not
-            counted" rather than "owns none". Deliberately not bounded by the
-            read count: buying ahead of what you have read, and reading ahead
-            of what you own, are both ordinary. */}
+        {/* Text, not a number, because ownership is a set: the app has 1-40,
+            a print volume covered 41-54, three were bought loose. Left blank
+            it stays null, which reads as "owned, not counted" rather than
+            "owns none". Deliberately not bounded by the read count: buying
+            ahead of what you have read, and reading ahead of what you own,
+            are both ordinary. */}
         <div className="flex flex-wrap items-center gap-2">
           <Input
-            ref={ownedCount}
             id={`chapters-owned-${id}`}
             name="chapters_owned"
-            type="number"
-            min={0}
-            defaultValue={source?.chapters_owned ?? ""}
-            placeholder="—"
-            className="w-28"
+            value={ownedText}
+            onChange={(e) => setOwnedText(e.target.value)}
+            placeholder="e.g. 1-40, 55, 60"
+            className="min-w-48 flex-1"
+            aria-describedby={`chapters-owned-hint-${id}`}
+            aria-invalid={!parsed.ok}
           />
 
           {/* type="button" is load-bearing: a bare <button> inside a form
@@ -127,25 +153,22 @@ export function SourceFields({
               type="button"
               variant="outline"
               className="rounded-pill"
-              onClick={() => {
-                if (ownedCount.current) {
-                  ownedCount.current.value = String(total.count);
-                }
-              }}
+              onClick={() => setOwnedText(`1-${total.count}`)}
             >
               {ownAllLabel(total)}
             </Button>
           ) : null}
         </div>
 
-        {/* Says why there is no shortcut, rather than leaving its absence to
-            be read as a bug. MAL carries no count for most ongoing webtoons. */}
-        {total ? null : (
-          <p className="text-xs text-muted-foreground">
-            MyAnimeList has no chapter count for this title yet — type what you
-            own.
-          </p>
-        )}
+        {/* A typed syntax needs a mirror, or the first time anyone finds out
+            what the field made of their input is after saving. This says what
+            was understood, in the same words the entry page will use. */}
+        <p
+          id={`chapters-owned-hint-${id}`}
+          className={parsed.ok ? "text-xs text-muted-foreground" : "text-xs text-alert"}
+        >
+          {hint}
+        </p>
       </div>
 
       <div className="grid gap-2">

@@ -24,6 +24,13 @@ import { SourceFields, type EntrySource } from "@/components/source-fields";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  countChapters,
+  formatRanges,
+  fromMultirange,
+  gapsWithin,
+  unionRanges,
+} from "@/lib/data/chapter-ranges";
 import { ownedCountLabel, type ChapterTotal } from "@/lib/data/chapter-totals";
 import type { Source } from "@/lib/data/rank-sources";
 
@@ -71,6 +78,8 @@ export function EntrySourceEditor({
           </Button>
         ) : null}
       </div>
+
+      <OwnedAcrossSources sources={sources} total={total} />
 
       {adding ? (
         <AddSourceForm
@@ -153,10 +162,8 @@ export function EntrySourceEditor({
 
                     A null count on an owned source says nothing rather than
                     zero: "owned, not counted" is a real answer. */}
-                {source.is_owned && source.chapters_owned !== null ? (
-                  <p className="text-sm text-muted-foreground">
-                    {ownedCountLabel(source.chapters_owned, total)}
-                  </p>
+                {source.is_owned ? (
+                  <OwnedHere source={source} total={total} />
                 ) : null}
 
                 {source.url ? (
@@ -195,6 +202,90 @@ export function EntrySourceEditor({
         )}
       </ul>
     </section>
+  );
+}
+
+/**
+ * What one source contributes, on its own row.
+ *
+ * Two lines rather than one: the count answers "how much", and the ranges
+ * answer "which" — and the second is only worth the space when the answer is
+ * not a single run, which is the common case.
+ *
+ * A source marked owned with nothing recorded says nothing at all. "Owned, not
+ * counted" is a real answer and a zero would contradict it.
+ */
+function OwnedHere({
+  source,
+  total,
+}: {
+  source: EntrySource;
+  total: ChapterTotal | null;
+}) {
+  const ranges = fromMultirange(source.chapters_owned);
+  if (ranges.length === 0) return null;
+
+  return (
+    <div className="grid gap-0.5">
+      <p className="text-sm text-muted-foreground">
+        {ownedCountLabel(countChapters(ranges), total)}
+      </p>
+      {ranges.length > 1 ? (
+        <p className="text-xs text-muted-foreground">{formatRanges(ranges)}</p>
+      ) : null}
+    </div>
+  );
+}
+
+/** At most this many gaps are named before the rest are counted instead. */
+const GAPS_SHOWN = 3;
+
+/**
+ * Everything owned, across every source.
+ *
+ * The union, never a sum. Sources overlap constantly — the first arc read free
+ * on one app and bought on another — so adding the per-source counts would
+ * claim the user owns twice what they do. `unionRanges` collapses the overlap;
+ * see lib/data/chapter-ranges.ts.
+ *
+ * Only shown once two sources are owned. With one, the row above it already
+ * says the same thing, and repeating it under a heading that promises a
+ * synthesis is worse than saying nothing.
+ *
+ * Unowned sources are excluded even when they carry a range, matching the row
+ * above: the form keeps a count through an unticking of Owned so it is not
+ * lost, and counting that here would contradict the flag.
+ */
+function OwnedAcrossSources({
+  sources,
+  total,
+}: {
+  sources: EntrySource[];
+  total: ChapterTotal | null;
+}) {
+  const owned = sources.filter((s) => s.is_owned);
+  if (owned.length < 2) return null;
+
+  const ranges = unionRanges(owned.map((s) => fromMultirange(s.chapters_owned)));
+  if (ranges.length === 0) return null;
+
+  const gaps = gapsWithin(ranges);
+  const named = gaps.slice(0, GAPS_SHOWN);
+  const rest = gaps.length - named.length;
+
+  return (
+    <div className="grid gap-1 rounded-lg border border-border bg-card p-3">
+      <p className="text-sm font-medium">
+        {ownedCountLabel(countChapters(ranges), total, "in total")}
+      </p>
+      <p className="text-xs text-muted-foreground">{formatRanges(ranges)}</p>
+      {gaps.length > 0 ? (
+        <p className="text-xs text-muted-foreground">
+          Missing {formatRanges(named)}
+          {rest > 0 ? ` and ${rest} more gap${rest === 1 ? "" : "s"}` : ""}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

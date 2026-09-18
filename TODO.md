@@ -241,33 +241,25 @@ two an admin wants distinguished) is a different, harder problem this table
 doesn't solve. Build it when a real MAL genre pair turns out to annoy someone
 browsing the tag pages, not before.
 
-### Non-contiguous chapter ownership
+### Owned chapters across titles, in SQL
 
-`entry_sources.chapters_owned` is an int, so ownership at a source is a count
-read forward from chapter 1 — "I own 40 of these" — not a set of chapter
-numbers. That matches how the coin-gated apps actually work: Webtoon, Tapas
-and Piccoma all unlock the *next* chapter, so a count says everything a list
-of forty rows would, in one column, with no join and no second editor.
+`entry_sources.chapters_owned` is an `int4multirange`, so a gap is expressible
+and the per-source sets union correctly — owning 1–40 on two sources is 40
+chapters, not 80. The union runs in the browser (`unionRanges` in
+`lib/data/chapter-ranges.ts`) because the entry page already has every source's
+ranges in the rows it fetched, so asking Postgres for what is already on the
+client would be a round-trip for nothing.
 
-What it cannot express is a gap: a chapter given away free during a promo, a
-volume bought mid-series in print, an arc unlocked out of order. Recording
-those means an `entry_source_chapters (entry_source_id, chapter)` table — or a
-range type, if the gaps turn out to be few and wide — plus its own RLS
-policies (select/insert/delete-own, keyed off `entry_sources.user_id` the same
-way), and a UI that is no longer one number in a form.
+That stops working the moment a question spans titles: "how many chapters do I
+own across my whole library", or "which titles have gaps". Those want
+`range_agg` server-side rather than every title's ranges shipped to the browser
+to be added up there. The column is already the right type for it — the work is
+a view or an RPC plus somewhere to show the answer, not a schema change.
 
-`is_owned` is deliberately independent of the count and would survive that
-change untouched: it is the flag the badge and the library toggle read
-(`isOwned` in `lib/data/pick-random.ts` deliberately ignores
-`chapters_owned`), so a table could replace the int without touching either.
-The migration would be a backfill of `1..chapters_owned` per row.
-
-Build it when someone's real library has a gap they cannot record, not before
-— and note that the cheap half-measure, letting `chapters_owned` mean "up to
-chapter N, roughly", is what the field already does. The "own all" shortcut
-(`lib/data/chapter-totals.ts`) leans on that reading too: it fills the field
-with MAL's `num_chapters`, which is a total rather than a set, so a table
-would need it to fill a range instead.
+Not yet known to be wanted: no screen asks a cross-title question about
+ownership today, and the library toggle only needs the `is_owned` boolean,
+which `isOwned` in `lib/data/pick-random.ts` reads without touching the ranges
+at all.
 
 ### Guest demo mode
 

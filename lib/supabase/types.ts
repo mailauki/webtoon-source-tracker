@@ -163,7 +163,7 @@ export type Database = {
       }
       entry_sources: {
         Row: {
-          chapters_owned: number | null
+          chapters_owned: string | null
           chapters_read: number | null
           created_at: string
           entry_id: number
@@ -180,7 +180,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          chapters_owned?: number | null
+          chapters_owned?: string | null
           chapters_read?: number | null
           created_at?: string
           entry_id: number
@@ -197,7 +197,7 @@ export type Database = {
           user_id: string
         }
         Update: {
-          chapters_owned?: number | null
+          chapters_owned?: string | null
           chapters_read?: number | null
           created_at?: string
           entry_id?: number

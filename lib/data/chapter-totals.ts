@@ -82,10 +82,17 @@ export function ownAllLabel(total: ChapterTotal): string {
 export function ownedCountLabel(
   owned: number,
   total: ChapterTotal | null,
+  /**
+   * Where the count applies. A parameter rather than two functions because
+   * only the last two words differ, and rather than the caller patching the
+   * string, because a label that gets edited by a regex breaks silently the
+   * day its wording changes.
+   */
+  scope: "here" | "in total" = "here",
 ): string {
-  if (!total || owned > total.count) return `${owned} chapters owned here`;
+  if (!total || owned > total.count) return `${owned} chapters owned ${scope}`;
   if (total.final && owned === total.count) {
-    return `All ${total.count} chapters owned here`;
+    return `All ${total.count} chapters owned ${scope}`;
   }
-  return `${owned} of ${total.count} chapters owned here`;
+  return `${owned} of ${total.count} chapters owned ${scope}`;
 }

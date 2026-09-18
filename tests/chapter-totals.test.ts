@@ -104,4 +104,18 @@ describe("ownedCountLabel", () => {
       "45 chapters owned here",
     );
   });
+
+  // The cross-source summary says the same thing about a union rather than
+  // about one source, so only the last two words change.
+  it("relocates the count with the scope parameter", () => {
+    expect(ownedCountLabel(43, { count: 179, final: true }, "in total")).toBe(
+      "43 of 179 chapters owned in total",
+    );
+    expect(ownedCountLabel(179, { count: 179, final: true }, "in total")).toBe(
+      "All 179 chapters owned in total",
+    );
+    expect(ownedCountLabel(43, null, "in total")).toBe(
+      "43 chapters owned in total",
+    );
+  });
 });

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { verifySession } from "@/lib/auth/dal";
+import { parseRanges, toMultirange } from "@/lib/data/chapter-ranges";
 import { createClient } from "@/lib/supabase/server";
 
 export type EntrySourceState = { error?: string; message?: string } | null;
@@ -28,9 +29,10 @@ const addSchema = z.object({
   chaptersRead: z
     .union([z.literal(""), z.coerce.number().int().min(0)])
     .optional(),
-  chaptersOwned: z
-    .union([z.literal(""), z.coerce.number().int().min(0)])
-    .optional(),
+  // Free text ("1-40, 55, 60"), not a number: ownership is a set of ranges
+  // now. Bounded here and given meaning by parseRanges, which returns the
+  // message the user sees rather than a schema-shaped one.
+  chaptersOwned: z.string().max(200).optional(),
   notes: z.string().max(2000).optional(),
   isPrimary: z.coerce.boolean().optional(),
   isOfficial: z.coerce.boolean().optional(),
@@ -104,6 +106,12 @@ export async function addEntrySource(
     isOwned,
   } = parsed.data;
 
+  // Parsed after the schema so the user gets "Could not read “4o”" rather than
+  // a type error, and so the value reaching Postgres is always canonical.
+  const owned = parseRanges(chaptersOwned ?? "");
+  if (!owned.ok) return { error: owned.error };
+  const ownedChapters = toMultirange(owned.ranges);
+
   const supabase = await createClient();
 
   if (isPrimary) await clearOtherPrimaries(supabase, entryId);
@@ -116,9 +124,10 @@ export async function addEntrySource(
     source_id: sourceId,
     url: url || null,
     chapters_read: chaptersRead === "" ? null : (chaptersRead ?? null),
-    // Blank stays null rather than becoming 0: "owned, not counted" is a real
-    // answer, and 0 would claim the opposite.
-    chapters_owned: chaptersOwned === "" ? null : (chaptersOwned ?? null),
+    // Null rather than an empty multirange: the column's check constraint
+    // rejects the empty one so that "nothing owned here" has a single
+    // spelling. Blank text therefore reads as "owned, not counted".
+    chapters_owned: ownedChapters,
     notes: notes || null,
     is_primary: isPrimary ?? false,
     is_official: isOfficial ?? true,
@@ -153,9 +162,7 @@ export async function updateEntrySource(
       chaptersRead: z
         .union([z.literal(""), z.coerce.number().int().min(0)])
         .optional(),
-      chaptersOwned: z
-        .union([z.literal(""), z.coerce.number().int().min(0)])
-        .optional(),
+      chaptersOwned: z.string().max(200).optional(),
       notes: z.string().max(2000).optional(),
       isPrimary: z.coerce.boolean().optional(),
       isOfficial: z.coerce.boolean().optional(),
@@ -191,6 +198,10 @@ export async function updateEntrySource(
     isOwned,
   } = parsed.data;
 
+  const owned = parseRanges(chaptersOwned ?? "");
+  if (!owned.ok) return { error: owned.error };
+  const ownedChapters = toMultirange(owned.ranges);
+
   const supabase = await createClient();
 
   if (isPrimary) await clearOtherPrimaries(supabase, entryId, id);
@@ -200,7 +211,7 @@ export async function updateEntrySource(
     .update({
       url: url || null,
       chapters_read: chaptersRead === "" ? null : (chaptersRead ?? null),
-      chapters_owned: chaptersOwned === "" ? null : (chaptersOwned ?? null),
+      chapters_owned: ownedChapters,
       notes: notes || null,
       is_primary: isPrimary ?? false,
       is_official: isOfficial ?? true,

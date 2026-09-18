@@ -53,7 +53,7 @@ const ATTACHED: EntrySource[] = [
     is_paid: false,
     is_hiatus: false,
     is_owned: true,
-    chapters_owned: 20,
+    chapters_owned: "{[1,21)}",
     sources: { id: 1, name: "Tapas" },
   },
 ];
@@ -131,7 +131,7 @@ describe("entry source dialog", () => {
     expect(screen.getByLabelText(/Chapters read/)).toHaveValue(12);
     expect(screen.getByLabelText("Primary source")).toBeChecked();
     expect(screen.getByLabelText("Owned")).toBeChecked();
-    expect(screen.getByLabelText("Chapters owned")).toHaveValue(20);
+    expect(screen.getByLabelText("Chapters owned")).toHaveValue("1-20");
   });
 
   it("submits ownership as its own flag and count", async () => {
@@ -139,13 +139,13 @@ describe("entry source dialog", () => {
 
     await user.selectOptions(screen.getByLabelText("Source"), "2");
     await user.click(screen.getByLabelText("Owned"));
-    await user.type(screen.getByLabelText("Chapters owned"), "40");
+    await user.type(screen.getByLabelText("Chapters owned"), "1-40, 55");
     await user.click(screen.getByRole("button", { name: "Add" }));
 
     await vi.waitFor(() => expect(addEntrySource).toHaveBeenCalledOnce());
     const formData = addEntrySource.mock.calls[0][1];
     expect(formData.get("is_owned")).toBe("on");
-    expect(formData.get("chapters_owned")).toBe("40");
+    expect(formData.get("chapters_owned")).toBe("1-40, 55");
   });
 
   // Two boxes, not one: the source charging money and the user having paid it
@@ -177,7 +177,7 @@ describe("entry source dialog", () => {
     await vi.waitFor(() => expect(updateEntrySource).toHaveBeenCalledOnce());
     const formData = updateEntrySource.mock.calls[0][1];
     expect(formData.get("is_owned")).toBeNull();
-    expect(formData.get("chapters_owned")).toBe("20");
+    expect(formData.get("chapters_owned")).toBe("1-20");
   });
 
   // Blank is "owned, not counted" rather than "owns none" — the action turns
@@ -321,7 +321,7 @@ describe("revealing the chapter count", () => {
     await vi.waitFor(() => expect(updateEntrySource).toHaveBeenCalledOnce());
     const formData = updateEntrySource.mock.calls[0][1];
     expect(formData.get("is_owned")).toBeNull();
-    expect(formData.get("chapters_owned")).toBe("20");
+    expect(formData.get("chapters_owned")).toBe("1-20");
   });
 
   it("brings the same number back when the box is re-ticked", async () => {
@@ -331,7 +331,7 @@ describe("revealing the chapter count", () => {
     await user.click(ownedBox());
 
     expect(count()).toBeVisible();
-    expect(count()).toHaveValue(20);
+    expect(count()).toHaveValue("1-20");
   });
 });
 
@@ -344,14 +344,14 @@ describe("the own-all shortcut", () => {
     const { user } = setup({ mode: "edit", entrySourceId: 55 }, ATTACHED, FINISHED);
 
     await user.click(button(/^Own all 179$/));
-    expect(screen.getByLabelText("Chapters owned")).toHaveValue(179);
+    expect(screen.getByLabelText("Chapters owned")).toHaveValue("1-179");
   });
 
   it("qualifies the total on a series still publishing", async () => {
     const { user } = setup({ mode: "edit", entrySourceId: 55 }, ATTACHED, ONGOING);
 
     await user.click(button(/Own all 41 so far/));
-    expect(screen.getByLabelText("Chapters owned")).toHaveValue(41);
+    expect(screen.getByLabelText("Chapters owned")).toHaveValue("1-41");
   });
 
   // A bare <button> in a form submits. If this one did, pressing it would save
@@ -370,7 +370,9 @@ describe("the own-all shortcut", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await vi.waitFor(() => expect(updateEntrySource).toHaveBeenCalledOnce());
-    expect(updateEntrySource.mock.calls[0][1].get("chapters_owned")).toBe("179");
+    expect(updateEntrySource.mock.calls[0][1].get("chapters_owned")).toBe(
+      "1-179",
+    );
   });
 
   it("offers no shortcut when MAL has no count, and says why", async () => {
@@ -400,5 +402,77 @@ describe("the own-all shortcut", () => {
 
     await user.click(screen.getByLabelText("Owned"));
     expect(button(/^Own all 179$/)).toBeVisible();
+  });
+});
+
+/**
+ * The live preview under the field.
+ *
+ * A typed syntax needs a mirror, or the first anyone learns what the field
+ * made of their input is after saving it.
+ */
+describe("the chapters-owned preview", () => {
+  const field = () => screen.getByLabelText("Chapters owned");
+
+  it("says what it understood", async () => {
+    const { user } = setup({ mode: "add" });
+    await user.click(screen.getByLabelText("Owned"));
+    await user.type(field(), "1-40, 55, 60");
+
+    expect(screen.getByText("42 chapters: 1–40, 55, 60")).toBeVisible();
+  });
+
+  // The rule that keeps a list meaning one thing: a lone number is one chapter.
+  it("reads a bare number as a single chapter", async () => {
+    const { user } = setup({ mode: "add" });
+    await user.click(screen.getByLabelText("Owned"));
+    await user.type(field(), "55");
+
+    expect(screen.getByText("1 chapter: 55")).toBeVisible();
+  });
+
+  it("shows what overlapping entries collapse to", async () => {
+    const { user } = setup({ mode: "add" });
+    await user.click(screen.getByLabelText("Owned"));
+    await user.type(field(), "1-40, 30-50");
+
+    expect(screen.getByText("50 chapters: 1–50")).toBeVisible();
+  });
+
+  it("reports what it could not read, and marks the field invalid", async () => {
+    const { user } = setup({ mode: "add" });
+    await user.click(screen.getByLabelText("Owned"));
+    await user.type(field(), "1-40, abc");
+
+    expect(screen.getByText(/Could not read/)).toBeVisible();
+    expect(field()).toHaveAttribute("aria-invalid", "true");
+  });
+
+  it("clears the invalid mark once the text parses again", async () => {
+    const { user } = setup({ mode: "edit", entrySourceId: 55 });
+    expect(field()).toHaveAttribute("aria-invalid", "false");
+
+    await user.type(field(), ", abc");
+    expect(field()).toHaveAttribute("aria-invalid", "true");
+
+    // Correcting it must recover, not leave the field stuck invalid.
+    await user.clear(field());
+    await user.type(field(), "1-40");
+    expect(field()).toHaveAttribute("aria-invalid", "false");
+    expect(screen.getByText("40 chapters: 1–40")).toBeVisible();
+  });
+
+  it("prefills from the stored multirange in the form the parser accepts", () => {
+    // {[1,21)} is chapters 1-20 — the half-open upper bound is Postgres's,
+    // and the field must never show it.
+    setup({ mode: "edit", entrySourceId: 55 });
+    expect(field()).toHaveValue("1-20");
+    expect(screen.getByText("20 chapters: 1–20")).toBeVisible();
+  });
+
+  it("says MAL has no count when it has none", async () => {
+    const { user } = setup({ mode: "add" });
+    await user.click(screen.getByLabelText("Owned"));
+    expect(screen.getByText(/no chapter count for this title/)).toBeVisible();
   });
 });
