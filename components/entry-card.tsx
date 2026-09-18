@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { ExternalLink } from "lucide-react";
 
@@ -16,10 +15,14 @@ import {
   OwnedBadge,
   SourceBadge,
 } from "@/components/source-badge";
-import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ownsEveryChapter } from "@/lib/data/chapter-ranges";
 import { chapterTotal } from "@/lib/data/chapter-totals";
 import type { LibraryRow } from "@/lib/data/entries";
-import { isOnHiatus, isOwned } from "@/lib/data/pick-random";
+import { isOnHiatus } from "@/lib/data/pick-random";
 import type { RankedSource } from "@/lib/data/rank-sources";
 import type { Source } from "@/lib/data/rank-sources";
 import { readingLink } from "@/lib/data/source-links";
@@ -31,6 +34,29 @@ const STATUS_LABELS: Record<string, string> = {
   dropped: "Dropped",
   plan_to_read: "Plan to read",
 };
+
+/**
+ * Whether this click means "open it somewhere else" rather than "act here".
+ *
+ * Covers every new-tab and new-window gesture a browser gives an anchor:
+ * middle-click, and the modifier combinations that mean the same thing across
+ * platforms (cmd on macOS, ctrl elsewhere, shift for a window).
+ */
+function opensElsewhere(event: {
+  button: number;
+  metaKey: boolean;
+  ctrlKey: boolean;
+  shiftKey: boolean;
+  altKey: boolean;
+}): boolean {
+  return (
+    event.button !== 0 ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.shiftKey ||
+    event.altKey
+  );
+}
 
 /** "42 / 179" — an em dash stands in for an unknown total (ongoing series). */
 function progressLabel(read: number, total: number | null): string {
@@ -46,7 +72,7 @@ export function EntryCard({
   topSources?: RankedSource[];
   catalog?: Source[];
 }) {
-  // The dialog lives outside <ContextMenu> — Radix unmounts menu content on
+  // The dialog lives outside <DropdownMenu> — Radix unmounts menu content on
   // close and would take the dialog with it.
   const [dialog, setDialog] = useState<SourceDialogRequest | null>(null);
 
@@ -63,9 +89,18 @@ export function EntryCard({
   // Only when every source has paused — see isOnHiatus.
   const onHiatus = isOnHiatus(entry);
 
-  // Owned anywhere is owned — see isOwned. Can be true alongside onHiatus:
-  // a series you bought and that has since stopped is both.
-  const owned = isOwned(entry);
+  // The corner badge is reserved for owning the series outright — see
+  // ownsEveryChapter. Owning *some* of it is already said by the bookmark on
+  // the source pill below, and a badge that appeared after one bought chapter
+  // would be the loudest thing on a card while meaning the least.
+  //
+  // Can be true alongside onHiatus: a completed series you bought and that has
+  // since stopped updating somewhere is both.
+  //
+  // `malTotal` is named apart from `total` below, which is the raw chapter
+  // count the progress bar divides by.
+  const malTotal = chapterTotal(title);
+  const ownedOutright = ownsEveryChapter(sources, malTotal);
 
   // Where to read this, if anywhere is recorded. See readingLink.
   const readAt = readingLink(sources);
@@ -77,17 +112,38 @@ export function EntryCard({
       : 0;
 
   return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>
-        {/* The read button cannot live inside the card link: the HTML parser
-        hoists a nested anchor out of its parent, so the server markup and the
-        client tree disagree and hydration fails. The two sit side by side
-        under this wrapper instead, which is now what the context menu triggers
-        from and what the cover's hover zoom keys off. */}
-        <div className="group/card relative">
-          <Link
+    // The read link cannot live inside the trigger: an anchor nested in a
+    // button is invalid, the parser hoists it out, and the server markup then
+    // disagrees with the client tree so hydration fails. The two sit side by
+    // side under this wrapper instead, which is what the cover's hover zoom
+    // keys off and what the read link positions against.
+    <div className="group/card relative">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          {/* A real link that opens the menu on a plain click.
+
+          Radix opens the menu from `pointerdown` and already ignores
+          right-click, middle-click and ctrl+click, so those reach the browser
+          untouched — "Open link in new tab" works, and so does a middle-click.
+          Cmd- and shift-click it does *not* ignore, so `onPointerDown` cancels
+          it for those (a prevented default makes Radix's composed handler
+          stand down) and `onClick` leaves the navigation alone.
+
+          A plain left click is the reverse: the menu opens, so the navigation
+          has to be cancelled or the card would do both.
+
+          The href is real, which is the point — a card can be opened in a new
+          tab, and its destination is visible in the status bar on hover. */}
+          <a
             href={`/entry/${entry.id}`}
-            className="group block focus-visible:outline-none"
+            onPointerDown={(event) => {
+              if (opensElsewhere(event)) event.preventDefault();
+            }}
+            onClick={(event) => {
+              if (!opensElsewhere(event)) event.preventDefault();
+            }}
+            className="group block w-full text-left focus-visible:outline-none"
+            aria-label={`${title.title} — open quick actions`}
           >
             {/* 1:2 portrait, matching Tapas. MAL covers are ~2:3, so object-cover
             crops rather than distorts. */}
@@ -108,7 +164,7 @@ export function EntryCard({
                 {/* Last of the three, so the states that need acting on —
                     nothing recorded, or nothing updating — stay leftmost.
                     Owning something is settled news. */}
-                {owned ? <OwnedBadge overlay /> : null}
+                {ownedOutright ? <OwnedBadge overlay /> : null}
               </div>
 
               <div className="absolute inset-x-0 bottom-0 flex flex-col gap-1 p-2">
@@ -166,37 +222,42 @@ export function EntryCard({
                 </div>
               ) : null}
             </div>
-          </Link>
+          </a>
+        </DropdownMenuTrigger>
 
-          {/* The card link owns the tap; this owns the read. Both are on the
-          card so neither needs the context menu, and the button sits opposite
-          the status badges rather than over the title. Always visible: on
-          touch there is no hover to reveal it, and "where do I read this" is
-          the question the shelf exists to answer.
+        <EntryCardMenu
+          entry={entry}
+          topSources={topSources}
+          onOpenDialog={setDialog}
+        />
+      </DropdownMenu>
 
-          Only the primary source gets a button. The rest stay one right-click
-          away in the menu, which is the surface built for the full list. */}
-          {readAt ? (
-            <a
-              href={readAt.url!}
-              target="_blank"
-              rel="noopener noreferrer"
-              title={`Read on ${readAt.sources!.name}`}
-              aria-label={`Read ${title.title} on ${readAt.sources!.name}`}
-              className="absolute right-1.5 top-1.5 inline-flex size-7 items-center justify-center rounded-full bg-slate-900/70 text-white backdrop-blur-sm transition-colors hover:bg-slate-900/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-            >
-              <ExternalLink className="size-3.5" />
-            </a>
-          ) : null}
-        </div>
-      </ContextMenuTrigger>
+      {/* The cover owns the tap; this owns the read. Both are on the card so
+      neither needs the menu, and the button sits opposite the status badges
+      rather than over the title. Always visible: on touch there is no hover to
+      reveal it, and "where do I read this" is the question the shelf exists to
+      answer.
 
-      <EntryCardMenu
-        entry={entry}
-        topSources={topSources}
-        onOpenDialog={setDialog}
-      />
+      Sized for a finger on touch and left alone on a pointer — it overlays
+      cover art, so every pixel it grows is artwork it hides.
 
+      Only the primary source gets a button. The rest stay one tap away in the
+      menu, which is the surface built for the full list. */}
+      {readAt ? (
+        <a
+          href={readAt.url!}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={`Read on ${readAt.sources!.name}`}
+          aria-label={`Read ${title.title} on ${readAt.sources!.name}`}
+          className="absolute right-1.5 top-1.5 inline-flex size-7 items-center justify-center rounded-full bg-slate-900/70 text-white backdrop-blur-sm transition-colors hover:bg-slate-900/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background pointer-coarse:size-10 pointer-coarse:[&_svg]:size-5"
+        >
+          <ExternalLink className="size-3.5" />
+        </a>
+      ) : null}
+
+      {/* Outside the DropdownMenu: Radix unmounts menu content on close and
+      would take the dialog with it. */}
       <EntrySourceDialog
         entryId={entry.id}
         entryTitle={title.title}
@@ -205,9 +266,9 @@ export function EntryCard({
         catalog={catalog}
         // The row already carries MAL's count, so the quick-edit dialog can
         // offer the same "own all" shortcut the entry page does.
-        total={chapterTotal(title)}
+        total={malTotal}
         onClose={() => setDialog(null)}
       />
-    </ContextMenu>
+    </div>
   );
 }

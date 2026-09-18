@@ -15,7 +15,7 @@ import {
 
 /** Fields requested for list entries — enough to render a card without extra calls. */
 const LIST_FIELDS =
-  "list_status,alternative_titles,main_picture,num_chapters,num_volumes,media_type,status,genres";
+  "list_status,alternative_titles,main_picture,num_chapters,num_volumes,media_type,status,genres,nsfw";
 
 /** Search returns bare nodes, not the {node, list_status} pairs the list uses. */
 const searchResultSchema = z.object({ node: malMangaNodeSchema });
@@ -49,6 +49,12 @@ export async function getMangaList(
       offset: options.offset ?? 0,
       status: options.status,
       sort: options.sort ?? "list_updated_at",
+      // Deliberately the opposite of what searchManga does, and not a
+      // mistake to tidy up: this is the user's *own* list. A title they put
+      // there themselves must come back, or a sync would quietly drop rows
+      // from their library and the app would look like it lost their data.
+      // Hiding adult titles is a default for *discovery*, not censorship of
+      // what someone already tracks.
       nsfw: true,
     },
   });
@@ -63,11 +69,48 @@ export async function getManga(client: MalClient, mangaId: number) {
   return malMangaNodeSchema.parse(raw);
 }
 
-export async function searchManga(client: MalClient, query: string, limit = 20) {
+/**
+ * MAL's rating for an entry it considers explicit or borderline.
+ *
+ * A missing value is *not* mature. MAL omits the field on some entries, and
+ * `nsfw` is only ever requested alongside the query parameter that already
+ * asks MAL to leave adult titles out — so anything arriving without a rating
+ * has passed that filter, and treating unknown as explicit would empty the
+ * results rather than clean them.
+ */
+const MATURE_RATINGS = new Set(["gray", "black"]);
+
+export function isMature(node: { nsfw?: string | null }): boolean {
+  return MATURE_RATINGS.has(node.nsfw ?? "");
+}
+
+/**
+ * Searches the MAL catalog for titles to add.
+ *
+ * Adult titles are left out by default, in two layers. `nsfw: false` asks MAL
+ * to filter server-side, and `isMature` drops anything explicitly rated that
+ * arrives anyway — MAL's own filter is not something this app can verify, and
+ * the second check costs one comparison per row.
+ *
+ * This is deliberately *not* what `getMangaList` does. That syncs the user's
+ * own list, where hiding a title would silently drop something they put there
+ * themselves; a discovery search is the opposite case, where the default
+ * should be the safe one. The flag is a parameter so an opt-in setting can
+ * turn it off later without touching the call site's shape.
+ */
+export async function searchManga(
+  client: MalClient,
+  query: string,
+  limit = 20,
+  { includeMature = false }: { includeMature?: boolean } = {},
+) {
   const raw = await client.request<unknown>("/manga", {
-    query: { q: query, limit, fields: LIST_FIELDS, nsfw: true },
+    query: { q: query, limit, fields: LIST_FIELDS, nsfw: includeMature },
   });
-  return malPagedSchema(searchResultSchema).parse(raw);
+  const page = malPagedSchema(searchResultSchema).parse(raw);
+
+  if (includeMature) return page;
+  return { ...page, data: page.data.filter((item) => !isMature(item.node)) };
 }
 
 /**

@@ -27,7 +27,7 @@ import type { Source } from "@/lib/data/rank-sources";
 /**
  * Attach or edit one source without leaving the library.
  *
- * Rendered as a sibling of the context menu rather than inside it: Radix
+ * Rendered as a sibling of the card's menu rather than inside it: Radix
  * unmounts menu content on close, which would tear the dialog down with it.
  */
 export function EntrySourceDialog({

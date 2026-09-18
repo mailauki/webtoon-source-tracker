@@ -1,5 +1,5 @@
 /**
- * Ranking for the card context menu's "add a source" shortcuts.
+ * Ranking for the card menu's "add a source" shortcuts.
  *
  * Kept out of `sources.ts` because that module is `server-only`: this is pure
  * logic the client bundle and the tests both need.

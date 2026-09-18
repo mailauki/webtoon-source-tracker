@@ -84,6 +84,121 @@ export function gapsWithin(ranges: ChapterRange[]): ChapterRange[] {
   return gaps;
 }
 
+/**
+ * Own one more chapter at the top, or give the top one back.
+ *
+ * The stepper moves **the highest owned chapter** — `+1` takes the next one
+ * above it, `-1` hands it back. That is the gesture a coin app produces: you
+ * unlock forward from where you are, one at a time.
+ *
+ * Extending the last run rather than filling the first gap is a deliberate
+ * reading of an ambiguous case. Owning 1-40 and a loose chapter 100, the next
+ * unlock could be 41 or 101; this picks 101. The trailing run is where someone
+ * is actually reading in every ordinary library, and a stepper that jumped
+ * backwards into a gap the user deliberately left would be the stranger
+ * surprise. The text field is there for the case this gets wrong.
+ *
+ * `max` caps the climb — MAL's chapter count, where there is one. Stepping
+ * past the end of a finished series is not a thing anyone can do.
+ *
+ * Returns the ranges unchanged when there is nothing to do, so a caller can
+ * compare by value to decide whether a control should be disabled.
+ */
+export function stepHighest(
+  ranges: ChapterRange[],
+  delta: 1 | -1,
+  max?: number,
+): ChapterRange[] {
+  const owned = normalizeRanges(ranges);
+
+  if (delta === 1) {
+    // Nothing owned yet: the first step owns chapter 1, not chapter 0.
+    if (owned.length === 0) {
+      return max !== undefined && max < 1 ? owned : [{ start: 1, end: 1 }];
+    }
+
+    const last = owned[owned.length - 1];
+    if (max !== undefined && last.end >= max) return owned;
+
+    return normalizeRanges([
+      ...owned.slice(0, -1),
+      { start: last.start, end: last.end + 1 },
+    ]);
+  }
+
+  if (owned.length === 0) return owned;
+
+  const last = owned[owned.length - 1];
+  // A run of one disappears rather than inverting into an empty range.
+  if (last.end === last.start) return owned.slice(0, -1);
+
+  return normalizeRanges([
+    ...owned.slice(0, -1),
+    { start: last.start, end: last.end - 1 },
+  ]);
+}
+
+/** The highest chapter owned, or null when nothing is. */
+export function highestOwned(ranges: ChapterRange[]): number | null {
+  const owned = normalizeRanges(ranges);
+  return owned.length === 0 ? null : owned[owned.length - 1].end;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Ownership across the sources attached to one title                       */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * The fields an ownership question reads off an attached source, structurally.
+ *
+ * Declared here rather than imported from `entries.ts` so client components can
+ * name it without reaching into a `server-only` module — the same trick
+ * `SourceAttachment` uses in source-links.ts.
+ */
+export type OwnedSource = {
+  is_owned: boolean;
+  chapters_owned: string | null;
+};
+
+/**
+ * Every chapter owned across a title's sources, as one set.
+ *
+ * Only sources marked owned count. The form deliberately keeps a range through
+ * an unticking of Owned so a hand-entered value is not lost, which means an
+ * unticked source can still carry one — and counting it here would contradict
+ * the flag everything else reads.
+ */
+export function ownedAcross(sources: OwnedSource[]): ChapterRange[] {
+  return unionRanges(
+    sources
+      .filter((s) => s.is_owned)
+      .map((s) => fromMultirange(s.chapters_owned)),
+  );
+}
+
+/**
+ * Whether the user owns the whole series.
+ *
+ * Requires a *final* total: a series still publishing has no "all" to own, and
+ * a badge claiming otherwise would go stale the next time a chapter shipped.
+ * This is the same rule `ownedCountLabel` uses to decide when it may say "All
+ * 179 chapters", so the card and the entry page cannot disagree.
+ *
+ * `>=` rather than `===` because MAL's count lags reality often enough that
+ * owning more than it knows about is ordinary, and that is not a reason to
+ * withhold the badge.
+ *
+ * The total is taken structurally so this needs no import from
+ * chapter-totals.ts — `ChapterTotal` satisfies it.
+ */
+export function ownsEveryChapter(
+  sources: OwnedSource[],
+  total: { count: number; final: boolean } | null,
+): boolean {
+  if (!total?.final) return false;
+  return countChapters(ownedAcross(sources)) >= total.count;
+}
+
 /* ------------------------------------------------------------------------ */
 /* Reading and writing what a person types                                  */
 /* ------------------------------------------------------------------------ */

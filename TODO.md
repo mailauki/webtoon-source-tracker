@@ -241,6 +241,79 @@ two an admin wants distinguished) is a different, harder problem this table
 doesn't solve. Build it when a real MAL genre pair turns out to annoy someone
 browsing the tag pages, not before.
 
+### Letting a user opt in to mature titles in search
+
+`searchManga` hides adult titles from the add-a-title search: it sends
+`nsfw: false` and drops anything MAL rates `gray` or `black` that arrives
+anyway (`isMature`, `lib/mal/endpoints.ts`). The switch already exists as an
+`includeMature` option on the call, so turning it on for a user is a parameter,
+not a rewrite.
+
+What is missing is where the preference lives. `library_prefs` is the obvious
+home — a `show_mature boolean not null default false` column beside
+`hide_hiatus` and `owned_only`, read in the search route and passed through.
+The UI is a settings toggle rather than a filter chip: it is a standing
+statement about what someone wants to see, not a view of a shelf.
+
+Note the sync deliberately does **not** filter — `getMangaList` still sends
+`nsfw: true`, because hiding a title the user put on their own MyAnimeList list
+would drop rows out of their library and look like data loss. Any opt-in work
+here applies to discovery only, and that asymmetry is the point rather than an
+oversight.
+
+### Latest available chapter, from the source itself
+
+`chapterTotal()` (`lib/data/chapter-totals.ts`) reads MAL's `num_chapters`,
+which is 0 or null for most ongoing webtoons. That is exactly where the
+"own all" shortcut goes missing and the form falls back to "MyAnimeList has no
+chapter count for this title yet" — so a count from the source a title is
+actually read on would fill the one hole the feature has.
+
+`entry_sources.url` is a series URL the user already pasted, so for some
+sources the count is reachable without asking for anything new.
+
+**Only where a machine interface is published.** Two of the catalog's sources
+have one:
+
+- **MangaDex** — a documented public API, no auth:
+  `GET https://api.mangadex.org/manga/{id}/aggregate?translatedLanguage[]=en`
+  returns the chapter list. The id is in the pasted URL
+  (`mangadex.org/title/{id}/…`).
+- **WEBTOON** — per-series RSS at
+  `/{lang}/{genre}/{series}/rss?title_no={id}`. The `title_no` is already a
+  query parameter on the URL people paste, so the feed URL is derivable from
+  what is stored.
+
+Everything else in the catalog (Tapas, Lezhin, Manta, Kakao Page, Tappytoon,
+VIZ, K MANGA, INKR, MANGA Plus) is a paywalled catalog behind a JS-rendered
+SPA, frequently Cloudflare, sometimes a login. Reading those means a headless
+browser or reverse-engineered internal endpoints, a per-site adapter that
+breaks on every redesign, and terms that generally prohibit automated access —
+a real exposure for a deployed app, not a hypothetical. Custom "Other" sources
+are arbitrary URLs and cannot have an adapter at all. **Those stay unsupported
+on purpose**, and the absence of a count for them is not a bug to fix.
+
+Shape, when it gets built:
+
+- A registry keyed by source slug, `adapters[slug]?.latestChapter(url)`,
+  returning `{ latest, at } | null`. Every unknown source returns null and the
+  UI simply does not offer the hint — the same way it behaves today when MAL
+  has no count, so nothing new has to be designed for the empty case.
+- Server-side. CORS rules out the browser, and the fetch must not sit in the
+  request path.
+- Cached per *series*, not per user and not per page load: one fetch serves
+  everyone tracking that title. A `source_chapter_counts (source_id, series_key,
+  latest, fetched_at)` table, filled by a cron rather than on read. Vercel's
+  serverless IPs get rate-limited quickly otherwise.
+- Feeding `chapterTotal()` as a fallback when MAL has none, so the "own all"
+  button and the union summary keep working unchanged — this adds a source of
+  truth, not a second code path.
+
+Note the cache is shared catalog data (like `media_titles`), not user data: it
+records what a public feed says about a series, never anything about who reads
+it. That keeps it on the right side of the scope in the README — nothing here
+exposes one user's library to another.
+
 ### Owned chapters across titles, in SQL
 
 `entry_sources.chapters_owned` is an `int4multirange`, so a gap is expressible
