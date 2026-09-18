@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   countChapters,
+  highestOwned,
+  stepHighest,
   formatRanges,
   formatRangesForInput,
   fromMultirange,
@@ -253,5 +255,79 @@ describe("the Postgres boundary", () => {
   it("round-trips through Postgres's own form", () => {
     const ranges = [r(1, 40), r(55), r(60, 62)];
     expect(fromMultirange(toMultirange(ranges))).toEqual(ranges);
+  });
+});
+
+describe("stepHighest", () => {
+  it("owns the next chapter above the highest", () => {
+    expect(stepHighest([r(1, 40)], 1)).toEqual([r(1, 41)]);
+  });
+
+  it("starts at chapter 1 when nothing is owned", () => {
+    // Not chapter 0 — chapters are numbered from 1, and the column's check
+    // constraint would reject it anyway.
+    expect(stepHighest([], 1)).toEqual([r(1)]);
+  });
+
+  // The ambiguous case, decided: the trailing run is where someone is reading,
+  // so the step continues it rather than jumping back to fill an old gap.
+  it("extends the trailing run, not the first gap", () => {
+    expect(stepHighest([r(1, 40), r(100)], 1)).toEqual([r(1, 40), r(100, 101)]);
+  });
+
+  it("gives back the highest chapter", () => {
+    expect(stepHighest([r(1, 41)], -1)).toEqual([r(1, 40)]);
+  });
+
+  it("drops a run of one rather than inverting it", () => {
+    expect(stepHighest([r(1, 40), r(55)], -1)).toEqual([r(1, 40)]);
+    expect(stepHighest([r(7)], -1)).toEqual([]);
+  });
+
+  it("does nothing when there is nothing to give back", () => {
+    expect(stepHighest([], -1)).toEqual([]);
+  });
+
+  it("stops at MAL's total", () => {
+    expect(stepHighest([r(1, 179)], 1, 179)).toEqual([r(1, 179)]);
+    expect(stepHighest([r(1, 178)], 1, 179)).toEqual([r(1, 179)]);
+  });
+
+  it("climbs freely when no total is known", () => {
+    expect(stepHighest([r(1, 500)], 1)).toEqual([r(1, 501)]);
+  });
+
+  // Returned unchanged means "nothing happened", which is how the caller
+  // decides whether the button should be disabled.
+  it("returns an equal value when it cannot move", () => {
+    const at = [r(1, 179)];
+    expect(stepHighest(at, 1, 179)).toEqual(at);
+  });
+
+  it("merges when a step closes a one-chapter gap", () => {
+    // 1-39 and 41-45: stepping the trailing run cannot close it, but a step
+    // that ever does must not leave two touching runs behind.
+    expect(stepHighest([r(1, 39), r(41, 45)], 1)).toEqual([r(1, 39), r(41, 46)]);
+    expect(stepHighest([r(1, 40), r(42, 42)], -1)).toEqual([r(1, 40)]);
+  });
+
+  it("does not mutate its input", () => {
+    const input = [r(1, 40)];
+    stepHighest(input, 1);
+    expect(input).toEqual([r(1, 40)]);
+  });
+});
+
+describe("highestOwned", () => {
+  it("is the top of the last run", () => {
+    expect(highestOwned([r(1, 40), r(55, 60)])).toBe(60);
+  });
+
+  it("is null when nothing is owned", () => {
+    expect(highestOwned([])).toBeNull();
+  });
+
+  it("normalises before answering", () => {
+    expect(highestOwned([r(55, 60), r(1, 40)])).toBe(60);
   });
 });

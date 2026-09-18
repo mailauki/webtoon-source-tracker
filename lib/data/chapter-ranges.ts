@@ -84,6 +84,66 @@ export function gapsWithin(ranges: ChapterRange[]): ChapterRange[] {
   return gaps;
 }
 
+/**
+ * Own one more chapter at the top, or give the top one back.
+ *
+ * The stepper moves **the highest owned chapter** — `+1` takes the next one
+ * above it, `-1` hands it back. That is the gesture a coin app produces: you
+ * unlock forward from where you are, one at a time.
+ *
+ * Extending the last run rather than filling the first gap is a deliberate
+ * reading of an ambiguous case. Owning 1-40 and a loose chapter 100, the next
+ * unlock could be 41 or 101; this picks 101. The trailing run is where someone
+ * is actually reading in every ordinary library, and a stepper that jumped
+ * backwards into a gap the user deliberately left would be the stranger
+ * surprise. The text field is there for the case this gets wrong.
+ *
+ * `max` caps the climb — MAL's chapter count, where there is one. Stepping
+ * past the end of a finished series is not a thing anyone can do.
+ *
+ * Returns the ranges unchanged when there is nothing to do, so a caller can
+ * compare by value to decide whether a control should be disabled.
+ */
+export function stepHighest(
+  ranges: ChapterRange[],
+  delta: 1 | -1,
+  max?: number,
+): ChapterRange[] {
+  const owned = normalizeRanges(ranges);
+
+  if (delta === 1) {
+    // Nothing owned yet: the first step owns chapter 1, not chapter 0.
+    if (owned.length === 0) {
+      return max !== undefined && max < 1 ? owned : [{ start: 1, end: 1 }];
+    }
+
+    const last = owned[owned.length - 1];
+    if (max !== undefined && last.end >= max) return owned;
+
+    return normalizeRanges([
+      ...owned.slice(0, -1),
+      { start: last.start, end: last.end + 1 },
+    ]);
+  }
+
+  if (owned.length === 0) return owned;
+
+  const last = owned[owned.length - 1];
+  // A run of one disappears rather than inverting into an empty range.
+  if (last.end === last.start) return owned.slice(0, -1);
+
+  return normalizeRanges([
+    ...owned.slice(0, -1),
+    { start: last.start, end: last.end - 1 },
+  ]);
+}
+
+/** The highest chapter owned, or null when nothing is. */
+export function highestOwned(ranges: ChapterRange[]): number | null {
+  const owned = normalizeRanges(ranges);
+  return owned.length === 0 ? null : owned[owned.length - 1].end;
+}
+
 /* ------------------------------------------------------------------------ */
 /* Reading and writing what a person types                                  */
 /* ------------------------------------------------------------------------ */

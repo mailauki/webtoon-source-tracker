@@ -476,3 +476,98 @@ describe("the chapters-owned preview", () => {
     expect(screen.getByText(/no chapter count for this title/)).toBeVisible();
   });
 });
+
+/**
+ * The stepper, for the common gesture: unlocking the next chapter.
+ *
+ * It edits the field rather than saving — this form commits on Save — so these
+ * assert on the field's value, not on the action.
+ */
+describe("the chapters-owned stepper", () => {
+  const field = () => screen.getByLabelText("Chapters owned");
+  const plus = () => screen.getByRole("button", { name: "Own one more chapter" });
+  const minus = () =>
+    screen.getByRole("button", { name: "Own one fewer chapter" });
+
+  it("owns the next chapter above the highest", async () => {
+    const { user } = setup({ mode: "edit", entrySourceId: 55 });
+    expect(field()).toHaveValue("1-20");
+
+    await user.click(plus());
+    expect(field()).toHaveValue("1-21");
+    expect(screen.getByText("21 chapters: 1–21")).toBeVisible();
+  });
+
+  it("gives the highest chapter back", async () => {
+    const { user } = setup({ mode: "edit", entrySourceId: 55 });
+    await user.click(minus());
+    expect(field()).toHaveValue("1-19");
+  });
+
+  it("starts at chapter 1 from nothing", async () => {
+    const { user } = setup({ mode: "add" });
+    await user.click(screen.getByLabelText("Owned"));
+    expect(field()).toHaveValue("");
+
+    await user.click(plus());
+    expect(field()).toHaveValue("1");
+    expect(screen.getByText("1 chapter: 1")).toBeVisible();
+  });
+
+  it("extends the trailing run rather than filling a gap", async () => {
+    const { user } = setup({ mode: "add" });
+    await user.click(screen.getByLabelText("Owned"));
+    await user.type(field(), "1-40, 100");
+
+    await user.click(plus());
+    expect(field()).toHaveValue("1-40, 100-101");
+  });
+
+  it("cannot give back what is not owned", async () => {
+    const { user } = setup({ mode: "add" });
+    await user.click(screen.getByLabelText("Owned"));
+    expect(minus()).toBeDisabled();
+  });
+
+  it("stops at MAL's total", async () => {
+    const { user } = setup({ mode: "add" }, ATTACHED, { count: 3, final: true });
+    await user.click(screen.getByLabelText("Owned"));
+    await user.type(field(), "1-3");
+
+    expect(plus()).toBeDisabled();
+    // Below the total it is live again.
+    await user.clear(field());
+    await user.type(field(), "1-2");
+    expect(plus()).toBeEnabled();
+  });
+
+  it("climbs past any total MAL does not have", async () => {
+    const { user } = setup({ mode: "add" });
+    await user.click(screen.getByLabelText("Owned"));
+    await user.type(field(), "1-500");
+
+    await user.click(plus());
+    expect(field()).toHaveValue("1-501");
+  });
+
+  // Stepping rewrites the field from the parsed value, so unparseable text
+  // would be silently discarded. Both controls go dead instead.
+  it("is disabled while the text does not parse", async () => {
+    const { user } = setup({ mode: "edit", entrySourceId: 55 });
+    await user.type(field(), ", abc");
+
+    expect(plus()).toBeDisabled();
+    expect(minus()).toBeDisabled();
+    expect(field()).toHaveValue("1-20, abc");
+  });
+
+  it("saves what the stepper left in the field", async () => {
+    const { user } = setup({ mode: "edit", entrySourceId: 55 });
+    await user.click(plus());
+    await user.click(plus());
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await vi.waitFor(() => expect(updateEntrySource).toHaveBeenCalledOnce());
+    expect(updateEntrySource.mock.calls[0][1].get("chapters_owned")).toBe("1-22");
+  });
+});

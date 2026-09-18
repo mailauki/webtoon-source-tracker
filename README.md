@@ -8,6 +8,30 @@ Your account lives in Supabase. MyAnimeList is a **connection** you link to it,
 not a login — so you can unlink and relink without losing anything, and account
 recovery works normally.
 
+## Scope
+
+Deliberate boundaries, so a feature that crosses one gets questioned rather
+than quietly built:
+
+- **Everything but the front door is behind a login.** The library, entries,
+  collections, settings and `/discover` all call `verifySession()`. Only the
+  landing page, the auth screens and the legal pages are public. A new page
+  belongs in the gated set unless there is a reason it cannot be.
+- **No social features.** No following, sharing, profiles, comments, likes or
+  public libraries. A user's shelf is theirs and is never visible to another
+  user — RLS is select-own on `user_entries` and `entry_sources`, and that is
+  the enforcement, not a UI choice.
+- **`/discover` is the one shared surface, and it is editorial.** Curated
+  collections and tags are admin-authored (`owner_id is null`, see
+  `supabase/migrations/20260909000000_admins_and_tags.sql`), shown to everyone
+  signed in, and writable only by an admin granted out of band via
+  `yarn grant:admin`. It is a shelf the maintainer curates *for* readers, not a
+  place readers publish to each other.
+
+Shared *catalog* data is not a social feature: `media_titles` is one row per
+MAL title readable by any signed-in user, because it describes a comic rather
+than a person. The line is whether a row says anything about who reads what.
+
 ## Stack
 
 - Next.js 16 (App Router, Server Components) · React 19 · TypeScript

@@ -1,5 +1,6 @@
 "use client";
 
+import { Minus, Plus } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,9 @@ import {
   formatRanges,
   formatRangesForInput,
   fromMultirange,
+  highestOwned,
   parseRanges,
+  stepHighest,
 } from "@/lib/data/chapter-ranges";
 import { ownAllLabel, type ChapterTotal } from "@/lib/data/chapter-totals";
 /**
@@ -65,6 +68,28 @@ export function SourceFields({
     formatRangesForInput(fromMultirange(source?.chapters_owned)),
   );
   const parsed = parseRanges(ownedText);
+
+  /**
+   * The stepper moves the highest owned chapter — see stepHighest.
+   *
+   * It edits the field rather than saving, unlike ProgressEditor's matching
+   * control: that one owns its own form and writes straight to MyAnimeList, so
+   * it needs the optimistic dance around a ~1s round trip. This sits inside a
+   * form the user submits, so a step is just another edit and Save is still
+   * the thing that commits it.
+   */
+  function step(delta: 1 | -1) {
+    if (!parsed.ok) return;
+    const next = stepHighest(parsed.ranges, delta, total?.count);
+    setOwnedText(formatRangesForInput(next));
+  }
+
+  // Unparseable text is not steppable: rewriting the field from a failed parse
+  // would silently discard whatever the user was in the middle of typing.
+  const highest = parsed.ok ? highestOwned(parsed.ranges) : null;
+  const cannotAdd =
+    !parsed.ok || (total !== null && highest !== null && highest >= total.count);
+  const cannotSubtract = !parsed.ok || highest === null;
 
   // What the line under the field says. Pulled out of the JSX because three
   // nested ternaries in a template read as a puzzle.
@@ -134,20 +159,48 @@ export function SourceFields({
             ahead of what you have read, and reading ahead of what you own,
             are both ordinary. */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Matches the Progress stepper's shape: minus, value, plus. There
+              the value is a number; here it is the field itself, since the
+              set it edits cannot be shown as one.
+
+              `type="button"` on all three is load-bearing: a bare <button>
+              inside a form defaults to submit, so any of them would save the
+              row instead of editing the field. */}
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="rounded-pill"
+            disabled={cannotSubtract}
+            onClick={() => step(-1)}
+            aria-label="Own one fewer chapter"
+          >
+            <Minus className="size-4" />
+          </Button>
+
           <Input
             id={`chapters-owned-${id}`}
             name="chapters_owned"
             value={ownedText}
             onChange={(e) => setOwnedText(e.target.value)}
             placeholder="e.g. 1-40, 55, 60"
-            className="min-w-48 flex-1"
+            className="min-w-40 flex-1"
             aria-describedby={`chapters-owned-hint-${id}`}
             aria-invalid={!parsed.ok}
           />
 
-          {/* type="button" is load-bearing: a bare <button> inside a form
-              defaults to submit, so this would save the row instead of
-              filling the field. */}
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="rounded-pill"
+            disabled={cannotAdd}
+            onClick={() => step(1)}
+            aria-label="Own one more chapter"
+          >
+            <Plus className="size-4" />
+          </Button>
+
           {total ? (
             <Button
               type="button"
