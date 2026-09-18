@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   countChapters,
+  ownedAcross,
+  ownsEveryChapter,
   highestOwned,
   stepHighest,
   formatRanges,
@@ -329,5 +331,99 @@ describe("highestOwned", () => {
 
   it("normalises before answering", () => {
     expect(highestOwned([r(55, 60), r(1, 40)])).toBe(60);
+  });
+});
+
+describe("ownedAcross", () => {
+  const src = (is_owned: boolean, chapters_owned: string | null) => ({
+    is_owned,
+    chapters_owned,
+  });
+
+  it("unions the ranges of every owned source", () => {
+    expect(
+      ownedAcross([src(true, "{[1,41)}"), src(true, "{[55,61)}")]),
+    ).toEqual([r(1, 40), r(55, 60)]);
+  });
+
+  // The gate that keeps the form's forgiving behaviour from lying: a range is
+  // kept through an unticking of Owned so it is not lost, and must not then be
+  // counted as owned.
+  it("ignores a range left on an unticked source", () => {
+    expect(
+      ownedAcross([src(true, "{[1,41)}"), src(false, "{[55,61)}")]),
+    ).toEqual([r(1, 40)]);
+  });
+
+  it("is empty when nothing is owned", () => {
+    expect(ownedAcross([src(false, "{[1,41)}")])).toEqual([]);
+    expect(ownedAcross([])).toEqual([]);
+  });
+
+  it("counts an overlap once", () => {
+    expect(
+      ownedAcross([src(true, "{[1,41)}"), src(true, "{[30,51)}")]),
+    ).toEqual([r(1, 50)]);
+  });
+});
+
+describe("ownsEveryChapter", () => {
+  const whole = [{ is_owned: true, chapters_owned: "{[1,180)}" }];
+  const part = [{ is_owned: true, chapters_owned: "{[1,41)}" }];
+  const FINISHED = { count: 179, final: true };
+
+  it("is true for a finished series owned end to end", () => {
+    expect(ownsEveryChapter(whole, FINISHED)).toBe(true);
+  });
+
+  it("is false when only part is owned", () => {
+    expect(ownsEveryChapter(part, FINISHED)).toBe(false);
+  });
+
+  // A series still publishing has no "all" to own — a badge saying otherwise
+  // would go stale the next time a chapter shipped.
+  it("is false for a series still publishing", () => {
+    expect(ownsEveryChapter(whole, { count: 179, final: false })).toBe(false);
+  });
+
+  it("is false when there is no total to measure against", () => {
+    expect(ownsEveryChapter(whole, null)).toBe(false);
+  });
+
+  it("is true when ownership runs past a stale total", () => {
+    expect(
+      ownsEveryChapter(
+        [{ is_owned: true, chapters_owned: "{[1,201)}" }],
+        FINISHED,
+      ),
+    ).toBe(true);
+  });
+
+  it("is true when several sources cover it between them", () => {
+    expect(
+      ownsEveryChapter(
+        [
+          { is_owned: true, chapters_owned: "{[1,101)}" },
+          { is_owned: true, chapters_owned: "{[101,180)}" },
+        ],
+        FINISHED,
+      ),
+    ).toBe(true);
+  });
+
+  // A gap is not the whole series, however high the top of it reaches.
+  it("is false when the coverage has a hole in it", () => {
+    expect(
+      ownsEveryChapter(
+        [{ is_owned: true, chapters_owned: "{[1,41),[55,180)}" }],
+        FINISHED,
+      ),
+    ).toBe(false);
+  });
+
+  it("is false for an owned source with no count recorded", () => {
+    expect(
+      ownsEveryChapter([{ is_owned: true, chapters_owned: null }], FINISHED),
+    ).toBe(false);
   });
 });

@@ -63,11 +63,11 @@ const TOP_SOURCES = [
 ];
 
 /**
- * The card opens its menu on a plain tap now, not a right-click — the cover is
- * a menu trigger rather than a link.
+ * The cover is both a link to the entry page and the menu's trigger: a plain
+ * tap opens the menu, while the new-tab gestures reach the browser.
  */
 function cardTrigger() {
-  return screen.getByRole("button", { name: /^Tower of God/ });
+  return screen.getByRole("link", { name: /^Tower of God/ });
 }
 
 async function openMenu(entry: LibraryRow = row()) {
@@ -95,15 +95,64 @@ describe("entry card quick-access menu", () => {
     expect(await screen.findByRole("menu")).toBeInTheDocument();
   });
 
-  // The card used to navigate here directly. It must not still be a link, or
-  // a tap would race the menu against a navigation.
-  it("makes the card a menu trigger rather than a link", () => {
+  it("is a real link to the entry page as well as the menu trigger", () => {
     render(<EntryCard entry={row()} />);
 
-    expect(
-      screen.queryByRole("link", { name: /^Tower of God/ }),
-    ).not.toBeInTheDocument();
+    // The href is what makes "open in a new tab" work from the card itself.
+    expect(cardTrigger()).toHaveAttribute("href", "/entry/7");
     expect(cardTrigger()).toHaveAttribute("aria-haspopup", "menu");
+  });
+
+  /**
+   * Watches whether the navigation survives a click.
+   *
+   * Listens on `document`, not on the element: React delegates to the root
+   * container, so a listener bound to the anchor itself runs *before* the
+   * onClick handler under test and would always see an uncancelled event.
+   */
+  function watchNavigation() {
+    const seen: boolean[] = [];
+    const onClick = (e: Event) => seen.push(e.defaultPrevented);
+    document.addEventListener("click", onClick);
+    return {
+      get prevented() {
+        return seen.at(-1) ?? null;
+      },
+      stop: () => document.removeEventListener("click", onClick),
+    };
+  }
+
+  // A plain click has to cancel the navigation, or the card would open the
+  // menu and leave the page at the same time.
+  it("cancels the navigation on a plain click", async () => {
+    const user = userEvent.setup();
+    render(<EntryCard entry={row()} />);
+    const nav = watchNavigation();
+
+    await user.click(cardTrigger());
+
+    expect(nav.prevented).toBe(true);
+    expect(await screen.findByRole("menu")).toBeInTheDocument();
+    nav.stop();
+  });
+
+  // The whole point of keeping the href: these gestures must reach the
+  // browser, with no menu opening over the top of them.
+  it.each([
+    ["cmd", "{Meta>}", "{/Meta}"],
+    ["shift", "{Shift>}", "{/Shift}"],
+  ])("leaves a %s-click to the browser", async (_name, down, up) => {
+    const user = userEvent.setup();
+    render(<EntryCard entry={row()} />);
+    const nav = watchNavigation();
+
+    await user.keyboard(down);
+    await user.click(cardTrigger());
+    await user.keyboard(up);
+
+    expect(nav.prevented).toBe(false);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    nav.stop();
   });
 
   // The destination the tap used to have is the menu's first item, so nothing

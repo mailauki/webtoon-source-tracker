@@ -19,9 +19,10 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ownsEveryChapter } from "@/lib/data/chapter-ranges";
 import { chapterTotal } from "@/lib/data/chapter-totals";
 import type { LibraryRow } from "@/lib/data/entries";
-import { isOnHiatus, isOwned } from "@/lib/data/pick-random";
+import { isOnHiatus } from "@/lib/data/pick-random";
 import type { RankedSource } from "@/lib/data/rank-sources";
 import type { Source } from "@/lib/data/rank-sources";
 import { readingLink } from "@/lib/data/source-links";
@@ -33,6 +34,29 @@ const STATUS_LABELS: Record<string, string> = {
   dropped: "Dropped",
   plan_to_read: "Plan to read",
 };
+
+/**
+ * Whether this click means "open it somewhere else" rather than "act here".
+ *
+ * Covers every new-tab and new-window gesture a browser gives an anchor:
+ * middle-click, and the modifier combinations that mean the same thing across
+ * platforms (cmd on macOS, ctrl elsewhere, shift for a window).
+ */
+function opensElsewhere(event: {
+  button: number;
+  metaKey: boolean;
+  ctrlKey: boolean;
+  shiftKey: boolean;
+  altKey: boolean;
+}): boolean {
+  return (
+    event.button !== 0 ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.shiftKey ||
+    event.altKey
+  );
+}
 
 /** "42 / 179" — an em dash stands in for an unknown total (ongoing series). */
 function progressLabel(read: number, total: number | null): string {
@@ -65,9 +89,18 @@ export function EntryCard({
   // Only when every source has paused — see isOnHiatus.
   const onHiatus = isOnHiatus(entry);
 
-  // Owned anywhere is owned — see isOwned. Can be true alongside onHiatus:
-  // a series you bought and that has since stopped is both.
-  const owned = isOwned(entry);
+  // The corner badge is reserved for owning the series outright — see
+  // ownsEveryChapter. Owning *some* of it is already said by the bookmark on
+  // the source pill below, and a badge that appeared after one bought chapter
+  // would be the loudest thing on a card while meaning the least.
+  //
+  // Can be true alongside onHiatus: a completed series you bought and that has
+  // since stopped updating somewhere is both.
+  //
+  // `malTotal` is named apart from `total` below, which is the raw chapter
+  // count the progress bar divides by.
+  const malTotal = chapterTotal(title);
+  const ownedOutright = ownsEveryChapter(sources, malTotal);
 
   // Where to read this, if anywhere is recorded. See readingLink.
   const readAt = readingLink(sources);
@@ -87,13 +120,28 @@ export function EntryCard({
     <div className="group/card relative">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          {/* A button, not a link. Tapping the cover opens the quick menu —
-          "Go to entry" is its first item, so the old destination is one tap
-          further rather than gone. The cost is that a card can no longer be
-          cmd- or middle-clicked into a new tab; that moves to the menu item,
-          which is still a real anchor. */}
-          <button
-            type="button"
+          {/* A real link that opens the menu on a plain click.
+
+          Radix opens the menu from `pointerdown` and already ignores
+          right-click, middle-click and ctrl+click, so those reach the browser
+          untouched — "Open link in new tab" works, and so does a middle-click.
+          Cmd- and shift-click it does *not* ignore, so `onPointerDown` cancels
+          it for those (a prevented default makes Radix's composed handler
+          stand down) and `onClick` leaves the navigation alone.
+
+          A plain left click is the reverse: the menu opens, so the navigation
+          has to be cancelled or the card would do both.
+
+          The href is real, which is the point — a card can be opened in a new
+          tab, and its destination is visible in the status bar on hover. */}
+          <a
+            href={`/entry/${entry.id}`}
+            onPointerDown={(event) => {
+              if (opensElsewhere(event)) event.preventDefault();
+            }}
+            onClick={(event) => {
+              if (!opensElsewhere(event)) event.preventDefault();
+            }}
             className="group block w-full text-left focus-visible:outline-none"
             aria-label={`${title.title} — open quick actions`}
           >
@@ -116,7 +164,7 @@ export function EntryCard({
                 {/* Last of the three, so the states that need acting on —
                     nothing recorded, or nothing updating — stay leftmost.
                     Owning something is settled news. */}
-                {owned ? <OwnedBadge overlay /> : null}
+                {ownedOutright ? <OwnedBadge overlay /> : null}
               </div>
 
               <div className="absolute inset-x-0 bottom-0 flex flex-col gap-1 p-2">
@@ -174,7 +222,7 @@ export function EntryCard({
                 </div>
               ) : null}
             </div>
-          </button>
+          </a>
         </DropdownMenuTrigger>
 
         <EntryCardMenu
@@ -218,7 +266,7 @@ export function EntryCard({
         catalog={catalog}
         // The row already carries MAL's count, so the quick-edit dialog can
         // offer the same "own all" shortcut the entry page does.
-        total={chapterTotal(title)}
+        total={malTotal}
         onClose={() => setDialog(null)}
       />
     </div>

@@ -241,6 +241,26 @@ two an admin wants distinguished) is a different, harder problem this table
 doesn't solve. Build it when a real MAL genre pair turns out to annoy someone
 browsing the tag pages, not before.
 
+### Letting a user opt in to mature titles in search
+
+`searchManga` hides adult titles from the add-a-title search: it sends
+`nsfw: false` and drops anything MAL rates `gray` or `black` that arrives
+anyway (`isMature`, `lib/mal/endpoints.ts`). The switch already exists as an
+`includeMature` option on the call, so turning it on for a user is a parameter,
+not a rewrite.
+
+What is missing is where the preference lives. `library_prefs` is the obvious
+home — a `show_mature boolean not null default false` column beside
+`hide_hiatus` and `owned_only`, read in the search route and passed through.
+The UI is a settings toggle rather than a filter chip: it is a standing
+statement about what someone wants to see, not a view of a shelf.
+
+Note the sync deliberately does **not** filter — `getMangaList` still sends
+`nsfw: true`, because hiding a title the user put on their own MyAnimeList list
+would drop rows out of their library and look like data loss. Any opt-in work
+here applies to discovery only, and that asymmetry is the point rather than an
+oversight.
+
 ### Latest available chapter, from the source itself
 
 `chapterTotal()` (`lib/data/chapter-totals.ts`) reads MAL's `num_chapters`,

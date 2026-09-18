@@ -42,7 +42,10 @@ function source(overrides: Record<string, unknown> = {}): Attachment {
   } as unknown as Attachment;
 }
 
-function row(sources: Attachment[] = []): LibraryRow {
+function row(
+  sources: Attachment[] = [],
+  title: { num_chapters?: number | null; mal_status?: string | null } = {},
+): LibraryRow {
   return {
     id: 7,
     list_status: "reading",
@@ -52,9 +55,17 @@ function row(sources: Attachment[] = []): LibraryRow {
       title: "Tower of God",
       num_chapters: 179,
       main_picture_url: null,
+      mal_status: "currently_publishing",
+      ...title,
     },
   } as unknown as LibraryRow;
 }
+
+/** A finished 179-chapter series — the only shape that can be owned outright. */
+const FINISHED = { num_chapters: 179, mal_status: "finished" };
+
+/** Chapters 1–n as the multirange Postgres would hand back. */
+const upTo = (n: number) => `{[1,${n + 1})}`;
 
 afterEach(cleanup);
 
@@ -62,11 +73,12 @@ describe("card read button", () => {
   it("puts the reading link on the card, beside the menu trigger", () => {
     render(<EntryCard entry={row([source({ is_primary: true })])} />);
 
-    // The cover opens the quick menu; the corner link goes straight to the
-    // source. Two controls, neither nested in the other.
+    // The cover links to the entry page and opens the quick menu; the corner
+    // link goes straight to the source. Two anchors, neither nested in the
+    // other — a nested one would be hoisted out and break hydration.
     expect(
-      screen.getByRole("button", { name: /^Tower of God/ }),
-    ).toBeInTheDocument();
+      screen.getByRole("link", { name: /^Tower of God/ }),
+    ).toHaveAttribute("href", "/entry/7");
     expect(
       screen.getByRole("link", { name: "Read Tower of God on Tapas" }),
     ).toHaveAttribute("href", "https://tapas.io/series/tog");
@@ -87,7 +99,7 @@ describe("card read button", () => {
     // The card itself still opens the menu, which is where the URL gets
     // filled in from.
     expect(
-      screen.getByRole("button", { name: /^Tower of God/ }),
+      screen.getByRole("link", { name: /^Tower of God/ }),
     ).toBeInTheDocument();
   });
 
@@ -163,58 +175,145 @@ const ownedBadge = () =>
 const hiatusBadge = () => screen.queryByTitle("On hiatus at every source");
 
 describe("card owned badge", () => {
-  it("badges a title owned at its only source", () => {
-    render(<EntryCard entry={row([source({ is_owned: true })])} />);
-    expect(ownedBadge()).toBeInTheDocument();
-  });
-
-  // The `some` rule, from the card's side: one bought copy is enough, and
-  // recording a second place you read it must not take the badge away.
-  it("badges a title owned at only one of several sources", () => {
+  it("badges a finished series owned end to end", () => {
     render(
       <EntryCard
-        entry={row([
-          source({ id: 1, is_owned: false }),
-          source({ id: 2, is_owned: true, sources: { id: 2, name: "Webtoon" } }),
-        ])}
+        entry={row(
+          [source({ is_owned: true, chapters_owned: upTo(179) })],
+          FINISHED,
+        )}
       />,
     );
     expect(ownedBadge()).toBeInTheDocument();
   });
 
-  it("does not badge a title owned nowhere", () => {
-    render(<EntryCard entry={row([source()])} />);
+  // The rule the badge now carries: owning *some* of a series is already said
+  // by the bookmark on the source pill, so the corner badge stays for the
+  // whole thing. A badge after one bought chapter would be the loudest mark on
+  // the card while meaning the least.
+  it("does not badge a series only partly owned", () => {
+    render(
+      <EntryCard
+        entry={row(
+          [source({ is_owned: true, chapters_owned: upTo(40) })],
+          FINISHED,
+        )}
+      />,
+    );
+
     expect(ownedBadge()).not.toBeInTheDocument();
+    // …but the pill still says this source is owned.
+    expect(screen.getByTitle("Tapas · owned")).toBeInTheDocument();
+  });
+
+  it("counts every owned source towards the whole", () => {
+    // 1–100 on one and 101–179 on the other is the series, between them.
+    render(
+      <EntryCard
+        entry={row(
+          [
+            source({ id: 1, is_owned: true, chapters_owned: upTo(100) }),
+            source({
+              id: 2,
+              is_owned: true,
+              chapters_owned: "{[101,180)}",
+              sources: { id: 2, name: "Webtoon" },
+            }),
+          ],
+          FINISHED,
+        )}
+      />,
+    );
+    expect(ownedBadge()).toBeInTheDocument();
+  });
+
+  it("ignores a range left on a source that is not marked owned", () => {
+    render(
+      <EntryCard
+        entry={row(
+          [source({ is_owned: false, chapters_owned: upTo(179) })],
+          FINISHED,
+        )}
+      />,
+    );
+    expect(ownedBadge()).not.toBeInTheDocument();
+  });
+
+  // A series still publishing has no "all" to own — the badge would go stale
+  // the next time a chapter shipped.
+  it("does not badge an ongoing series, however much is owned", () => {
+    render(
+      <EntryCard
+        entry={row([source({ is_owned: true, chapters_owned: upTo(179) })], {
+          num_chapters: 179,
+          mal_status: "currently_publishing",
+        })}
+      />,
+    );
+    expect(ownedBadge()).not.toBeInTheDocument();
+  });
+
+  it("does not badge when MAL has no count to measure against", () => {
+    render(
+      <EntryCard
+        entry={row([source({ is_owned: true, chapters_owned: upTo(40) })], {
+          num_chapters: null,
+          mal_status: "finished",
+        })}
+      />,
+    );
+    expect(ownedBadge()).not.toBeInTheDocument();
+  });
+
+  // MAL's count lags reality often enough that owning past it is ordinary, and
+  // that is no reason to withhold the badge.
+  it("badges when ownership runs past a stale total", () => {
+    render(
+      <EntryCard
+        entry={row([source({ is_owned: true, chapters_owned: upTo(200) })], {
+          num_chapters: 179,
+          mal_status: "finished",
+        })}
+      />,
+    );
+    expect(ownedBadge()).toBeInTheDocument();
   });
 
   it("does not badge a title with no sources", () => {
     // Ownership hangs off a source, so there is nothing to have been bought.
-    render(<EntryCard entry={row()} />);
+    render(<EntryCard entry={row([], FINISHED)} />);
     expect(ownedBadge()).not.toBeInTheDocument();
   });
 
-  // A counted source is still an owned source, and an uncounted one is too —
-  // `is_owned` is the flag, `chapters_owned` only the amount.
-  it("badges regardless of whether the chapters are counted", () => {
-    render(
-      <EntryCard entry={row([source({ is_owned: true, chapters_owned: 40 })])} />,
-    );
-    expect(ownedBadge()).toBeInTheDocument();
-    cleanup();
-
+  // "Owned, not counted" cannot prove the whole series, so it gets the pill
+  // rather than the badge.
+  it("does not badge an owned source with no count recorded", () => {
     render(
       <EntryCard
-        entry={row([source({ is_owned: true, chapters_owned: null })])}
+        entry={row([source({ is_owned: true, chapters_owned: null })], FINISHED)}
       />,
     );
-    expect(ownedBadge()).toBeInTheDocument();
+
+    expect(ownedBadge()).not.toBeInTheDocument();
+    expect(screen.getByTitle("Tapas · owned")).toBeInTheDocument();
   });
 
   // Unlike No source and Hiatus, these two are not mutually exclusive: a
-  // series you bought and that has since stopped updating is both.
+  // series you bought outright and that has since stopped updating is both.
   it("shows the owned and hiatus badges together", () => {
     render(
-      <EntryCard entry={row([source({ is_owned: true, is_hiatus: true })])} />,
+      <EntryCard
+        entry={row(
+          [
+            source({
+              is_owned: true,
+              is_hiatus: true,
+              chapters_owned: upTo(179),
+            }),
+          ],
+          FINISHED,
+        )}
+      />,
     );
 
     expect(ownedBadge()).toBeInTheDocument();

@@ -54,6 +54,12 @@ export const malMangaNodeSchema = z.object({
   status: z.string().optional(),
   num_volumes: z.number().optional(),
   num_chapters: z.number().optional(),
+  /**
+   * MAL's own content rating: "white" is safe, "gray" is borderline, "black"
+   * is explicit. Optional because MAL omits it on some entries, and a missing
+   * value must not be read as either answer — see isMature.
+   */
+  nsfw: z.string().optional(),
   genres: z
     .array(z.object({ id: z.number(), name: z.string() }))
     .optional(),

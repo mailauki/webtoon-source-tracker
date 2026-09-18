@@ -145,6 +145,61 @@ export function highestOwned(ranges: ChapterRange[]): number | null {
 }
 
 /* ------------------------------------------------------------------------ */
+/* Ownership across the sources attached to one title                       */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * The fields an ownership question reads off an attached source, structurally.
+ *
+ * Declared here rather than imported from `entries.ts` so client components can
+ * name it without reaching into a `server-only` module — the same trick
+ * `SourceAttachment` uses in source-links.ts.
+ */
+export type OwnedSource = {
+  is_owned: boolean;
+  chapters_owned: string | null;
+};
+
+/**
+ * Every chapter owned across a title's sources, as one set.
+ *
+ * Only sources marked owned count. The form deliberately keeps a range through
+ * an unticking of Owned so a hand-entered value is not lost, which means an
+ * unticked source can still carry one — and counting it here would contradict
+ * the flag everything else reads.
+ */
+export function ownedAcross(sources: OwnedSource[]): ChapterRange[] {
+  return unionRanges(
+    sources
+      .filter((s) => s.is_owned)
+      .map((s) => fromMultirange(s.chapters_owned)),
+  );
+}
+
+/**
+ * Whether the user owns the whole series.
+ *
+ * Requires a *final* total: a series still publishing has no "all" to own, and
+ * a badge claiming otherwise would go stale the next time a chapter shipped.
+ * This is the same rule `ownedCountLabel` uses to decide when it may say "All
+ * 179 chapters", so the card and the entry page cannot disagree.
+ *
+ * `>=` rather than `===` because MAL's count lags reality often enough that
+ * owning more than it knows about is ordinary, and that is not a reason to
+ * withhold the badge.
+ *
+ * The total is taken structurally so this needs no import from
+ * chapter-totals.ts — `ChapterTotal` satisfies it.
+ */
+export function ownsEveryChapter(
+  sources: OwnedSource[],
+  total: { count: number; final: boolean } | null,
+): boolean {
+  if (!total?.final) return false;
+  return countChapters(ownedAcross(sources)) >= total.count;
+}
+
+/* ------------------------------------------------------------------------ */
 /* Reading and writing what a person types                                  */
 /* ------------------------------------------------------------------------ */
 

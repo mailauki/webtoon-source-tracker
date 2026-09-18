@@ -29,7 +29,7 @@ import {
   formatRanges,
   fromMultirange,
   gapsWithin,
-  unionRanges,
+  ownedAcross,
 } from "@/lib/data/chapter-ranges";
 import { ownedCountLabel, type ChapterTotal } from "@/lib/data/chapter-totals";
 import type { Source } from "@/lib/data/rank-sources";
@@ -263,10 +263,9 @@ function OwnedAcrossSources({
   sources: EntrySource[];
   total: ChapterTotal | null;
 }) {
-  const owned = sources.filter((s) => s.is_owned);
-  if (owned.length < 2) return null;
+  if (sources.filter((s) => s.is_owned).length < 2) return null;
 
-  const ranges = unionRanges(owned.map((s) => fromMultirange(s.chapters_owned)));
+  const ranges = ownedAcross(sources);
   if (ranges.length === 0) return null;
 
   const gaps = gapsWithin(ranges);
