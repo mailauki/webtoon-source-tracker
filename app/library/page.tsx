@@ -4,6 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { HiatusFilter } from "@/components/hiatus-filter";
 import { LibraryFilters, LibraryGrid } from "@/components/library-grid";
 import { MalSearchResults } from "@/components/mal-search-results";
+import { OwnedFilter } from "@/components/owned-filter";
 import { RandomPick } from "@/components/random-pick";
 import { SortFilter } from "@/components/sort-filter";
 import { SourceFilter } from "@/components/source-filter";
@@ -74,9 +75,11 @@ export default async function LibraryPage() {
   const activeStatus = resolveActiveChip(prefs?.status);
   const activeSource = resolveActiveChip(prefs?.source);
   const activeSort = resolveSort(prefs?.sort);
-  // Defaults to off: a title should never disappear from the shelf on a visit
-  // where the user did not ask for it.
+  // Both default to off: a title should never disappear from the shelf on a
+  // visit where the user did not ask for it. That matters more for owned-only,
+  // which would otherwise empty the shelf of anyone who has marked nothing.
   const hideHiatus = prefs?.hide_hiatus ?? false;
+  const ownedOnly = prefs?.owned_only ?? false;
 
   const [entries, statusCounts, sources, topSources] = await Promise.all([
     getLibrary(),
@@ -104,6 +107,7 @@ export default async function LibraryPage() {
         status: activeStatus,
         source: activeSource,
         hideHiatus,
+        ownedOnly,
         sort: activeSort,
       }}
       entries={entries}
@@ -116,12 +120,16 @@ export default async function LibraryPage() {
           // much use without seeing the others.
           <div className="flex flex-wrap items-center justify-between gap-2">
             <StatusFilter statuses={statusChips} />
-            {/* Both act on the shelf the chips have narrowed: one hides the
-                paused titles and one orders what is left. `flex-wrap` on the
-                parent lets this group drop to its own line rather than
-                squeezing the status row on a phone. */}
+            {/* All three act on the shelf the chips have narrowed: two
+                change which titles are left — dropping the paused ones,
+                keeping only the owned ones — and the third orders what
+                remains. The two narrowing toggles sit together, with the sort
+                last, so the group reads as "what, then in what order".
+                `flex-wrap` on the parent lets it drop to its own line rather
+                than squeezing the status row on a phone. */}
             <div className="flex shrink-0 items-center gap-1.5">
               <HiatusFilter />
+              <OwnedFilter />
               <SortFilter />
             </div>
           </div>

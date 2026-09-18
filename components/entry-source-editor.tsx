@@ -1,7 +1,16 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { Crown, Lock, PauseCircle, Pencil, Plus, Trash2, X } from "lucide-react";
+import {
+  BookmarkCheck,
+  Crown,
+  Lock,
+  PauseCircle,
+  Pencil,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
 
 import {
   addEntrySource,
@@ -111,11 +120,32 @@ export function EntrySourceEditor({
                       <PauseCircle className="size-3" /> On hiatus
                     </span>
                   ) : null}
+                  {/* Muted like Paid and On hiatus, not a brand pill like
+                      Primary. Primary is structural — exactly one row can hold
+                      it — while these four are all just facts about this row,
+                      and a second brand pill beside the crown would dilute it.
+                      The emphasis ownership deserves lives on the library
+                      card, where a shelf is being scanned. */}
+                  {source.is_owned ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                      <BookmarkCheck className="size-3" /> Owned
+                    </span>
+                  ) : null}
                 </div>
 
                 {source.chapters_read !== null ? (
                   <p className="text-sm text-muted-foreground">
                     Up to chapter {source.chapters_read} here
+                  </p>
+                ) : null}
+
+                {/* Shown on its own terms, not folded into the line above:
+                    the two counts move independently, and a null here means
+                    "not counted" rather than zero — so there is nothing to
+                    say when it is unset, even on a source marked owned. */}
+                {source.chapters_owned !== null ? (
+                  <p className="text-sm text-muted-foreground">
+                    {source.chapters_owned} chapters owned here
                   </p>
                 ) : null}
 

@@ -241,6 +241,31 @@ two an admin wants distinguished) is a different, harder problem this table
 doesn't solve. Build it when a real MAL genre pair turns out to annoy someone
 browsing the tag pages, not before.
 
+### Non-contiguous chapter ownership
+
+`entry_sources.chapters_owned` is an int, so ownership at a source is a count
+read forward from chapter 1 — "I own 40 of these" — not a set of chapter
+numbers. That matches how the coin-gated apps actually work: Webtoon, Tapas
+and Piccoma all unlock the *next* chapter, so a count says everything a list
+of forty rows would, in one column, with no join and no second editor.
+
+What it cannot express is a gap: a chapter given away free during a promo, a
+volume bought mid-series in print, an arc unlocked out of order. Recording
+those means an `entry_source_chapters (entry_source_id, chapter)` table — or a
+range type, if the gaps turn out to be few and wide — plus its own RLS
+policies (select/insert/delete-own, keyed off `entry_sources.user_id` the same
+way), and a UI that is no longer one number in a form.
+
+`is_owned` is deliberately independent of the count and would survive that
+change untouched: it is the flag the badge and the library toggle read
+(`isOwned` in `lib/data/pick-random.ts` deliberately ignores
+`chapters_owned`), so a table could replace the int without touching either.
+The migration would be a backfill of `1..chapters_owned` per row.
+
+Build it when someone's real library has a gap they cannot record, not before
+— and note that the cheap half-measure, letting `chapters_owned` mean "up to
+chapter N, roughly", is what the field already does.
+
 ### Guest demo mode
 
 A signed-out visitor currently sees the landing page and can go no further —

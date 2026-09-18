@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { LibraryRow } from "@/lib/data/entries";
 import {
   isOnHiatus,
+  isOwned,
   pickNext,
   selectByMode,
   selectCandidates,
@@ -232,6 +233,173 @@ describe("selectCandidates — hiatus", () => {
 });
 
 /**
+ * A row whose sources carry owned flags, one boolean per attached source.
+ * Separate from `hiatusRow` so a fixture can vary one flag without implying
+ * anything about the other.
+ */
+function ownedRow(id: number, flags: boolean[]): LibraryRow {
+  return {
+    id,
+    list_status: "reading",
+    entry_sources: flags.map((is_owned, i) => ({
+      is_owned,
+      sources: { slug: `s${i}` },
+    })),
+  } as unknown as LibraryRow;
+}
+
+describe("isOwned", () => {
+  it("is true when the only source is owned", () => {
+    expect(isOwned(ownedRow(1, [true]))).toBe(true);
+  });
+
+  // The asymmetry with isOnHiatus, which is the whole design: hiatus needs
+  // every copy to have stopped, ownership needs only one to have been bought.
+  it("is true when any source is owned", () => {
+    expect(isOwned(ownedRow(1, [false, true]))).toBe(true);
+  });
+
+  // Recording a second place you read something must not un-own the title.
+  it("stays true when an unowned source is added alongside an owned one", () => {
+    expect(isOwned(ownedRow(1, [true]))).toBe(true);
+    expect(isOwned(ownedRow(1, [true, false, false]))).toBe(true);
+  });
+
+  it("is false when no source is owned", () => {
+    expect(isOwned(ownedRow(1, [false, false]))).toBe(false);
+  });
+
+  it("is false for a title with no sources", () => {
+    // Ownership is recorded on a source, so a title with none cannot be owned
+    // — and unlike isOnHiatus this needs no explicit guard, since
+    // [].some() is already false. Asserted so a refactor cannot flip it.
+    expect(isOwned(ownedRow(1, []))).toBe(false);
+  });
+
+  // `is_owned` is the flag; `chapters_owned` is only how much. Someone who
+  // ticked the box without counting has still said yes.
+  it("does not depend on a chapter count", () => {
+    const uncounted = {
+      id: 1,
+      list_status: "reading",
+      entry_sources: [
+        { is_owned: true, chapters_owned: null, sources: { slug: "s0" } },
+      ],
+    } as unknown as LibraryRow;
+
+    expect(isOwned(uncounted)).toBe(true);
+  });
+});
+
+describe("selectCandidates — owned", () => {
+  const SHELF = [
+    ownedRow(1, [true]),
+    ownedRow(2, [false]),
+    ownedRow(3, [false, true]),
+    ownedRow(4, []),
+  ];
+
+  it("keeps everything when the toggle is off", () => {
+    expect(ids(selectCandidates(SHELF, { status: "", source: "" }))).toEqual([
+      1, 2, 3, 4,
+    ]);
+  });
+
+  it("defaults to showing everything when ownedOnly is not passed at all", () => {
+    // Off-by-default is the contract the page and the provider both rely on —
+    // and it matters more here than for hiatus, since a shelf with nothing
+    // marked owned would otherwise come back empty.
+    const filters = { status: "", source: "" };
+    expect(ids(selectCandidates(SHELF, filters))).toHaveLength(4);
+  });
+
+  it("keeps only owned titles when the toggle is on", () => {
+    expect(
+      ids(selectCandidates(SHELF, { status: "", source: "", ownedOnly: true })),
+    ).toEqual([1, 3]);
+  });
+
+  it("drops titles with no sources, which cannot be owned", () => {
+    expect(
+      ids(
+        selectCandidates([ownedRow(4, [])], {
+          status: "",
+          source: "",
+          ownedOnly: true,
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it("combines with a source chip rather than replacing it", () => {
+    // "on s1, and owned somewhere" — both narrowings apply. Note the owned
+    // copy does not have to be the chipped source: 3 is owned on s1 and shown
+    // because it is on s1, but it would show for an s0 chip too.
+    expect(
+      ids(
+        selectCandidates(SHELF, { status: "", source: "s1", ownedOnly: true }),
+      ),
+    ).toEqual([3]);
+  });
+
+  it("combines with the hiatus toggle", () => {
+    // Owned and paused everywhere is an ordinary state — a series you bought
+    // that has since stopped — so the two toggles have to intersect rather
+    // than one winning.
+    const shelf = [
+      {
+        id: 1,
+        list_status: "reading",
+        entry_sources: [
+          { is_owned: true, is_hiatus: true, sources: { slug: "s0" } },
+        ],
+      },
+      {
+        id: 2,
+        list_status: "reading",
+        entry_sources: [
+          { is_owned: true, is_hiatus: false, sources: { slug: "s0" } },
+        ],
+      },
+      {
+        id: 3,
+        list_status: "reading",
+        entry_sources: [
+          { is_owned: false, is_hiatus: false, sources: { slug: "s0" } },
+        ],
+      },
+    ] as unknown as LibraryRow[];
+
+    expect(
+      ids(
+        selectCandidates(shelf, {
+          status: "",
+          source: "",
+          ownedOnly: true,
+          hideHiatus: true,
+        }),
+      ),
+    ).toEqual([2]);
+  });
+
+  it("applies status and ownership together", () => {
+    const shelf = [
+      ownedRow(1, [true]),
+      { ...ownedRow(2, [true]), list_status: "completed" } as LibraryRow,
+    ];
+    expect(
+      ids(
+        selectCandidates(shelf, {
+          status: "reading",
+          source: "",
+          ownedOnly: true,
+        }),
+      ),
+    ).toEqual([1]);
+  });
+});
+
+/**
  * A row with a last-touched timestamp, for the neglected mode. Days are
  * relative to NOW so the fixtures read as "touched N days ago".
  */
@@ -258,6 +426,24 @@ function agedRow(
 }
 
 const NO_CHIPS = { status: "", source: "" };
+
+/** An aged row whose single source carries an owned flag. */
+function agedOwnedRow(
+  id: number,
+  list_status: string,
+  daysAgo: number | null,
+  owned: boolean,
+): LibraryRow {
+  return {
+    id,
+    list_status,
+    mal_updated_at:
+      daysAgo === null
+        ? null
+        : new Date(NOW - daysAgo * 86_400_000).toISOString(),
+    entry_sources: [{ is_owned: owned, is_hiatus: false, sources: { slug: "s0" } }],
+  } as unknown as LibraryRow;
+}
 
 describe("selectByMode — surprise", () => {
   it("is the chip selection, unchanged", () => {
@@ -299,6 +485,37 @@ describe("selectByMode — plan", () => {
     ];
     expect(
       ids(selectByMode(shelf, "plan", { ...NO_CHIPS, hideHiatus: true })),
+    ).toEqual([2]);
+  });
+
+  it("still honours the owned toggle", () => {
+    // Same reasoning read the other way: someone looking only at what they
+    // have bought does not want to be handed something they would have to buy
+    // first, whichever button they pressed.
+    const shelf = [
+      agedOwnedRow(1, "plan_to_read", 5, false),
+      agedOwnedRow(2, "plan_to_read", 5, true),
+    ];
+    expect(
+      ids(selectByMode(shelf, "plan", { ...NO_CHIPS, ownedOnly: true })),
+    ).toEqual([2]);
+  });
+
+  // The modes reach past the *chips*, not past the toggles — the chips are a
+  // view of the shelf, while the toggles rule titles out as recommendations.
+  it("honours the toggles even while ignoring the chips", () => {
+    const shelf = [
+      agedOwnedRow(1, "plan_to_read", 5, false),
+      agedOwnedRow(2, "plan_to_read", 5, true),
+    ];
+    expect(
+      ids(
+        selectByMode(shelf, "plan", {
+          status: "reading",
+          source: "nowhere",
+          ownedOnly: true,
+        }),
+      ),
     ).toEqual([2]);
   });
 });
@@ -377,6 +594,37 @@ describe("selectByMode — neglected", () => {
         selectByMode(shelf, "neglected", { ...NO_CHIPS, hideHiatus: true }),
       ),
     ).toEqual([2]);
+  });
+
+  it("still honours the owned toggle", () => {
+    const shelf = [
+      agedOwnedRow(1, "reading", 100, false),
+      agedOwnedRow(2, "reading", 90, true),
+    ];
+    expect(
+      ids(selectByMode(shelf, "neglected", { ...NO_CHIPS, ownedOnly: true })),
+    ).toEqual([2]);
+  });
+
+  // The gate runs before the slice, so the stalest third is a third of what
+  // survives the toggles — not a third of the shelf, most of which the toggle
+  // would then throw away.
+  it("takes the slice from what the toggle leaves, not the whole shelf", () => {
+    const shelf = [
+      ...Array.from({ length: 30 }, (_, i) =>
+        agedOwnedRow(i + 1, "reading", i + 1, false),
+      ),
+      ...Array.from({ length: 30 }, (_, i) =>
+        agedOwnedRow(i + 101, "reading", i + 1, true),
+      ),
+    ];
+    const picked = ids(
+      selectByMode(shelf, "neglected", { ...NO_CHIPS, ownedOnly: true }),
+    );
+
+    // A third of the 30 owned rows, not a third of all 60.
+    expect(picked).toHaveLength(10);
+    expect(picked.every((id) => id > 100)).toBe(true);
   });
 
   it("returns nothing when no title is in progress", () => {

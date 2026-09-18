@@ -25,6 +25,7 @@ vi.mock("@/components/entry-card", () => ({
 import { HeaderSearch } from "@/components/header-search";
 import { HiatusFilter } from "@/components/hiatus-filter";
 import { LibraryFilters, LibraryGrid } from "@/components/library-grid";
+import { OwnedFilter } from "@/components/owned-filter";
 import { SourceFilter } from "@/components/source-filter";
 import { StatusFilter } from "@/components/status-filter";
 import { DEFAULT_SORT } from "@/lib/data/library-prefs";
@@ -39,6 +40,8 @@ function row(
   title_en: string | null = null,
   /** Per-source hiatus flags, positional. Defaults to none paused. */
   hiatus: boolean[] = [],
+  /** Per-source owned flags, positional. Defaults to none owned. */
+  owned: boolean[] = [],
 ): LibraryRow {
   return {
     id,
@@ -46,6 +49,7 @@ function row(
     media_titles: { title, title_en },
     entry_sources: slugs.map((slug, i) => ({
       is_hiatus: hiatus[i] ?? false,
+      is_owned: owned[i] ?? false,
       sources: slug ? { slug } : null,
     })),
   } as unknown as LibraryRow;
@@ -362,5 +366,134 @@ describe("hide hiatus toggle", () => {
     await userEvent.click(toggle());
     // "your filters hid it", not "nothing synced yet" — the shelf is not empty.
     expect(screen.getByText("No titles match")).toBeInTheDocument();
+  });
+});
+
+describe("owned only toggle", () => {
+  // 7 is owned on its only source; 8 is owned on one of two; 9 is owned
+  // nowhere. Appended to the shared shelf so the existing rows keep their ids
+  // — and note none of ROWS is owned, which is what the default-off tests
+  // lean on.
+  const SHELF = [
+    ...ROWS,
+    row(7, "reading", ["webtoon"], "Title 7", null, [], [true]),
+    row(8, "reading", ["webtoon", "tapas"], "Title 8", null, [], [false, true]),
+    row(9, "reading", ["webtoon"], "Title 9", null, [], [false]),
+  ];
+
+  function setupShelf(initial = { status: "", source: "" }) {
+    return render(
+      <LibraryFilters initial={{ sort: DEFAULT_SORT, ...initial }}>
+        <OwnedFilter />
+        <SourceFilter sources={SOURCES} />
+        <LibraryGrid
+          entries={SHELF}
+          emptyFiltered={<p>No titles match</p>}
+          emptyUnfiltered={<p>Nothing synced yet</p>}
+        />
+      </LibraryFilters>,
+    );
+  }
+
+  const toggle = () => screen.getByRole("button", { name: /Owned only/ });
+
+  it("shows the whole shelf by default", () => {
+    setupShelf();
+    expect(visibleIds()).toEqual([1, 2, 3, 4, 7, 8, 9]);
+    expect(toggle()).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("keeps only owned titles when pressed", async () => {
+    setupShelf();
+    await userEvent.click(toggle());
+
+    // 8 stays on the strength of its Tapas copy; 9 and the unowned ROWS go.
+    expect(visibleIds()).toEqual([7, 8]);
+    expect(toggle()).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("brings the rest back when pressed again", async () => {
+    setupShelf();
+    await userEvent.click(toggle());
+    await userEvent.click(toggle());
+    expect(visibleIds()).toEqual([1, 2, 3, 4, 7, 8, 9]);
+  });
+
+  it("persists the choice as a boolean, not a sentinel", async () => {
+    setupShelf();
+    await userEvent.click(toggle());
+    expect(saveLibraryPrefs).toHaveBeenCalledWith({ ownedOnly: true });
+
+    await userEvent.click(toggle());
+    // false must survive as false — it is "show the whole shelf again", not an
+    // empty value to be normalised to the `all` sentinel.
+    expect(saveLibraryPrefs).toHaveBeenLastCalledWith({ ownedOnly: false });
+  });
+
+  it("starts pressed when the stored preference says so", () => {
+    render(
+      <LibraryFilters
+        initial={{ status: "", source: "", ownedOnly: true, sort: DEFAULT_SORT }}
+      >
+        <OwnedFilter />
+        <SourceFilter sources={SOURCES} />
+        <LibraryGrid
+          entries={SHELF}
+          emptyFiltered={<p>No titles match</p>}
+          emptyUnfiltered={<p>Nothing synced yet</p>}
+        />
+      </LibraryFilters>,
+    );
+
+    expect(toggle()).toHaveAttribute("aria-pressed", "true");
+    expect(visibleIds()).toEqual([7, 8]);
+  });
+
+  it("narrows alongside a source chip rather than replacing it", async () => {
+    setupShelf({ status: "", source: "tapas" });
+    await userEvent.click(toggle());
+    // On Tapas: 4 and 8 — of which only 8 is owned anywhere.
+    expect(visibleIds()).toEqual([8]);
+  });
+
+  it("shows the filtered empty state when nothing is owned", async () => {
+    render(
+      <LibraryFilters initial={{ status: "", source: "", sort: DEFAULT_SORT }}>
+        <OwnedFilter />
+        <SourceFilter sources={SOURCES} />
+        <LibraryGrid
+          entries={[row(1, "reading", ["webtoon"])]}
+          emptyFiltered={<p>No titles match</p>}
+          emptyUnfiltered={<p>Nothing synced yet</p>}
+        />
+      </LibraryFilters>,
+    );
+
+    await userEvent.click(toggle());
+    // "your filters hid it", not "nothing synced yet" — the shelf has a title
+    // on it, the user just owns none of it. This is the case that makes
+    // off-by-default matter.
+    expect(screen.getByText("No titles match")).toBeInTheDocument();
+  });
+
+  it("does not narrow a search, which reaches past the toggles", async () => {
+    render(
+      <LibraryFilters initial={{ status: "", source: "", sort: DEFAULT_SORT }}>
+        <HeaderSearch />
+        <OwnedFilter />
+        <LibraryGrid
+          entries={SHELF}
+          emptyFiltered={<p>No titles match</p>}
+          emptyUnfiltered={<p>Nothing synced yet</p>}
+        />
+      </LibraryFilters>,
+    );
+
+    await userEvent.click(toggle());
+    await search("Title 9");
+
+    // 9 is owned nowhere, so the pressed toggle would hide it — but the user
+    // asked for it by name, and a search is a lookup rather than a view.
+    expect(visibleIds()).toEqual([9]);
   });
 });

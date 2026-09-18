@@ -15,6 +15,8 @@ export type CandidateFilters = {
   source: string;
   /** The hiatus toggle. Off by default, so nothing vanishes unasked. */
   hideHiatus?: boolean;
+  /** The owned toggle. Off by default, for the same reason. */
+  ownedOnly?: boolean;
 };
 
 /**
@@ -37,6 +39,26 @@ export function isOnHiatus(entry: LibraryRow): boolean {
 }
 
 /**
+ * Whether the user owns this title anywhere they read it.
+ *
+ * `some`, where isOnHiatus is `every` — the asymmetry is the point. Hiatus is
+ * bad news, so it only counts once every copy has stopped; ownership is good
+ * news, so one bought copy is enough. Requiring `every` would un-own a title
+ * the moment a second, unbought source was attached, which would punish the
+ * user for recording more than they had to.
+ *
+ * `is_owned` alone, never `chapters_owned`: a count is how much is owned, not
+ * whether anything is. Someone who ticked the box without counting has still
+ * said yes, and a null there must not read as no.
+ *
+ * Lives beside isOnHiatus because the same three callers need it — the badge,
+ * the grid's filtering, and the dice.
+ */
+export function isOwned(entry: LibraryRow): boolean {
+  return entry.entry_sources.some((es) => es.is_owned);
+}
+
+/**
  * The rows the active chips leave visible.
  *
  * This is the single definition of what a chip selection means: the grid
@@ -50,7 +72,7 @@ export function isOnHiatus(entry: LibraryRow): boolean {
  */
 export function selectCandidates(
   entries: LibraryRow[],
-  { status, source, hideHiatus = false }: CandidateFilters,
+  { status, source, hideHiatus = false, ownedOnly = false }: CandidateFilters,
 ): LibraryRow[] {
   return entries.filter((entry) => {
     if (status && entry.list_status !== status) return false;
@@ -58,6 +80,12 @@ export function selectCandidates(
     // Applied before the source chip, so "Webtoon" and "hide hiatus" together
     // mean titles on Webtoon that are still updating somewhere.
     if (hideHiatus && isOnHiatus(entry)) return false;
+
+    // Narrows alongside the rest rather than replacing them: "Webtoon +
+    // owned only" means the titles on Webtoon that the user owns somewhere.
+    // A title with no sources is never owned, so this also drops the
+    // "No source" cards — correctly, since nowhere recorded is nowhere bought.
+    if (ownedOnly && !isOwned(entry)) return false;
 
     if (source === "none") return entry.entry_sources.length === 0;
     if (source) {
@@ -149,6 +177,9 @@ function lastTouched(entry: LibraryRow): number {
  *
  * `hideHiatus` applies to all three: a paused title is a poor recommendation
  * whatever the question was, and the toggle is the user having said so.
+ * `ownedOnly` rides along for the same reason, read the other way round —
+ * someone looking only at what they have bought does not want the dice
+ * offering them something they would have to buy first.
  *
  * Ordering is by timestamp alone, so this needs no notion of "now" — the
  * stalest end of the shelf is the stalest end whenever it is asked.
@@ -160,10 +191,20 @@ export function selectByMode(
 ): LibraryRow[] {
   if (mode === "surprise") return selectCandidates(entries, filters);
 
-  const { hideHiatus = false } = filters;
-  const shelf = hideHiatus
-    ? entries.filter((entry) => !isOnHiatus(entry))
-    : entries;
+  // Both toggles gate the pool the shortcut modes draw from. They bypass the
+  // *chips* — which are a view of the shelf — but not these, which are the
+  // user having ruled certain titles out as recommendations altogether.
+  const { hideHiatus = false, ownedOnly = false } = filters;
+  // Reuses the caller's array when neither toggle is on, which is the common
+  // case — there is nothing to narrow, so there is nothing to copy.
+  const shelf =
+    hideHiatus || ownedOnly
+      ? entries.filter(
+          (entry) =>
+            !(hideHiatus && isOnHiatus(entry)) &&
+            !(ownedOnly && !isOwned(entry)),
+        )
+      : entries;
 
   if (mode === "plan") {
     return shelf.filter((entry) => entry.list_status === "plan_to_read");
