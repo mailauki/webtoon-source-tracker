@@ -11,6 +11,7 @@ import { EntryTags } from "@/components/entry-tags";
 import { ProgressEditor } from "@/components/progress-editor";
 import { Badge } from "@/components/ui/badge";
 import { isAdmin, verifySession } from "@/lib/auth/dal";
+import { chapterTotal } from "@/lib/data/chapter-totals";
 import { getCollectionTargets } from "@/lib/data/collections";
 import { getEntry } from "@/lib/data/entries";
 import { getSources } from "@/lib/data/sources";
@@ -182,6 +183,7 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
           entryId={entry.id}
           sources={entry.entry_sources}
           catalog={catalog}
+          total={chapterTotal(title)}
         />
 
         {/* Below the sources: where you read a title is the point of the app,

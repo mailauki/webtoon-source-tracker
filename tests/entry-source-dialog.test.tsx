@@ -61,6 +61,7 @@ const ATTACHED: EntrySource[] = [
 function setup(
   request: Parameters<typeof EntrySourceDialog>[0]["request"],
   attached = ATTACHED,
+  total: Parameters<typeof EntrySourceDialog>[0]["total"] = null,
 ) {
   const onClose = vi.fn();
   render(
@@ -70,6 +71,7 @@ function setup(
       request={request}
       attached={attached}
       catalog={CATALOG}
+      total={total}
       onClose={onClose}
     />,
   );
@@ -269,5 +271,134 @@ describe("entry source dialog", () => {
   it("renders nothing when the row an edit points at is gone", () => {
     setup({ mode: "edit", entrySourceId: 999 });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * The count field is revealed by the Owned box rather than always shown.
+ *
+ * It is hidden with the `hidden` attribute and no display utility, so jsdom's
+ * UA stylesheet applies and `toBeVisible` is meaningful here — a `hidden`
+ * class would be inert in these tests, since no Tailwind CSS is loaded.
+ */
+describe("revealing the chapter count", () => {
+  const count = () => screen.getByLabelText("Chapters owned");
+  const ownedBox = () => screen.getByLabelText("Owned");
+
+  it("hides the count on a source that is not owned", () => {
+    setup({ mode: "add" });
+    expect(count()).not.toBeVisible();
+  });
+
+  it("shows it straight away on a source that is", () => {
+    // ATTACHED is owned, so opening its editor should not make the user tick
+    // a box they have already ticked to see the number behind it.
+    setup({ mode: "edit", entrySourceId: 55 });
+    expect(count()).toBeVisible();
+  });
+
+  it("reveals it when the box is ticked", async () => {
+    const { user } = setup({ mode: "add" });
+    await user.click(ownedBox());
+    expect(count()).toBeVisible();
+  });
+
+  it("hides it again when the box is unticked", async () => {
+    const { user } = setup({ mode: "edit", entrySourceId: 55 });
+    await user.click(ownedBox());
+    expect(count()).not.toBeVisible();
+  });
+
+  // The reason it is hidden rather than unmounted. An unmounted input submits
+  // nothing, so the count would be wiped by a glance at what the box does.
+  it("still submits a hidden count, so unticking cannot wipe it", async () => {
+    const { user } = setup({ mode: "edit", entrySourceId: 55 });
+
+    await user.click(ownedBox());
+    expect(count()).not.toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await vi.waitFor(() => expect(updateEntrySource).toHaveBeenCalledOnce());
+    const formData = updateEntrySource.mock.calls[0][1];
+    expect(formData.get("is_owned")).toBeNull();
+    expect(formData.get("chapters_owned")).toBe("20");
+  });
+
+  it("brings the same number back when the box is re-ticked", async () => {
+    const { user } = setup({ mode: "edit", entrySourceId: 55 });
+
+    await user.click(ownedBox());
+    await user.click(ownedBox());
+
+    expect(count()).toBeVisible();
+    expect(count()).toHaveValue(20);
+  });
+});
+
+describe("the own-all shortcut", () => {
+  const FINISHED = { count: 179, final: true };
+  const ONGOING = { count: 41, final: false };
+  const button = (name: RegExp) => screen.getByRole("button", { name });
+
+  it("fills the count with MAL's total for a finished series", async () => {
+    const { user } = setup({ mode: "edit", entrySourceId: 55 }, ATTACHED, FINISHED);
+
+    await user.click(button(/^Own all 179$/));
+    expect(screen.getByLabelText("Chapters owned")).toHaveValue(179);
+  });
+
+  it("qualifies the total on a series still publishing", async () => {
+    const { user } = setup({ mode: "edit", entrySourceId: 55 }, ATTACHED, ONGOING);
+
+    await user.click(button(/Own all 41 so far/));
+    expect(screen.getByLabelText("Chapters owned")).toHaveValue(41);
+  });
+
+  // A bare <button> in a form submits. If this one did, pressing it would save
+  // the row rather than fill the field.
+  it("does not submit the form", async () => {
+    const { user } = setup({ mode: "edit", entrySourceId: 55 }, ATTACHED, FINISHED);
+
+    await user.click(button(/^Own all 179$/));
+    expect(updateEntrySource).not.toHaveBeenCalled();
+  });
+
+  it("sends the filled-in total when the row is then saved", async () => {
+    const { user } = setup({ mode: "edit", entrySourceId: 55 }, ATTACHED, FINISHED);
+
+    await user.click(button(/^Own all 179$/));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await vi.waitFor(() => expect(updateEntrySource).toHaveBeenCalledOnce());
+    expect(updateEntrySource.mock.calls[0][1].get("chapters_owned")).toBe("179");
+  });
+
+  it("offers no shortcut when MAL has no count, and says why", async () => {
+    const { user } = setup({ mode: "add" });
+    await user.click(screen.getByLabelText("Owned"));
+
+    expect(
+      screen.queryByRole("button", { name: /Own all/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/no chapter count for this title/)).toBeVisible();
+  });
+
+  // The shortcut lives inside the revealed block, so it is only reachable once
+  // the user has said they own the title at all. It is out of the
+  // accessibility tree entirely while hidden — which is why this asks by role
+  // rather than by text, and why the DOM check below needs `hidden: true`.
+  it("stays out of reach until the owned box is ticked", async () => {
+    const { user } = setup({ mode: "add" }, ATTACHED, FINISHED);
+
+    expect(
+      screen.queryByRole("button", { name: /Own all/ }),
+    ).not.toBeInTheDocument();
+    // Present but hidden, not unmounted — the same block that keeps the count.
+    expect(
+      screen.getByRole("button", { name: /Own all 179/, hidden: true }),
+    ).not.toBeVisible();
+
+    await user.click(screen.getByLabelText("Owned"));
+    expect(button(/^Own all 179$/)).toBeVisible();
   });
 });

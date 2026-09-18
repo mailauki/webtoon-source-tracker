@@ -24,16 +24,20 @@ import { SourceFields, type EntrySource } from "@/components/source-fields";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ownedCountLabel, type ChapterTotal } from "@/lib/data/chapter-totals";
 import type { Source } from "@/lib/data/rank-sources";
 
 export function EntrySourceEditor({
   entryId,
   sources,
   catalog,
+  total = null,
 }: {
   entryId: number;
   sources: EntrySource[];
   catalog: Source[];
+  /** MAL's chapter count for this title, for the "own all" shortcut. */
+  total?: ChapterTotal | null;
 }) {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -72,6 +76,7 @@ export function EntrySourceEditor({
         <AddSourceForm
           entryId={entryId}
           available={available}
+          total={total}
           onDone={() => setAdding(false)}
         />
       ) : null}
@@ -89,6 +94,7 @@ export function EntrySourceEditor({
               <EditSourceForm
                 entryId={entryId}
                 source={source}
+                total={total}
                 onDone={() => setEditingId(null)}
               />
             </li>
@@ -139,13 +145,17 @@ export function EntrySourceEditor({
                   </p>
                 ) : null}
 
-                {/* Shown on its own terms, not folded into the line above:
-                    the two counts move independently, and a null here means
-                    "not counted" rather than zero — so there is nothing to
-                    say when it is unset, even on a source marked owned. */}
-                {source.chapters_owned !== null ? (
+                {/* Gated on is_owned, not just on the count being set. The
+                    form keeps a count through an unticking of Owned so it is
+                    not lost, which means an unticked source can still carry
+                    one — and reporting that as owned would contradict the flag
+                    everything else reads.
+
+                    A null count on an owned source says nothing rather than
+                    zero: "owned, not counted" is a real answer. */}
+                {source.is_owned && source.chapters_owned !== null ? (
                   <p className="text-sm text-muted-foreground">
-                    {source.chapters_owned} chapters owned here
+                    {ownedCountLabel(source.chapters_owned, total)}
                   </p>
                 ) : null}
 
@@ -191,10 +201,12 @@ export function EntrySourceEditor({
 function AddSourceForm({
   entryId,
   available,
+  total,
   onDone,
 }: {
   entryId: number;
   available: Source[];
+  total: ChapterTotal | null;
   onDone: () => void;
 }) {
   const [state, action] = useActionState<EntrySourceState, FormData>(
@@ -284,7 +296,7 @@ function AddSourceForm({
           </select>
         </div>
 
-        <SourceFields />
+        <SourceFields total={total} />
 
         {state?.error ? (
           <p role="alert" className="text-sm text-alert">
@@ -313,10 +325,12 @@ function AddSourceForm({
 function EditSourceForm({
   entryId,
   source,
+  total,
   onDone,
 }: {
   entryId: number;
   source: EntrySource;
+  total: ChapterTotal | null;
   onDone: () => void;
 }) {
   const [state, action] = useActionState<EntrySourceState, FormData>(
@@ -350,7 +364,7 @@ function EditSourceForm({
         </Button>
       </div>
 
-      <SourceFields source={source} />
+      <SourceFields source={source} total={total} />
 
       {state?.error ? (
         <p role="alert" className="text-sm text-alert">

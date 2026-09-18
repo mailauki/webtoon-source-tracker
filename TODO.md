@@ -264,7 +264,10 @@ The migration would be a backfill of `1..chapters_owned` per row.
 
 Build it when someone's real library has a gap they cannot record, not before
 — and note that the cheap half-measure, letting `chapters_owned` mean "up to
-chapter N, roughly", is what the field already does.
+chapter N, roughly", is what the field already does. The "own all" shortcut
+(`lib/data/chapter-totals.ts`) leans on that reading too: it fills the field
+with MAL's `num_chapters`, which is a total rather than a set, so a table
+would need it to fill a range instead.
 
 ### Guest demo mode
 
