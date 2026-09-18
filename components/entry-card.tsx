@@ -38,9 +38,10 @@ const STATUS_LABELS: Record<string, string> = {
 /**
  * Whether this click means "open it somewhere else" rather than "act here".
  *
- * Covers every new-tab and new-window gesture a browser gives an anchor:
- * middle-click, and the modifier combinations that mean the same thing across
- * platforms (cmd on macOS, ctrl elsewhere, shift for a window).
+ * The modifier combinations are what actually reach here — cmd on macOS, ctrl
+ * elsewhere, shift for a new window. Middle-click dispatches `auxclick` rather
+ * than `click` in current browsers, so the button check is insurance against
+ * one that does not, and costs a comparison.
  */
 function opensElsewhere(event: {
   button: number;
@@ -75,6 +76,27 @@ export function EntryCard({
   // The dialog lives outside <DropdownMenu> — Radix unmounts menu content on
   // close and would take the dialog with it.
   const [dialog, setDialog] = useState<SourceDialogRequest | null>(null);
+
+  // Controlled, so that opening is this component's decision rather than
+  // Radix's. See `closeOnly` and the anchor's onClick below.
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  /**
+   * Accepts Radix's requests to *close*, and declines its requests to open.
+   *
+   * `DropdownMenuTrigger` opens from `pointerdown`, which on touch fires the
+   * moment a finger lands — before the browser knows whether the gesture is a
+   * tap or the start of a scroll. Scrolling the shelf therefore opened a menu
+   * under the thumb on nearly every swipe.
+   *
+   * Opening moves to `click`, which the browser does not fire when a touch
+   * turns into a scroll — so the distinction is made by the platform, with no
+   * movement threshold of our own to tune. Every *close* still comes from
+   * Radix: outside press, Escape, and selecting an item all route here.
+   */
+  function closeOnly(next: boolean) {
+    if (!next) setMenuOpen(false);
+  }
 
   const title = entry.media_titles;
   const sources = entry.entry_sources;
@@ -118,29 +140,37 @@ export function EntryCard({
     // side under this wrapper instead, which is what the cover's hover zoom
     // keys off and what the read link positions against.
     <div className="group/card relative">
-      <DropdownMenu>
+      <DropdownMenu open={menuOpen} onOpenChange={closeOnly}>
         <DropdownMenuTrigger asChild>
-          {/* A real link that opens the menu on a plain click.
+          {/* A real link that opens the menu on a completed click.
 
-          Radix opens the menu from `pointerdown` and already ignores
-          right-click, middle-click and ctrl+click, so those reach the browser
-          untouched — "Open link in new tab" works, and so does a middle-click.
-          Cmd- and shift-click it does *not* ignore, so `onPointerDown` cancels
-          it for those (a prevented default makes Radix's composed handler
-          stand down) and `onClick` leaves the navigation alone.
+          Every gesture that means "open this somewhere else" is left to the
+          browser: right-click gets the native menu, middle-click and the
+          modifier combinations get a new tab or window. None of them produces
+          a plain `click`, so none of them opens the menu — the check below is
+          what keeps a cmd-click from doing both.
 
-          A plain left click is the reverse: the menu opens, so the navigation
-          has to be cancelled or the card would do both.
+          A plain click is the reverse: the menu opens, so the navigation has
+          to be cancelled or the card would do both.
+
+          Keyboard opens it here too. Radix asks to toggle on Enter, Space and
+          ArrowDown, but `closeOnly` declines every open it is asked for, so
+          `onKeyDown` does it directly — Radix still cancels the navigation
+          those keys would otherwise cause on an anchor.
 
           The href is real, which is the point — a card can be opened in a new
           tab, and its destination is visible in the status bar on hover. */}
           <a
             href={`/entry/${entry.id}`}
-            onPointerDown={(event) => {
-              if (opensElsewhere(event)) event.preventDefault();
-            }}
             onClick={(event) => {
-              if (!opensElsewhere(event)) event.preventDefault();
+              if (opensElsewhere(event)) return;
+              event.preventDefault();
+              setMenuOpen(true);
+            }}
+            onKeyDown={(event) => {
+              if (["Enter", " ", "ArrowDown"].includes(event.key)) {
+                setMenuOpen(true);
+              }
             }}
             className="group block w-full text-left focus-visible:outline-none"
             aria-label={`${title.title} — open quick actions`}

@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -94,6 +94,54 @@ describe("entry card quick-access menu", () => {
     await openMenu();
     expect(await screen.findByRole("menu")).toBeInTheDocument();
   });
+
+  /**
+   * The scroll bug this guards.
+   *
+   * Radix's trigger opens from `pointerdown`, which on touch fires the moment
+   * a finger lands — before the browser knows a swipe from a tap. Scrolling
+   * the shelf opened a menu under the thumb on nearly every swipe.
+   *
+   * Opening moved to `click`, which a touch that turns into a scroll never
+   * produces. A bare pointer-down must therefore leave the menu shut.
+   */
+  it("stays shut on pointer-down alone, so a swipe can scroll past", () => {
+    render(<EntryCard entry={row()} topSources={TOP_SOURCES} />);
+
+    fireEvent.pointerDown(cardTrigger(), { button: 0, ctrlKey: false });
+
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  // The same gesture end to end: press the card, drag away, release. No click
+  // is produced, so nothing opens.
+  it("stays shut when a press on a card is dragged away and released", async () => {
+    const user = userEvent.setup();
+    render(<EntryCard entry={row()} topSources={TOP_SOURCES} />);
+
+    await user.pointer([
+      { keys: "[MouseLeft>]", target: cardTrigger() },
+      { target: document.body },
+      { keys: "[/MouseLeft]" },
+    ]);
+
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  // Keyboard still reaches the menu — Radix toggles on these keys, and the
+  // controlled open has to let that through rather than swallowing it.
+  it.each(["{Enter}", "{ }", "{ArrowDown}"])(
+    "opens from the keyboard with %s",
+    async (key) => {
+      const user = userEvent.setup();
+      render(<EntryCard entry={row()} topSources={TOP_SOURCES} />);
+
+      cardTrigger().focus();
+      await user.keyboard(key);
+
+      expect(await screen.findByRole("menu")).toBeInTheDocument();
+    },
+  );
 
   it("is a real link to the entry page as well as the menu trigger", () => {
     render(<EntryCard entry={row()} />);
