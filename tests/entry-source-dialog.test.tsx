@@ -52,6 +52,8 @@ const ATTACHED: EntrySource[] = [
     is_official: true,
     is_paid: false,
     is_hiatus: false,
+    is_owned: true,
+    chapters_owned: 20,
     sources: { id: 1, name: "Tapas" },
   },
 ];
@@ -126,6 +128,67 @@ describe("entry source dialog", () => {
     );
     expect(screen.getByLabelText(/Chapters read/)).toHaveValue(12);
     expect(screen.getByLabelText("Primary source")).toBeChecked();
+    expect(screen.getByLabelText("Owned")).toBeChecked();
+    expect(screen.getByLabelText("Chapters owned")).toHaveValue(20);
+  });
+
+  it("submits ownership as its own flag and count", async () => {
+    const { user } = setup({ mode: "add" });
+
+    await user.selectOptions(screen.getByLabelText("Source"), "2");
+    await user.click(screen.getByLabelText("Owned"));
+    await user.type(screen.getByLabelText("Chapters owned"), "40");
+    await user.click(screen.getByRole("button", { name: "Add" }));
+
+    await vi.waitFor(() => expect(addEntrySource).toHaveBeenCalledOnce());
+    const formData = addEntrySource.mock.calls[0][1];
+    expect(formData.get("is_owned")).toBe("on");
+    expect(formData.get("chapters_owned")).toBe("40");
+  });
+
+  // Two boxes, not one: the source charging money and the user having paid it
+  // are different facts, and a coin-gated app you have never bought from is
+  // the case the library toggle exists to surface.
+  it("keeps paid and owned as independent flags", async () => {
+    const { user } = setup({ mode: "add" });
+
+    await user.selectOptions(screen.getByLabelText("Source"), "2");
+    await user.click(screen.getByLabelText("Paid"));
+    await user.click(screen.getByRole("button", { name: "Add" }));
+
+    await vi.waitFor(() => expect(addEntrySource).toHaveBeenCalledOnce());
+    const formData = addEntrySource.mock.calls[0][1];
+    expect(formData.get("is_paid")).toBe("on");
+    expect(formData.get("is_owned")).toBeNull();
+  });
+
+  // The count field is always rendered rather than revealed by the Owned box.
+  // Were it conditional, unticking Owned would unmount the input, the count
+  // would submit as empty, and a hand-entered number would be gone.
+  it("keeps the chapter count when the owned box is unticked", async () => {
+    const { user } = setup({ mode: "edit", entrySourceId: 55 });
+
+    await user.click(screen.getByLabelText("Owned"));
+    expect(screen.getByLabelText("Owned")).not.toBeChecked();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await vi.waitFor(() => expect(updateEntrySource).toHaveBeenCalledOnce());
+    const formData = updateEntrySource.mock.calls[0][1];
+    expect(formData.get("is_owned")).toBeNull();
+    expect(formData.get("chapters_owned")).toBe("20");
+  });
+
+  // Blank is "owned, not counted" rather than "owns none" — the action turns
+  // an empty string into null, which 0 would misreport.
+  it("submits an empty count rather than a zero when it is left blank", async () => {
+    const { user } = setup({ mode: "add" });
+
+    await user.selectOptions(screen.getByLabelText("Source"), "2");
+    await user.click(screen.getByLabelText("Owned"));
+    await user.click(screen.getByRole("button", { name: "Add" }));
+
+    await vi.waitFor(() => expect(addEntrySource).toHaveBeenCalledOnce());
+    expect(addEntrySource.mock.calls[0][1].get("chapters_owned")).toBe("");
   });
 
   it("does not offer to change which source an existing row points at", () => {

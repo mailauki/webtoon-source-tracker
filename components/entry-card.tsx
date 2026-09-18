@@ -13,11 +13,12 @@ import { EntrySourceDialog } from "@/components/entry-source-dialog";
 import {
   HiatusBadge,
   NoSourceBadge,
+  OwnedBadge,
   SourceBadge,
 } from "@/components/source-badge";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import type { LibraryRow } from "@/lib/data/entries";
-import { isOnHiatus } from "@/lib/data/pick-random";
+import { isOnHiatus, isOwned } from "@/lib/data/pick-random";
 import type { RankedSource } from "@/lib/data/rank-sources";
 import type { Source } from "@/lib/data/rank-sources";
 import { readingLink } from "@/lib/data/source-links";
@@ -61,6 +62,10 @@ export function EntryCard({
   // Only when every source has paused — see isOnHiatus.
   const onHiatus = isOnHiatus(entry);
 
+  // Owned anywhere is owned — see isOwned. Can be true alongside onHiatus:
+  // a series you bought and that has since stopped is both.
+  const owned = isOwned(entry);
+
   // Where to read this, if anywhere is recorded. See readingLink.
   const readAt = readingLink(sources);
 
@@ -99,6 +104,10 @@ export function EntryCard({
               <div className="absolute inset-x-0 top-0 flex flex-wrap gap-1 p-1.5">
                 {sources.length === 0 ? <NoSourceBadge overlay /> : null}
                 {onHiatus ? <HiatusBadge overlay /> : null}
+                {/* Last of the three, so the states that need acting on —
+                    nothing recorded, or nothing updating — stay leftmost.
+                    Owning something is settled news. */}
+                {owned ? <OwnedBadge overlay /> : null}
               </div>
 
               <div className="absolute inset-x-0 bottom-0 flex flex-col gap-1 p-2">
@@ -118,6 +127,7 @@ export function EntryCard({
                           isPaid: es.is_paid,
                           isOfficial: es.is_official,
                           isHiatus: es.is_hiatus,
+                          isOwned: es.is_owned,
                         }}
                       />
                     ) : null,

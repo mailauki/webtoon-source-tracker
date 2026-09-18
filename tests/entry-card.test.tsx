@@ -34,6 +34,8 @@ function source(overrides: Record<string, unknown> = {}): Attachment {
     is_paid: false,
     is_official: true,
     is_hiatus: false,
+    is_owned: false,
+    chapters_owned: null,
     sources: { id: 1, name: "Tapas" },
     ...overrides,
   } as unknown as Attachment;
@@ -137,5 +139,84 @@ describe("readingLink", () => {
 
   it("returns nothing for an entry with no sources", () => {
     expect(readingLink([])).toBeNull();
+  });
+});
+
+/** The badge, by its own tooltip — the pill icons carry the same word. */
+const ownedBadge = () =>
+  screen.queryByTitle("Owned at one or more of your sources");
+const hiatusBadge = () => screen.queryByTitle("On hiatus at every source");
+
+describe("card owned badge", () => {
+  it("badges a title owned at its only source", () => {
+    render(<EntryCard entry={row([source({ is_owned: true })])} />);
+    expect(ownedBadge()).toBeInTheDocument();
+  });
+
+  // The `some` rule, from the card's side: one bought copy is enough, and
+  // recording a second place you read it must not take the badge away.
+  it("badges a title owned at only one of several sources", () => {
+    render(
+      <EntryCard
+        entry={row([
+          source({ id: 1, is_owned: false }),
+          source({ id: 2, is_owned: true, sources: { id: 2, name: "Webtoon" } }),
+        ])}
+      />,
+    );
+    expect(ownedBadge()).toBeInTheDocument();
+  });
+
+  it("does not badge a title owned nowhere", () => {
+    render(<EntryCard entry={row([source()])} />);
+    expect(ownedBadge()).not.toBeInTheDocument();
+  });
+
+  it("does not badge a title with no sources", () => {
+    // Ownership hangs off a source, so there is nothing to have been bought.
+    render(<EntryCard entry={row()} />);
+    expect(ownedBadge()).not.toBeInTheDocument();
+  });
+
+  // A counted source is still an owned source, and an uncounted one is too —
+  // `is_owned` is the flag, `chapters_owned` only the amount.
+  it("badges regardless of whether the chapters are counted", () => {
+    render(
+      <EntryCard entry={row([source({ is_owned: true, chapters_owned: 40 })])} />,
+    );
+    expect(ownedBadge()).toBeInTheDocument();
+    cleanup();
+
+    render(
+      <EntryCard
+        entry={row([source({ is_owned: true, chapters_owned: null })])}
+      />,
+    );
+    expect(ownedBadge()).toBeInTheDocument();
+  });
+
+  // Unlike No source and Hiatus, these two are not mutually exclusive: a
+  // series you bought and that has since stopped updating is both.
+  it("shows the owned and hiatus badges together", () => {
+    render(
+      <EntryCard entry={row([source({ is_owned: true, is_hiatus: true })])} />,
+    );
+
+    expect(ownedBadge()).toBeInTheDocument();
+    expect(hiatusBadge()).toBeInTheDocument();
+  });
+
+  // Paid is a property of the source; owned is what the user did about it.
+  // The pill's tooltip is what keeps the two readable on the card.
+  it("names both paid and owned on the source pill", () => {
+    render(
+      <EntryCard entry={row([source({ is_paid: true, is_owned: true })])} />,
+    );
+    expect(screen.getByTitle("Tapas · paid · owned")).toBeInTheDocument();
+  });
+
+  it("names paid alone on a source the user has not bought from", () => {
+    render(<EntryCard entry={row([source({ is_paid: true })])} />);
+    expect(screen.getByTitle("Tapas · paid")).toBeInTheDocument();
   });
 });

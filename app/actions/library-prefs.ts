@@ -30,9 +30,10 @@ const prefsSchema = z.object({
   // resolveSort() falls back to the default for anything it does not
   // recognise, which is the behaviour we want for a stale preference too.
   sort: prefSchema.optional(),
-  // A plain boolean, not the text-with-sentinel the chips use: the toggle has
+  // Plain booleans, not the text-with-sentinel the chips use: a toggle has
   // only two meaningful states, so there is no "never chose" to preserve.
   hideHiatus: z.boolean().optional(),
+  ownedOnly: z.boolean().optional(),
 });
 
 export type LibraryPrefsPatch = z.input<typeof prefsSchema>;
@@ -53,6 +54,7 @@ export async function saveLibraryPrefs(patch: LibraryPrefsPatch) {
     source?: string;
     sort?: string | null;
     hide_hiatus?: boolean;
+    owned_only?: boolean;
   } = {
     user_id: userId,
   };
@@ -71,6 +73,11 @@ export async function saveLibraryPrefs(patch: LibraryPrefsPatch) {
   // an empty value to normalise away.
   if (parsed.data.hideHiatus !== undefined) {
     row.hide_hiatus = parsed.data.hideHiatus;
+  }
+  // Same, read the other way: false is "show the whole shelf again", which is
+  // as deliberate a choice as narrowing to what the user owns.
+  if (parsed.data.ownedOnly !== undefined) {
+    row.owned_only = parsed.data.ownedOnly;
   }
 
   if (Object.keys(row).length === 1) return;

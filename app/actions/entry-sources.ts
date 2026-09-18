@@ -28,11 +28,15 @@ const addSchema = z.object({
   chaptersRead: z
     .union([z.literal(""), z.coerce.number().int().min(0)])
     .optional(),
+  chaptersOwned: z
+    .union([z.literal(""), z.coerce.number().int().min(0)])
+    .optional(),
   notes: z.string().max(2000).optional(),
   isPrimary: z.coerce.boolean().optional(),
   isOfficial: z.coerce.boolean().optional(),
   isPaid: z.coerce.boolean().optional(),
   isHiatus: z.coerce.boolean().optional(),
+  isOwned: z.coerce.boolean().optional(),
 });
 
 function readFlags(formData: FormData) {
@@ -41,6 +45,7 @@ function readFlags(formData: FormData) {
     isOfficial: formData.get("is_official") === "on",
     isPaid: formData.get("is_paid") === "on",
     isHiatus: formData.get("is_hiatus") === "on",
+    isOwned: formData.get("is_owned") === "on",
   };
 }
 
@@ -76,6 +81,7 @@ export async function addEntrySource(
     sourceId: formData.get("source_id"),
     url: formData.get("url") ?? "",
     chaptersRead: formData.get("chapters_read") ?? "",
+    chaptersOwned: formData.get("chapters_owned") ?? "",
     notes: formData.get("notes") ?? "",
     ...readFlags(formData),
   });
@@ -89,11 +95,13 @@ export async function addEntrySource(
     sourceId,
     url,
     chaptersRead,
+    chaptersOwned,
     notes,
     isPrimary,
     isOfficial,
     isPaid,
     isHiatus,
+    isOwned,
   } = parsed.data;
 
   const supabase = await createClient();
@@ -108,11 +116,15 @@ export async function addEntrySource(
     source_id: sourceId,
     url: url || null,
     chapters_read: chaptersRead === "" ? null : (chaptersRead ?? null),
+    // Blank stays null rather than becoming 0: "owned, not counted" is a real
+    // answer, and 0 would claim the opposite.
+    chapters_owned: chaptersOwned === "" ? null : (chaptersOwned ?? null),
     notes: notes || null,
     is_primary: isPrimary ?? false,
     is_official: isOfficial ?? true,
     is_paid: isPaid ?? false,
     is_hiatus: isHiatus ?? false,
+    is_owned: isOwned ?? false,
   });
 
   if (error) {
@@ -141,17 +153,22 @@ export async function updateEntrySource(
       chaptersRead: z
         .union([z.literal(""), z.coerce.number().int().min(0)])
         .optional(),
+      chaptersOwned: z
+        .union([z.literal(""), z.coerce.number().int().min(0)])
+        .optional(),
       notes: z.string().max(2000).optional(),
       isPrimary: z.coerce.boolean().optional(),
       isOfficial: z.coerce.boolean().optional(),
       isPaid: z.coerce.boolean().optional(),
       isHiatus: z.coerce.boolean().optional(),
+      isOwned: z.coerce.boolean().optional(),
     })
     .safeParse({
       id: formData.get("id"),
       entryId: formData.get("entry_id"),
       url: formData.get("url") ?? "",
       chaptersRead: formData.get("chapters_read") ?? "",
+      chaptersOwned: formData.get("chapters_owned") ?? "",
       notes: formData.get("notes") ?? "",
       ...readFlags(formData),
     });
@@ -165,11 +182,13 @@ export async function updateEntrySource(
     entryId,
     url,
     chaptersRead,
+    chaptersOwned,
     notes,
     isPrimary,
     isOfficial,
     isPaid,
     isHiatus,
+    isOwned,
   } = parsed.data;
 
   const supabase = await createClient();
@@ -181,11 +200,13 @@ export async function updateEntrySource(
     .update({
       url: url || null,
       chapters_read: chaptersRead === "" ? null : (chaptersRead ?? null),
+      chapters_owned: chaptersOwned === "" ? null : (chaptersOwned ?? null),
       notes: notes || null,
       is_primary: isPrimary ?? false,
       is_official: isOfficial ?? true,
       is_paid: isPaid ?? false,
       is_hiatus: isHiatus ?? false,
+      is_owned: isOwned ?? false,
     })
     .eq("id", id);
 

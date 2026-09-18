@@ -1,4 +1,4 @@
-import { Crown, Lock, PauseCircle } from "lucide-react";
+import { BookmarkCheck, Crown, Lock, PauseCircle } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -9,6 +9,7 @@ export type SourceBadgeData = {
   isPaid?: boolean;
   isOfficial?: boolean;
   isHiatus?: boolean;
+  isOwned?: boolean;
 };
 
 /**
@@ -37,6 +38,7 @@ export function SourceBadge({
         source.isPaid ? "paid" : null,
         source.isOfficial === false ? "unofficial" : null,
         source.isHiatus ? "on hiatus" : null,
+        source.isOwned ? "owned" : null,
       ]
         .filter(Boolean)
         .join(" · ")}
@@ -50,6 +52,12 @@ export function SourceBadge({
       ) : null}
       {source.isHiatus ? (
         <PauseCircle className="size-2.5" aria-label="On hiatus" />
+      ) : null}
+      {/* Sits next to the lock rather than replacing it: `isPaid` says the
+          source charges and `isOwned` says the user paid, and a pill showing
+          both is the common case on a coin-gated app. */}
+      {source.isOwned ? (
+        <BookmarkCheck className="size-2.5" aria-label="Owned" />
       ) : null}
     </Badge>
   );
@@ -76,6 +84,31 @@ export function HiatusBadge({ overlay = false }: { overlay?: boolean }) {
       title="On hiatus at every source"
     >
       Hiatus
+    </Badge>
+  );
+}
+
+/**
+ * The user owns this title somewhere they read it.
+ *
+ * `some`, not `every` — see isOwned. One bought copy is enough to say the
+ * title is owned, and attaching a second unbought source must not take the
+ * badge away.
+ *
+ * Not mutually exclusive with HiatusBadge: owning a series that has since
+ * paused is ordinary, and both facts are worth saying. It is mutually
+ * exclusive with NoSourceBadge by construction — ownership is recorded on a
+ * source, so a title with none cannot be owned.
+ */
+export function OwnedBadge({ overlay = false }: { overlay?: boolean }) {
+  return (
+    <Badge
+      variant={overlay ? "owned" : "source"}
+      className="gap-1"
+      title="Owned at one or more of your sources"
+    >
+      <BookmarkCheck className="size-2.5" aria-hidden />
+      Owned
     </Badge>
   );
 }

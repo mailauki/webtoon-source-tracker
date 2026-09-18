@@ -53,15 +53,23 @@ import type { Source } from "@/lib/data/rank-sources";
  * The chips do NOT narrow search results — see LibraryGrid below for why.
  */
 
-type Filters = { status: string; source: string; hideHiatus: boolean };
+type Filters = {
+  status: string;
+  source: string;
+  hideHiatus: boolean;
+  ownedOnly: boolean;
+};
 type State = Filters & { sort: Sort };
 
 /**
- * What the provider is seeded with. `hideHiatus` is optional because off is
+ * What the provider is seeded with. Both toggles are optional because off is
  * the default everywhere: a caller that has no stored preference — and every
- * caller that predates the toggle — should show the whole shelf.
+ * caller that predates either toggle — should show the whole shelf.
  */
-type InitialState = Omit<State, "hideHiatus"> & { hideHiatus?: boolean };
+type InitialState = Omit<State, "hideHiatus" | "ownedOnly"> & {
+  hideHiatus?: boolean;
+  ownedOnly?: boolean;
+};
 
 type LibraryFilterContext = State & {
   /** Chip values are "" for All; stored as the explicit `all` sentinel. */
@@ -69,6 +77,8 @@ type LibraryFilterContext = State & {
   setSource: (value: string) => void;
   /** The hiatus toggle. Unlike the chips this is a boolean, not a sentinel. */
   setHideHiatus: (value: boolean) => void;
+  /** The owned toggle. A boolean too, and positive where hiatus subtracts. */
+  setOwnedOnly: (value: boolean) => void;
   setSort: (value: Sort) => void;
   /**
    * What the user has typed, verbatim. The field renders this so the caret
@@ -129,6 +139,7 @@ export function LibraryFilters({
   // rest of the session, and the server value is only the seed.
   const [state, setState] = useState<State>({
     hideHiatus: false,
+    ownedOnly: false,
     ...initial,
   });
 
@@ -177,6 +188,7 @@ export function LibraryFilters({
         setStatus: (status) => update({ status }),
         setSource: (source) => update({ source }),
         setHideHiatus: (hideHiatus) => update({ hideHiatus }),
+        setOwnedOnly: (ownedOnly) => update({ ownedOnly }),
         setSort: updateSort,
         query,
         setQuery,
@@ -235,7 +247,7 @@ export function LibraryGrid({
   /** A search matched nothing. Falls back to `emptyUnfiltered` if omitted. */
   emptySearch?: React.ReactNode;
 }) {
-  const { status, source, hideHiatus, sort, deferredQuery } =
+  const { status, source, hideHiatus, ownedOnly, sort, deferredQuery } =
     useLibraryFilters();
   const term = deferredQuery.trim().toLowerCase();
   const searching = term !== "";
@@ -250,7 +262,7 @@ export function LibraryGrid({
     ? entries.filter((entry) => matchesTitle(entry, term))
     : // The same function the dice draws from, so the shelf and the roll can
       // never disagree about which titles a chip selection covers.
-      selectCandidates(entries, { status, source, hideHiatus });
+      selectCandidates(entries, { status, source, hideHiatus, ownedOnly });
 
   // Sorting applies to search results too. The chips are skipped during a
   // search because they would hide the match; an order hides nothing, and a
@@ -261,7 +273,8 @@ export function LibraryGrid({
     // While searching the chips are not applied, so a miss is never "your
     // filters hid it" — it is simply not on the shelf.
     if (searching) return <>{emptySearch ?? emptyUnfiltered}</>;
-    return <>{status || source || hideHiatus ? emptyFiltered : emptyUnfiltered}</>;
+    const narrowed = status || source || hideHiatus || ownedOnly;
+    return <>{narrowed ? emptyFiltered : emptyUnfiltered}</>;
   }
 
   return (

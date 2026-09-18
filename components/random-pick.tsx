@@ -64,7 +64,7 @@ const MODES: { mode: PickMode; label: string; drawnFrom: string }[] = [
  * never disagree about what "Reading + Webtoon" covers.
  */
 export function RandomPick() {
-  const { entries, status, source, hideHiatus, deferredQuery } =
+  const { entries, status, source, hideHiatus, ownedOnly, deferredQuery } =
     useLibraryFilters();
 
   const [picked, setPicked] = useState<LibraryRow | null>(null);
@@ -75,10 +75,12 @@ export function RandomPick() {
   // it stays valid across the re-renders that bring new row objects.
   const [seen, setSeen] = useState<Set<number>>(new Set());
 
-  // `hideHiatus` rides along with the chips: the toggle is the user saying a
-  // paused title is not worth their time, which is as true of a recommendation
-  // as it is of the shelf.
-  const filters = { status, source, hideHiatus };
+  // Both toggles ride along with the chips: they are the user saying a paused
+  // title is not worth their time, or that they only want what they already
+  // own — as true of a recommendation as it is of the shelf. Unlike the chips,
+  // these still apply in the two modes that reach past them (see
+  // selectByMode), because they rule titles out rather than choosing a view.
+  const filters = { status, source, hideHiatus, ownedOnly };
   const pools = MODES.map((m) => ({
     ...m,
     candidates: selectByMode(entries, m.mode, filters),

@@ -163,12 +163,14 @@ export type Database = {
       }
       entry_sources: {
         Row: {
+          chapters_owned: number | null
           chapters_read: number | null
           created_at: string
           entry_id: number
           id: number
           is_hiatus: boolean
           is_official: boolean
+          is_owned: boolean
           is_paid: boolean
           is_primary: boolean
           notes: string | null
@@ -178,12 +180,14 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          chapters_owned?: number | null
           chapters_read?: number | null
           created_at?: string
           entry_id: number
           id?: never
           is_hiatus?: boolean
           is_official?: boolean
+          is_owned?: boolean
           is_paid?: boolean
           is_primary?: boolean
           notes?: string | null
@@ -193,12 +197,14 @@ export type Database = {
           user_id: string
         }
         Update: {
+          chapters_owned?: number | null
           chapters_read?: number | null
           created_at?: string
           entry_id?: number
           id?: never
           is_hiatus?: boolean
           is_official?: boolean
+          is_owned?: boolean
           is_paid?: boolean
           is_primary?: boolean
           notes?: string | null
@@ -234,6 +240,7 @@ export type Database = {
       library_prefs: {
         Row: {
           hide_hiatus: boolean
+          owned_only: boolean
           sort: string | null
           source: string | null
           status: string | null
@@ -242,6 +249,7 @@ export type Database = {
         }
         Insert: {
           hide_hiatus?: boolean
+          owned_only?: boolean
           sort?: string | null
           source?: string | null
           status?: string | null
@@ -250,6 +258,7 @@ export type Database = {
         }
         Update: {
           hide_hiatus?: boolean
+          owned_only?: boolean
           sort?: string | null
           source?: string | null
           status?: string | null

@@ -38,6 +38,15 @@ const badgeVariants = cva(
         // treatment vanished against pale cover art.
         hiatus:
           "bg-slate-900/85 text-white rounded-badge px-1.5 text-[10px] font-bold backdrop-blur-sm",
+        // owned: the "you bought this" marker. Shares `hiatus`'s solid-ground
+        // shape for the same reason — the frosted treatment vanishes against
+        // pale cover art — but carries the brand amber rather than slate.
+        // Alone among the three it reports something the user did rather than
+        // something that happened to the title, and amber is the app's own
+        // voice. Still not `alert`: red stays with the missing-source gap,
+        // which is the only badge here that asks to be acted on.
+        owned:
+          "bg-brand/90 text-brand-foreground rounded-badge px-1.5 text-[10px] font-bold backdrop-blur-sm",
       },
     },
     defaultVariants: {

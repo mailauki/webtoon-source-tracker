@@ -18,6 +18,8 @@ export type EntrySource = {
   is_official: boolean;
   is_paid: boolean;
   is_hiatus: boolean;
+  is_owned: boolean;
+  chapters_owned: number | null;
   sources: { id: number; name: string } | null;
 };
 
@@ -31,18 +33,22 @@ export type EntrySource = {
 export function SourceFields({ source }: { source?: EntrySource }) {
   return (
     <>
+      {/* The link gets the full width it wants; the two counts pair off
+          beneath it, since read-here and owned-here are the same kind of
+          answer about the same source and are usually filled in together. */}
+      <div className="grid gap-2">
+        <Label htmlFor={`url-${source?.id ?? "new"}`}>Link (optional)</Label>
+        <Input
+          id={`url-${source?.id ?? "new"}`}
+          name="url"
+          type="url"
+          inputMode="url"
+          defaultValue={source?.url ?? ""}
+          placeholder="https://…"
+        />
+      </div>
+
       <div className="grid gap-2 sm:grid-cols-2">
-        <div className="grid gap-2">
-          <Label htmlFor={`url-${source?.id ?? "new"}`}>Link (optional)</Label>
-          <Input
-            id={`url-${source?.id ?? "new"}`}
-            name="url"
-            type="url"
-            inputMode="url"
-            defaultValue={source?.url ?? ""}
-            placeholder="https://…"
-          />
-        </div>
         <div className="grid gap-2">
           <Label htmlFor={`chapters-${source?.id ?? "new"}`}>
             Chapters read here
@@ -53,6 +59,28 @@ export function SourceFields({ source }: { source?: EntrySource }) {
             type="number"
             min={0}
             defaultValue={source?.chapters_read ?? ""}
+            placeholder="—"
+          />
+        </div>
+        {/* Always rendered, not revealed by the Owned box. Hiding it would
+            unmount the input, so the count would submit as empty and be
+            cleared the first time someone unticked Owned to see what it did —
+            and these numbers are hand-entered and unrecoverable.
+
+            Left blank it stays null, which reads as "owned, not counted"
+            rather than "owns none". Deliberately not bounded by the read
+            count: buying ahead of what you have read, and reading ahead of
+            what you own, are both ordinary. */}
+        <div className="grid gap-2">
+          <Label htmlFor={`chapters-owned-${source?.id ?? "new"}`}>
+            Chapters owned
+          </Label>
+          <Input
+            id={`chapters-owned-${source?.id ?? "new"}`}
+            name="chapters_owned"
+            type="number"
+            min={0}
+            defaultValue={source?.chapters_owned ?? ""}
             placeholder="—"
           />
         </div>
@@ -87,6 +115,10 @@ export function SourceFields({ source }: { source?: EntrySource }) {
           />
           Official
         </label>
+        {/* "Paid" is about the source — it charges money. "Owned" is about
+            the user — they paid it. A coin-gated app you have never bought
+            from is Paid and not Owned, which is the whole point of keeping
+            them as two boxes. */}
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -95,6 +127,15 @@ export function SourceFields({ source }: { source?: EntrySource }) {
             className="size-4 accent-[var(--brand)]"
           />
           Paid
+        </label>
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            name="is_owned"
+            defaultChecked={source?.is_owned ?? false}
+            className="size-4 accent-[var(--brand)]"
+          />
+          Owned
         </label>
         {/* Per source, not per title: a series can pause on one site and keep
             updating on another. */}
