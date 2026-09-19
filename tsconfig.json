@@ -9,6 +9,13 @@
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",
+    // scripts/*.ts run under plain `node --experimental-strip-types`, whose
+    // ESM resolver demands the extension a bundler infers. Without this, a
+    // script cannot import a lib module by value at all — which is why
+    // scripts/backfill-genres.ts had to reimplement the logic it shares.
+    // Safe alongside "noEmit": nothing here is compiled to a .js that would
+    // carry the specifier forward.
+    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "react-jsx",
