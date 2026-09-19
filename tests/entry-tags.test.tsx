@@ -188,7 +188,27 @@ describe("tags on the entry page", () => {
 
     await user.click(screen.getByRole("button", { name: /Remove tag Romance/i }));
 
-    expect(toastError).toHaveBeenCalledWith("Something went wrong.");
+    // Asserted first, and separately, so that a future failure says which half
+    // broke: the click never reaching the action, or the action resolving
+    // without the toast. The bare toast assertion could not tell them apart.
+    expect(untagTitle).toHaveBeenCalledOnce();
+
+    // `waitFor` rather than a bare expect, unlike the two assertions above.
+    // Those only need the submit to dispatch, which `user.click` flushes; this
+    // one needs the action to resolve, React to re-render on the new state,
+    // and RemovableTagChip's effect to run off it — a chain `user.click` has
+    // been seen not to cover. Once in roughly ten full-suite runs this
+    // assertion found zero calls while passing every time in isolation.
+    //
+    // The cause is not established: injecting a 0ms and a 50ms delay into the
+    // action's resolution does not reproduce it, so this is tolerance for an
+    // extra tick, not a fix for a known race. It weakens nothing — a toast
+    // that never fires still fails, just after the timeout instead of
+    // immediately. Matches the pattern tests/entry-card-menu.test.tsx already
+    // uses for post-action assertions.
+    await vi.waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith("Something went wrong."),
+    );
   });
 
   // --- the Edit toggle -----------------------------------------------------
