@@ -3,7 +3,6 @@ import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { HiatusFilter } from "@/components/hiatus-filter";
 import { LibraryFilters, LibraryGrid } from "@/components/library-grid";
-import { MalSearchResults } from "@/components/mal-search-results";
 import { OwnedFilter } from "@/components/owned-filter";
 import { RandomPick } from "@/components/random-pick";
 import { SortFilter } from "@/components/sort-filter";
@@ -65,12 +64,11 @@ export default async function LibraryPage() {
     );
   }
 
-  // Status, source, sort and now search are all applied in the browser. The
-  // rows below carry every field they narrow on, so none of them needs a
-  // round-trip — and for search that matters twice over: re-rendering this
-  // page per keystroke was remounting the input and closing the mobile
-  // keyboard mid-word. This page takes no search params at all now; the term
-  // lives and dies in <LibraryFilters>.
+  // Status, source and sort are all applied in the browser. The rows below
+  // carry every field they narrow on, so none of them needs a round-trip.
+  // This page takes no search params: searching moved to /search, which does
+  // both halves of it — this shelf and the MyAnimeList catalog — off one
+  // term.
   const prefs = await getLibraryPrefs();
   const activeStatus = resolveActiveChip(prefs?.status);
   const activeSource = resolveActiveChip(prefs?.source);
@@ -113,7 +111,6 @@ export default async function LibraryPage() {
       entries={entries}
     >
       <AppShell
-        searchable
         secondaryRow={
           // All of these live in the secondary row: the chips narrow the
           // shelf and the controls opposite act on what is left, and none is
@@ -144,10 +141,8 @@ export default async function LibraryPage() {
             <div>
               <h1 className="font-display text-2xl font-bold">Library</h1>
               {/* The whole shelf, deliberately — this is a standing fact
-                  about the library, and recounting it per keystroke would put
-                  a number that changes under every character next to a field
-                  the user is still typing in. The grid below shows what
-                  matches. */}
+                  about the library, not a running count of what the chips
+                  have left. The grid below shows that. */}
               <p className="text-sm text-muted-foreground">
                 {entries.length} {entries.length === 1 ? "title" : "titles"} ·
                 MyAnimeList as {connection.mal_username}
@@ -181,36 +176,20 @@ export default async function LibraryPage() {
             emptyFiltered={
               <EmptyState
                 title="No titles match"
-                body="Try a different filter or clear the search."
+                body="Try a different filter, or look the title up on Search."
               />
             }
-            // All three empty states are supplied as rendered nodes and the
-            // grid picks between them: which one applies depends on the live
-            // query, which is client state now, and a node cannot be chosen
-            // here without re-rendering this page per keystroke.
+            // Both empty states are supplied as rendered nodes and the grid
+            // picks between them: which one applies depends on the chips,
+            // which are client state, and a node cannot be chosen here
+            // without re-rendering this page per click.
             emptyUnfiltered={
               <EmptyState
                 title="Nothing synced yet"
                 body="Hit Sync to pull your list from MyAnimeList."
               />
             }
-            // A search that matches nothing on the shelf: the copy stays
-            // short, because the MAL button below is the actual next step and
-            // pointing at Sync would steer the user away from it. It names no
-            // results, since none have been fetched until that button is
-            // pressed.
-            emptySearch={
-              <EmptyState
-                title="Not in your library"
-                body="Nothing here matches. Search MyAnimeList below to add it."
-              />
-            }
           />
-
-          {/* Searching is also how a title gets added, so the offer to search
-              MyAnimeList sits under the shelf whenever a query is active. The
-              catalog itself is only queried once that button is pressed. */}
-          <MalSearchResults />
         </div>
       </AppShell>
     </LibraryFilters>

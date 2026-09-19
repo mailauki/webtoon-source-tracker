@@ -28,7 +28,6 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-import { HeaderSearch } from "@/components/header-search";
 import { LibraryFilters } from "@/components/library-grid";
 import { RandomPick } from "@/components/random-pick";
 import { DEFAULT_SORT } from "@/lib/data/library-prefs";
@@ -91,19 +90,8 @@ function setup({
       initial={{ status, source, hideHiatus, sort: DEFAULT_SORT }}
       entries={entries}
     >
-      {/* The query has no seed — it is typed, so the field has to be here. */}
-      <HeaderSearch />
       <RandomPick />
     </LibraryFilters>,
-  );
-}
-
-/** Puts the provider in the searching state the only way a user can. */
-async function search(q: string) {
-  await userEvent.click(screen.getByRole("button", { name: "Search titles" }));
-  await userEvent.type(
-    screen.getByRole("searchbox", { name: "Search titles" }),
-    q,
   );
 }
 
@@ -200,17 +188,6 @@ describe("RandomPick", () => {
       "href",
       `/entry/${id}`,
     );
-  });
-
-  // A search already bypasses the chips, and rolling a die against a title the
-  // user just typed by name is incoherent.
-  it("is not offered while a search is active", async () => {
-    setup();
-    await search("solo");
-
-    expect(
-      screen.queryByRole("button", { name: /surprise me/i }),
-    ).not.toBeInTheDocument();
   });
 
   it("is disabled when the filters leave nothing to pick from", () => {
@@ -427,18 +404,6 @@ describe("the mode buttons", () => {
 
     expect(dialogTitle()).not.toBe(first);
     expect(["Tower of God", "Bastard"]).toContain(first);
-  });
-
-  it("hides the whole banner during a search", async () => {
-    setup({ entries: SHELF });
-    await search("solo");
-
-    expect(
-      screen.queryByRole("button", { name: /from plan to read/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /haven't read in a while/i }),
-    ).not.toBeInTheDocument();
   });
 });
 

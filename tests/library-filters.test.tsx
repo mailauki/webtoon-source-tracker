@@ -8,9 +8,9 @@ const { saveLibraryPrefs } = vi.hoisted(() => ({
 }));
 vi.mock("@/app/actions/library-prefs", () => ({ saveLibraryPrefs }));
 
-// The query is client state and the URL is out of it entirely — nothing here
-// reads or writes `?q=`. next/navigation is still mocked because the tree
-// pulls it in; nothing under test calls it.
+// next/navigation is mocked because the tree pulls it in; nothing under test
+// calls it. The chips do not navigate — the selection is stored per user, so
+// there is no URL for them to write.
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }),
 }));
@@ -22,7 +22,6 @@ vi.mock("@/components/entry-card", () => ({
   ),
 }));
 
-import { HeaderSearch } from "@/components/header-search";
 import { HiatusFilter } from "@/components/hiatus-filter";
 import { LibraryFilters, LibraryGrid } from "@/components/library-grid";
 import { OwnedFilter } from "@/components/owned-filter";
@@ -55,8 +54,6 @@ function row(
   } as unknown as LibraryRow;
 }
 
-// Every row's title contains "title", so a search for it matches the whole
-// shelf — which is what the "search overrides the chips" tests assert on.
 const ROWS = [
   row(1, "reading", ["webtoon"]),
   row(2, "reading", []),
@@ -77,7 +74,6 @@ const SOURCES = [
 function setup(initial = { status: "", source: "" }) {
   return render(
     <LibraryFilters initial={{ sort: DEFAULT_SORT, ...initial }}>
-      <HeaderSearch />
       <StatusFilter statuses={STATUSES} />
       <SourceFilter sources={SOURCES} />
       <LibraryGrid
@@ -91,18 +87,6 @@ function setup(initial = { status: "", source: "" }) {
 
 const visibleIds = () =>
   screen.queryAllByTestId("entry").map((n) => Number(n.textContent));
-
-/**
- * Puts the grid in the searching state by typing, which is now the only way
- * in — the query has no seed, so it cannot be handed to the provider.
- */
-async function search(q: string) {
-  await userEvent.click(screen.getByRole("button", { name: "Search titles" }));
-  await userEvent.type(
-    screen.getByRole("searchbox", { name: "Search titles" }),
-    q,
-  );
-}
 
 /**
  * The chip a user would click.
@@ -167,44 +151,6 @@ describe("filtering", () => {
   });
 });
 
-/**
- * A search is a lookup of one title, not a view of the shelf, so the chips do
- * not apply to it. If they did, searching for something outside the current
- * filter would report it missing — and the MAL panel below would then offer to
- * add a title the user already owns.
- */
-describe("search overrides the chips", () => {
-  it("shows a match the active chips would otherwise hide", async () => {
-    setup({ status: "completed", source: "" });
-    await search("title");
-    // Without the override this would be [3] — only the completed row.
-    expect(visibleIds()).toEqual([1, 2, 3, 4]);
-  });
-
-  it("ignores the source chip too", async () => {
-    setup({ status: "", source: "webtoon" });
-    await search("title");
-    expect(visibleIds()).toEqual([1, 2, 3, 4]);
-  });
-
-  it("still applies the chips once the search is cleared", async () => {
-    setup({ status: "completed", source: "" });
-    await search("title");
-    expect(visibleIds()).toEqual([1, 2, 3, 4]);
-
-    await userEvent.clear(
-      screen.getByRole("searchbox", { name: "Search titles" }),
-    );
-    expect(visibleIds()).toEqual([3]);
-  });
-
-  it("treats a whitespace-only query as no search", async () => {
-    setup({ status: "completed", source: "" });
-    await search("   ");
-    expect(visibleIds()).toEqual([3]);
-  });
-});
-
 describe("empty states", () => {
   it("distinguishes 'nothing synced' from 'nothing matches'", async () => {
     setup();
@@ -217,14 +163,13 @@ describe("empty states", () => {
     expect(screen.queryByText("Nothing synced yet")).not.toBeInTheDocument();
   });
 
-  // While searching, the chips are not applied — so a miss is never "your
-  // filters hid it". The page renders the search-specific copy in that slot.
-  it("uses the unfiltered empty state during a search", async () => {
+  // An unfiltered shelf with nothing on it has not been synced — the chips
+  // cannot be what is hiding a title, because there is none.
+  it("uses the unfiltered empty state for an empty shelf", () => {
     render(
       <LibraryFilters
-        initial={{ status: "completed", source: "webtoon", sort: DEFAULT_SORT }}
+        initial={{ status: "", source: "", sort: DEFAULT_SORT }}
       >
-        <HeaderSearch />
         <StatusFilter statuses={STATUSES} />
         <SourceFilter sources={SOURCES} />
         <LibraryGrid
@@ -234,7 +179,6 @@ describe("empty states", () => {
         />
       </LibraryFilters>,
     );
-    await search("nonesuch");
 
     expect(screen.getByText("Nothing synced yet")).toBeInTheDocument();
     expect(screen.queryByText("No titles match")).not.toBeInTheDocument();
@@ -474,26 +418,5 @@ describe("owned only toggle", () => {
     // on it, the user just owns none of it. This is the case that makes
     // off-by-default matter.
     expect(screen.getByText("No titles match")).toBeInTheDocument();
-  });
-
-  it("does not narrow a search, which reaches past the toggles", async () => {
-    render(
-      <LibraryFilters initial={{ status: "", source: "", sort: DEFAULT_SORT }}>
-        <HeaderSearch />
-        <OwnedFilter />
-        <LibraryGrid
-          entries={SHELF}
-          emptyFiltered={<p>No titles match</p>}
-          emptyUnfiltered={<p>Nothing synced yet</p>}
-        />
-      </LibraryFilters>,
-    );
-
-    await userEvent.click(toggle());
-    await search("Title 9");
-
-    // 9 is owned nowhere, so the pressed toggle would hide it — but the user
-    // asked for it by name, and a search is a lookup rather than a view.
-    expect(visibleIds()).toEqual([9]);
   });
 });

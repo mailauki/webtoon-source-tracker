@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  createContext,
-  useContext,
-  useDeferredValue,
-  useState,
-  useTransition,
-} from "react";
+import { createContext, useContext, useState, useTransition } from "react";
 
 import { saveLibraryPrefs } from "@/app/actions/library-prefs";
 import { EntryCard } from "@/components/entry-card";
@@ -35,22 +29,11 @@ import type { Source } from "@/lib/data/rank-sources";
  * the page fetched, so narrowing them needs no extra query — the click is
  * instant and the save happens behind it.
  *
- * Search moved here for a second reason. It used to live in `?q=`, where the
- * server re-queried with an `ilike` and streamed a new grid — which meant
- * every debounced keystroke replaced the DOM under a focused input. On mobile
- * that dismisses the keyboard mid-word. The rows the page already fetched
- * carry their titles, so matching text needs no round-trip either; the query
- * is client state now and the grid narrows on the keystroke itself.
- *
- * The URL is out of it entirely: `?q=` is not read and no longer written.
- * Mirroring the term back into the URL kept a navigation on the typing path
- * for no one's benefit — nothing on screen read it back, both result sets run
- * off the state here, and a `router.replace` per settled term re-rendered the
- * page under a focused input for the sake of a link nobody follows. A search
- * is a transient lookup, not a location; dropping the write leaves the field
- * as the only thing that owns the term.
- *
- * The chips do NOT narrow search results — see LibraryGrid below for why.
+ * Search is deliberately NOT here. It briefly was — a field in the header
+ * filtering these same rows — but finding a title you already track and
+ * finding one to add are the same gesture, and only one of them belonged on
+ * this page. Both now live at /search, which searches this shelf and the
+ * MyAnimeList catalog off one term. The chips stay here, where the shelf is.
  */
 
 type Filters = {
@@ -80,18 +63,6 @@ type LibraryFilterContext = State & {
   /** The owned toggle. A boolean too, and positive where hiatus subtracts. */
   setOwnedOnly: (value: boolean) => void;
   setSort: (value: Sort) => void;
-  /**
-   * What the user has typed, verbatim. The field renders this so the caret
-   * never lags a keystroke behind.
-   */
-  query: string;
-  setQuery: (value: string) => void;
-  /**
-   * The same query, deferred. The grid filters on this: React commits the
-   * keystroke first and re-filters in a later interruptible pass, so a long
-   * shelf cannot stutter the field.
-   */
-  deferredQuery: string;
   pending: boolean;
   /**
    * The shelf the page fetched. Held here rather than passed to each consumer
@@ -143,18 +114,6 @@ export function LibraryFilters({
     ...initial,
   });
 
-  // The query is plain state, deliberately not `useSearchParams()`. Reading it
-  // from the URL would make every keystroke wait on a navigation before the
-  // field could show the character — which is the lag that was interrupting
-  // typing in the first place. It starts empty every time: a search is a
-  // gesture, not a place, so there is nothing to restore from a URL.
-  const [query, setQuery] = useState("");
-
-  // The grid reads the deferred copy. React renders the typed character first
-  // at high priority, then re-filters in a second, interruptible pass — so a
-  // large shelf cannot make the field stutter between keystrokes.
-  const deferredQuery = useDeferredValue(query);
-
   function update(patch: Partial<Filters>) {
     setState((current) => ({ ...current, ...patch }));
 
@@ -190,9 +149,6 @@ export function LibraryFilters({
         setHideHiatus: (hideHiatus) => update({ hideHiatus }),
         setOwnedOnly: (ownedOnly) => update({ ownedOnly }),
         setSort: updateSort,
-        query,
-        setQuery,
-        deferredQuery,
         pending,
         entries,
       }}
@@ -203,31 +159,12 @@ export function LibraryFilters({
 }
 
 /**
- * Whether a row's title contains the search term.
- *
- * Both titles are checked because the shelf shows one and the user may know
- * the other — a romanised title on the card is no reason for the English name
- * not to find it. `term` arrives already trimmed and lowercased so this does
- * not redo that work per row.
- *
- * This is a substring match, matching the `ilike '%term%'` the server used to
- * run, so moving the search into the browser did not change what it finds.
- */
-function matchesTitle(entry: LibraryRow, term: string): boolean {
-  const { title, title_en } = entry.media_titles ?? {};
-  return (
-    (title?.toLowerCase().includes(term) ?? false) ||
-    (title_en?.toLowerCase().includes(term) ?? false)
-  );
-}
-
-/**
- * Narrows the server's rows by the active chips and the search term.
+ * Narrows the server's rows by the active chips.
  *
  * The empty states arrive as rendered nodes rather than a render function
  * taking `filtered`: this is a Client Component, and functions cannot cross
  * the server/client boundary. Only the *choice* between them depends on
- * client state, so the page supplies all three and this picks.
+ * client state, so the page supplies both and this picks.
  */
 export function LibraryGrid({
   entries,
@@ -235,7 +172,6 @@ export function LibraryGrid({
   catalog = [],
   emptyUnfiltered,
   emptyFiltered,
-  emptySearch,
 }: {
   entries: LibraryRow[];
   topSources?: RankedSource[];
@@ -244,35 +180,20 @@ export function LibraryGrid({
   emptyUnfiltered: React.ReactNode;
   /** Chips hid everything. */
   emptyFiltered: React.ReactNode;
-  /** A search matched nothing. Falls back to `emptyUnfiltered` if omitted. */
-  emptySearch?: React.ReactNode;
 }) {
-  const { status, source, hideHiatus, ownedOnly, sort, deferredQuery } =
-    useLibraryFilters();
-  const term = deferredQuery.trim().toLowerCase();
-  const searching = term !== "";
+  const { status, source, hideHiatus, ownedOnly, sort } = useLibraryFilters();
 
-  // A search deliberately ignores the chips. The chips are a standing view of
-  // the shelf; a search is a one-off lookup of a specific title, and the user
-  // asking for it by name has already said which one they want. Intersecting
-  // the two hides the match whenever it happens to sit outside the current
-  // view — and worse, the MAL panel below would then offer to add a title the
-  // user already owns, because the shelf appeared not to have it.
-  const visible = searching
-    ? entries.filter((entry) => matchesTitle(entry, term))
-    : // The same function the dice draws from, so the shelf and the roll can
-      // never disagree about which titles a chip selection covers.
-      selectCandidates(entries, { status, source, hideHiatus, ownedOnly });
-
-  // Sorting applies to search results too. The chips are skipped during a
-  // search because they would hide the match; an order hides nothing, and a
-  // search can still return enough rows to be worth ordering.
+  // The same function the dice draws from, so the shelf and the roll can never
+  // disagree about which titles a chip selection covers.
+  const visible = selectCandidates(entries, {
+    status,
+    source,
+    hideHiatus,
+    ownedOnly,
+  });
   const ordered = sortEntries(visible, sort);
 
   if (visible.length === 0) {
-    // While searching the chips are not applied, so a miss is never "your
-    // filters hid it" — it is simply not on the shelf.
-    if (searching) return <>{emptySearch ?? emptyUnfiltered}</>;
     const narrowed = status || source || hideHiatus || ownedOnly;
     return <>{narrowed ? emptyFiltered : emptyUnfiltered}</>;
   }

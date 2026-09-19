@@ -34,6 +34,12 @@ const prefsSchema = z.object({
   // only two meaningful states, so there is no "never chose" to preserve.
   hideHiatus: z.boolean().optional(),
   ownedOnly: z.boolean().optional(),
+  // The search page's two switches. Boolean for NSFW, which is off unless
+  // asked for; text for the novels/webtoons side, which — like `sort` — is
+  // stored as written and resolved leniently on read, so a value this version
+  // does not know falls back to the default instead of failing the write.
+  includeNsfw: z.boolean().optional(),
+  mediaKind: prefSchema.optional(),
 });
 
 export type LibraryPrefsPatch = z.input<typeof prefsSchema>;
@@ -55,6 +61,8 @@ export async function saveLibraryPrefs(patch: LibraryPrefsPatch) {
     sort?: string | null;
     hide_hiatus?: boolean;
     owned_only?: boolean;
+    search_include_nsfw?: boolean;
+    search_media_kind?: string | null;
   } = {
     user_id: userId,
   };
@@ -78,6 +86,16 @@ export async function saveLibraryPrefs(patch: LibraryPrefsPatch) {
   // as deliberate a choice as narrowing to what the user owns.
   if (parsed.data.ownedOnly !== undefined) {
     row.owned_only = parsed.data.ownedOnly;
+  }
+  // Also written straight through: false is "hide them again", which is as
+  // deliberate a choice as asking for them.
+  if (parsed.data.includeNsfw !== undefined) {
+    row.search_include_nsfw = parsed.data.includeNsfw;
+  }
+  // No `all` sentinel, for the same reason sort has none: the switch always
+  // has a side selected, so an empty value is "no preference" — which is null.
+  if (parsed.data.mediaKind !== undefined) {
+    row.search_media_kind = parsed.data.mediaKind || null;
   }
 
   if (Object.keys(row).length === 1) return;

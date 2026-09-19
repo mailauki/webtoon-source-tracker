@@ -1,8 +1,7 @@
-import { Compass, Layers, LibraryBig, LogOut, Settings, ShieldUser } from "lucide-react";
+import { Compass, Layers, LibraryBig, LogOut, Search, Settings, ShieldUser } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
-import { HeaderSearch } from "@/components/header-search";
 import { PullToRefresh } from "@/components/pull-to-refresh";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -37,19 +36,18 @@ import NavLink from "./nav-link";
  * whatever passes beneath it — give it a ground of its own if that ever needs
  * to stop being true.
  *
- * `searchable` gates the search control for the same reason: it filters the
- * library shelf, which only /library renders.
+ * There is no search control here any more. Search is its own page now, so it
+ * is a nav destination like any other — which also means it no longer has to
+ * be gated to the one page whose shelf it used to filter.
  */
 export async function AppShell({
   children,
   secondaryRow,
   tertiaryRow,
-  searchable = false,
 }: {
   children: React.ReactNode;
   secondaryRow?: React.ReactNode;
   tertiaryRow?: React.ReactNode;
-  searchable?: boolean;
 }) {
   const profile = await getProfile();
   const admin = await isAdmin();
@@ -57,8 +55,7 @@ export async function AppShell({
   return (
     <div className="flex min-h-screen flex-col">
       <header className="fixed w-full top-0 z-40 border-b border-border bg-background/80 backdrop-blur px-4">
-        {/* `relative` anchors the expanded search, which overlays the row. */}
-        <div className="relative h-[60px] mx-auto flex max-w-6xl items-center justify-between gap-4 py-3 pl-2">
+        <div className="h-[60px] mx-auto flex max-w-6xl items-center justify-between gap-4 py-3 pl-2">
 					<div className="flex items-center gap-3 sm:gap-6">
 						{/* The logo always shows; the wordmark rejoins it once there is
 						    room. One icon serves both themes: it is an amber tile with
@@ -68,12 +65,7 @@ export async function AppShell({
 						    outside it — and keeps the tile from fighting the pill shapes
 						    across the rest of the row.
 
-						    The wordmark returns at `sm`, alongside the nav labels. Note
-						    that the expanded search overlays from the right at up to
-						    max-w-md, so at exactly `sm` it can reach back over the
-						    wordmark; from `md` up the field clears it. Below `sm` the
-						    row's `pl-2` keeps this icon clear of the field, so the
-						    search strip needs no background of its own to hide it.
+						    The wordmark returns at `sm`, alongside the nav labels.
 
 						    The image stays `alt=""` and the text carries the link's
 						    accessible name at every width — it only toggles between
@@ -99,6 +91,10 @@ export async function AppShell({
 
 						<nav className="flex items-center gap-1">
 							<NavLink icon={<LibraryBig data-icon="inline-start" />} label="Library" url="/library" />
+							{/* Next to the library rather than out in the icon cluster on the
+							    right: it is where you go to add a title, which is the same
+							    kind of errand as browsing the shelf. */}
+							<NavLink icon={<Search data-icon="inline-start" />} label="Search" url="/search" />
 							<NavLink icon={<Compass data-icon="inline-start" />} label="Discover" url="/discover" />
 							<NavLink icon={<Layers data-icon="inline-start" />} label="Collections" url="/collections" />
 							<NavLink icon={<Settings data-icon="inline-start" />} label="Settings" url="/settings" />
@@ -106,7 +102,6 @@ export async function AppShell({
 						</nav>
 					</div>
 					<div className="flex items-center gap-1">
-						{searchable && <HeaderSearch />}
 						<ThemeToggle />
 						<form action="/auth/logout" method="post">
 							<Button
