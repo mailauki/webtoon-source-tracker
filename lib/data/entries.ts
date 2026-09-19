@@ -9,28 +9,26 @@ import { createClient } from "@/lib/supabase/server";
  * the user should only ever see their own entries, and RLS is the guarantee.
  */
 
-export type LibraryFilters = {
-  q?: string;
-};
-
 /**
  * One query for the whole library view: the user's entries, each with its
  * catalog title and its source assignments.
  *
- * `media_titles!inner` makes the title join an inner join so a filter on the
- * title (search) narrows the entries rather than returning nulls.
+ * `media_titles!inner` makes the title join an inner join: an entry whose
+ * catalog row is missing is not a shelf item, and an outer join would hand the
+ * grid a card with no title on it.
  *
- * Status and source are deliberately not filtered here. They are stored per
- * user and applied in the browser (see components/library-grid.tsx), because
- * every field they filter on already rides along on these rows — re-querying
- * for a chip click would be a round-trip for data we already sent. Sorting
- * works the same way, for the same reason; the `order` below is only the
- * order rows arrive in, and the client re-sorts to the stored preference.
+ * Nothing is filtered here — not status, not source, not the search term.
+ * Every field those narrow on already rides along on these rows, so the chips
+ * apply in the browser (see components/library-grid.tsx) and the search page
+ * matches titles the same way (see lib/data/search.ts); re-querying for either
+ * would be a round-trip for data we already sent. Sorting works the same way:
+ * the `order` below is only the order rows arrive in, and the client re-sorts
+ * to the stored preference.
  */
-export async function getLibrary(filters: LibraryFilters = {}) {
+export async function getLibrary() {
   const supabase = await createClient();
 
-  let query = supabase
+  const query = supabase
     .from("user_entries")
     .select(
       `
@@ -54,12 +52,6 @@ export async function getLibrary(filters: LibraryFilters = {}) {
     `,
     )
     .order("mal_updated_at", { ascending: false, nullsFirst: false });
-
-  if (filters.q) {
-    // Escape PostgREST's pattern characters so a search for "%" is literal.
-    const term = filters.q.replace(/[%_]/g, "\\$&");
-    query = query.ilike("media_titles.title", `%${term}%`);
-  }
 
   const { data, error } = await query;
   if (error) throw new Error(`Failed to load library: ${error.message}`);

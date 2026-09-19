@@ -123,12 +123,13 @@ const RESULT = {
 };
 
 function mockSearch(results: unknown[] = [RESULT], ok = true, status = 200) {
-  // The URL is declared even though the body ignores it: `lastRequest` below
-  // reads it back off the call, and an argument-less mock types its calls as
-  // an empty tuple.
-  const fetchMock = vi.fn(async (_url: RequestInfo | URL) => ({
+  // The URL is a declared argument so `lastRequest` below can read it back
+  // off the call: an argument-less mock types its calls as an empty tuple. It
+  // is echoed on the response the way a real one carries it.
+  const fetchMock = vi.fn(async (url: RequestInfo | URL) => ({
     ok,
     status,
+    url: String(url),
     json: async () => (ok ? { results } : { error: "boom" }),
   }));
   vi.stubGlobal("fetch", fetchMock);
