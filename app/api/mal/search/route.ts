@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 
 import { getOptionalSession } from "@/lib/auth/dal";
+import {
+  MIN_QUERY_LENGTH,
+  matchesMediaKind,
+  resolveMediaKind,
+} from "@/lib/data/search";
 import { MalClient } from "@/lib/mal/client";
 import { searchManga } from "@/lib/mal/endpoints";
 import { MalApiError, MalAuthError, MalRateLimitError } from "@/lib/mal/errors";
@@ -16,20 +21,35 @@ import { createClient } from "@/lib/supabase/server";
  * handlers have no such serialization, and `AbortController` on the client can
  * cancel a superseded request outright.
  *
- * Titles the user already has are dropped from the response outright. This
- * panel exists to add what the library is missing, and the shelf directly
- * above it is already showing the ones they own — listing them again here just
- * pads the results with rows that have no action on them.
+ * Titles the user already has are dropped from the response outright. The
+ * search page shows their own shelf directly above these results, so listing
+ * them again here just pads the catalog with rows that have no action on them.
  *
- * The trade-off is that a page of `LIMIT` can come back well short of `LIMIT`
- * when the user owns most of the matches. That is accepted: the alternative is
- * over-fetching and trimming, which spends a bigger MAL request on every
- * search to fill a panel that is already the secondary result set.
+ * Two switches from the page ride along as query params:
+ *
+ *   `nsfw=1`  — ask MAL for adult titles too. Off unless asked for; see
+ *               searchManga, which filters in two layers.
+ *   `kind=`   — which side of the novels/webtoons switch to answer with.
+ *
+ * MAL's search takes no media_type filter, so `kind` is applied here, after
+ * the fetch. That is why FETCH_LIMIT is well above LIMIT: a page of 12 asked
+ * of a catalog that is mostly manga would come back with one or two novels on
+ * it, and the switch would look broken rather than selective. Over-fetching
+ * once per search is the cheaper half of that trade — the alternative is
+ * paging MAL until the panel fills, which spends several requests on a search
+ * the user may already have what they wanted from.
  */
 
-/** MAL's own minimum; shorter queries return noise. */
-const MIN_QUERY_LENGTH = 3;
-const LIMIT = 12;
+const LIMIT = 24;
+
+/**
+ * How many rows to ask MAL for before filtering.
+ *
+ * Both filters below only ever remove rows — the kind switch drops one half of
+ * the catalog, and owned titles go too — so this has to be a good multiple of
+ * LIMIT for a full page to be reachable. MAL caps `limit` at 100.
+ */
+const FETCH_LIMIT = 60;
 
 export async function GET(request: Request) {
   // Route handlers are reachable directly, so this check is load-bearing.
@@ -40,7 +60,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
   }
 
-  const query = new URL(request.url).searchParams.get("q")?.trim() ?? "";
+  const params = new URL(request.url).searchParams;
+  const query = params.get("q")?.trim() ?? "";
+  // Anything but an explicit "1" is off: this is the direction where a
+  // misread param should fail safe.
+  const includeMature = params.get("nsfw") === "1";
+  // Unrecognised values resolve to the default side rather than 400ing — a
+  // stale client asking for a side this version dropped should still search.
+  const kind = resolveMediaKind(params.get("kind"));
 
   // Not an error — the field is simply not ready to search yet.
   if (query.length < MIN_QUERY_LENGTH) {
@@ -50,7 +77,7 @@ export async function GET(request: Request) {
   let found;
   try {
     const client = new MalClient(session.userId);
-    found = await searchManga(client, query, LIMIT);
+    found = await searchManga(client, query, FETCH_LIMIT, { includeMature });
   } catch (cause) {
     if (cause instanceof MalAuthError) {
       return NextResponse.json(
@@ -90,7 +117,11 @@ export async function GET(request: Request) {
     );
   }
 
-  const candidates = found.data.map((item) => item.node);
+  // The switch first, so the owned lookup below only asks about rows that
+  // could still be shown.
+  const candidates = found.data
+    .map((item) => item.node)
+    .filter((node) => matchesMediaKind(node.media_type, kind));
 
   // Which of these the user already has. RLS scopes this to the caller, so a
   // hit really is *their* entry.
@@ -113,7 +144,9 @@ export async function GET(request: Request) {
 
   // Dropped rather than flagged: everything left is something the user can
   // actually add.
-  const nodes = candidates.filter((node) => !owned.has(node.id));
+  const nodes = candidates
+    .filter((node) => !owned.has(node.id))
+    .slice(0, LIMIT);
 
   return NextResponse.json({
     results: nodes.map((node) => ({

@@ -1,5 +1,7 @@
 import "server-only";
 
+import { readAllRows } from "@/lib/data/pagination";
+import { MAL_LIST_STATUSES } from "@/lib/mal/types";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -9,31 +11,37 @@ import { createClient } from "@/lib/supabase/server";
  * the user should only ever see their own entries, and RLS is the guarantee.
  */
 
-export type LibraryFilters = {
-  q?: string;
-};
-
 /**
  * One query for the whole library view: the user's entries, each with its
  * catalog title and its source assignments.
  *
- * `media_titles!inner` makes the title join an inner join so a filter on the
- * title (search) narrows the entries rather than returning nulls.
+ * `media_titles!inner` makes the title join an inner join: an entry whose
+ * catalog row is missing is not a shelf item, and an outer join would hand the
+ * grid a card with no title on it.
  *
- * Status and source are deliberately not filtered here. They are stored per
- * user and applied in the browser (see components/library-grid.tsx), because
- * every field they filter on already rides along on these rows — re-querying
- * for a chip click would be a round-trip for data we already sent. Sorting
- * works the same way, for the same reason; the `order` below is only the
- * order rows arrive in, and the client re-sorts to the stored preference.
+ * Nothing is filtered here — not status, not source, not the search term.
+ * Every field those narrow on already rides along on these rows, so the chips
+ * apply in the browser (see components/library-grid.tsx) and the search page
+ * matches titles the same way (see lib/data/search.ts); re-querying for either
+ * would be a round-trip for data we already sent. Sorting works the same way:
+ * the `order` below is only the order rows arrive in, and the client re-sorts
+ * to the stored preference.
+ *
+ * Read through readAllRows because the whole shelf really does mean the whole
+ * shelf: PostgREST would otherwise cut it off at `max_rows` without saying so,
+ * and everything downstream — the chips, the dice, the search page — narrows
+ * what it is handed and would report a title as absent rather than as hidden.
+ * A library inside the cap still costs one query; see lib/data/pagination.ts.
  */
-export async function getLibrary(filters: LibraryFilters = {}) {
+export async function getLibrary() {
   const supabase = await createClient();
 
-  let query = supabase
-    .from("user_entries")
-    .select(
-      `
+  return readAllRows(
+    (from, to) =>
+      supabase
+        .from("user_entries")
+        .select(
+          `
       id,
       list_status,
       num_chapters_read,
@@ -52,38 +60,50 @@ export async function getLibrary(filters: LibraryFilters = {}) {
         sources ( id, slug, name, logo_url, owner_id )
       )
     `,
-    )
-    .order("mal_updated_at", { ascending: false, nullsFirst: false });
-
-  if (filters.q) {
-    // Escape PostgREST's pattern characters so a search for "%" is literal.
-    const term = filters.q.replace(/[%_]/g, "\\$&");
-    query = query.ilike("media_titles.title", `%${term}%`);
-  }
-
-  const { data, error } = await query;
-  if (error) throw new Error(`Failed to load library: ${error.message}`);
-
-  return data ?? [];
+          // The exact total, which the row cap does not truncate — it is what
+          // tells the loop whether a second page exists.
+          { count: "exact" },
+        )
+        .order("mal_updated_at", { ascending: false, nullsFirst: false })
+        // Ties on `mal_updated_at` are common (a bulk edit stamps a whole
+        // batch), and paging an unstable order drops and repeats rows across
+        // the boundary. `id` is the unique tiebreak that pins it.
+        .order("id", { ascending: true })
+        .range(from, to),
+    "library",
+  );
 }
 
 export type LibraryRow = Awaited<ReturnType<typeof getLibrary>>[number];
 
-/** Counts per status, for the filter chips. */
-export async function getStatusCounts() {
+/**
+ * Counts per status, for the filter chips.
+ *
+ * One `head: true` count per status rather than tallying the rows in JS. The
+ * old shape selected every entry just to produce five integers, which was both
+ * a whole table over the wire and — since that select was subject to
+ * `max_rows` — a set of counts that silently stopped growing at a thousand.
+ * PostgREST's exact count is not capped, so these stay true at any size.
+ *
+ * A failed count reads as 0, which drops that chip (the page only offers chips
+ * with a count above zero). Losing one chip is the right degradation here: the
+ * grid it filters is already on screen.
+ */
+export async function getStatusCounts(): Promise<Record<string, number>> {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("user_entries")
-    .select("list_status");
+  const counts = await Promise.all(
+    MAL_LIST_STATUSES.map(async (status) => {
+      const { count, error } = await supabase
+        .from("user_entries")
+        .select("id", { count: "exact", head: true })
+        .eq("list_status", status);
 
-  if (error) return {} as Record<string, number>;
+      return [status, error ? 0 : (count ?? 0)] as const;
+    }),
+  );
 
-  const counts: Record<string, number> = {};
-  for (const row of data ?? []) {
-    counts[row.list_status] = (counts[row.list_status] ?? 0) + 1;
-  }
-  return counts;
+  return Object.fromEntries(counts);
 }
 
 /**

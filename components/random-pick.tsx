@@ -64,7 +64,7 @@ const MODES: { mode: PickMode; label: string; drawnFrom: string }[] = [
  * never disagree about what "Reading + Webtoon" covers.
  */
 export function RandomPick() {
-  const { entries, status, source, hideHiatus, ownedOnly, deferredQuery } =
+  const { entries, status, source, hideHiatus, ownedOnly } =
     useLibraryFilters();
 
   const [picked, setPicked] = useState<LibraryRow | null>(null);
@@ -85,10 +85,6 @@ export function RandomPick() {
     ...m,
     candidates: selectByMode(entries, m.mode, filters),
   }));
-
-  // A search bypasses the chips and is a lookup of one known title, so there is
-  // nothing for a die to decide — see lib/data/pick-random.ts.
-  if (deferredQuery.trim() !== "") return null;
 
   /**
    * Draw from `next`, carrying `seen` only while the mode holds.

@@ -65,10 +65,9 @@ export function isOwned(entry: LibraryRow): boolean {
  * narrows the shelf with it and the dice draws from it, so the two can never
  * disagree about which titles "Reading + Webtoon" covers.
  *
- * The search term is deliberately not a parameter. A search already bypasses
- * the chips (see components/library-grid.tsx), and rolling a die against a
- * title the user just typed by name is incoherent — so the dice hides during
- * a search rather than trying to intersect with one.
+ * There is no search term here, and there should not be one. Searching is its
+ * own page now (/search), where the question is which title you meant — not
+ * which of many to be handed, which is the only question a die can answer.
  */
 export function selectCandidates(
   entries: LibraryRow[],

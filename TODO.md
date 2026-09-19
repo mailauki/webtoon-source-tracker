@@ -106,6 +106,122 @@ Adding it means a second sync path (`/users/@me/animelist`, which uses
 `num_episodes_watched` rather than `num_chapters_read`), a media-type filter in
 the library, and making that outbound link type-aware.
 
+### `TODO(remove-entry)` — nothing can be taken off the shelf
+
+**Where:** `components/entry-card-menu.tsx` (`useEntryCardActions`),
+`lib/mal/endpoints.ts` (beside `updateListStatus`), `app/entry/[id]/page.tsx`
+
+Titles only ever arrive. `addEntry` puts one on the list, `syncMalList` brings
+the rest in, and nothing anywhere says "I'm done with this, take it off." The
+only way a row leaves `user_entries` today is the sync noticing MAL no longer
+has it — which means opening MyAnimeList in another tab to do the actual
+removal, then waiting for a sync to notice.
+
+- **The endpoint exists and the client already speaks it.**
+  `DELETE /manga/{manga_id}/my_list_status`, and `RequestOptions` in
+  `lib/mal/client.ts` already lists `"DELETE"` as a method, so this is a
+  `deleteListStatus` next to `updateListStatus` in `lib/mal/endpoints.ts` and
+  nothing below it has to change.
+- **404 is a success here.** The documented response is 200 on removal and 404
+  when the title was not on the list — confirm against the API docs, but plan
+  for it: a double click, or a title already removed from another device, must
+  not surface as a failed removal when the user's intent has been satisfied.
+- **MAL first, as always.** Same non-negotiable ordering `updateProgress` and
+  `addEntry` both document. A local-only delete is silently undone by the next
+  sync, which re-adds the row from MAL's copy.
+- **The local delete cascades to `entry_sources`** — the URLs, per-source
+  progress and notes that no re-sync can rebuild. Two existing notes bear
+  directly on this. `TODO(confirm-destructive)` wants the installed-but-never
+  rendered `AlertDialog`, and this is a better first use than the source
+  delete: the blast radius is a whole title. `TODO(soft-delete)` wants an
+  `archived_at` column, and a *user-initiated* removal is the stronger argument
+  for one, because here the user can be deliberately wrong.
+- **Two removals, and they must not sit next to each other unmarked.**
+  "Remove from my library" deletes the row. "Dropped" is a `list_status` the
+  progress editor already offers (`STATUSES` in `components/progress-editor.tsx`)
+  and keeps everything. They read almost identically as menu items and differ
+  by an irreversible cascade, so the destructive one needs to look destructive
+  wherever the two end up together.
+
+The card context menu is where the other per-title actions live, and the entry
+page needs it too — that is where someone lands once they have decided.
+
+### `TODO(bulk-edit)` — multi-select on the shelf
+
+**Where:** `components/library-grid.tsx` (selection belongs beside the
+filters), `components/entry-card.tsx`, `app/actions/progress.ts`
+
+Every action in the app is per title. Marking a finished series read, filing
+ten titles into a collection, attaching the same source to a batch that all
+came from one site — each is the same click repeated, and the shelf already
+knows how to show exactly the set someone wants to act on, because the chips
+just narrowed it to them.
+
+- **The closest existing surface is not actually a multi-select.**
+  `components/collections/add-titles-dialog.tsx` looks like one — a filterable
+  list of library rows with a per-row state — but each row is its own form that
+  commits on click, and its `added` Set records what has already been written
+  rather than what is chosen. Worth reading for the list and the browser-side
+  filtering; it has no selection model to lift.
+- **It is a mode, not a checkbox.** A card's own click is already a link to its
+  entry page and its ⋯ button already opens `EntryCardSheet` (right-click opens
+  the same actions as a context menu on a desktop). All of that has to be
+  suppressed while selecting, or the first tap does two things. The state goes
+  in `<LibraryFilters>`, which already owns the rows and already spans the
+  header and the grid.
+- **The write side is the actual work.** MAL has no bulk endpoint, so N titles
+  is N sequential `PUT /manga/{id}/my_list_status` calls, and `lib/mal/client.ts`
+  deliberately does not retry a 403 over-quota. That makes a bulk action a
+  partial-failure problem rather than a loop: it needs per-title results, copy
+  that can say "7 of 10 applied", and it must leave the local cache untouched
+  for the three that failed — the invariant `updateProgress` spells out.
+- **One action taking many ids, not many actions.** Next dispatches Server
+  Actions sequentially per client, so firing N from the browser queues them
+  anyway and gives up any chance of reporting progress while they run.
+- **Worth doing, in order:** status change, add to collection, quick-add a
+  source. Bulk *removal* multiplies exactly the unrecoverable cascade
+  `TODO(remove-entry)` is careful about, so it should come last if at all, and
+  not before `TODO(soft-delete)` makes it undoable.
+
+### `TODO(authors)` — "more from this author"
+
+**Where:** `lib/mal/endpoints.ts` (`LIST_FIELDS`), `lib/mal/types.ts`
+(`malMangaNodeSchema`), `app/entry/[id]/page.tsx`
+
+The entry page shows a title's kind, status, score and chapter count, and never
+says who made it. The obvious next question — what else has this author
+written — has nowhere to be asked.
+
+- **The data is neither fetched nor stored.** `LIST_FIELDS` asks for `genres`
+  and `nsfw` but not `authors`, so it never reaches `media_titles`. Requesting
+  `authors{first_name,last_name}` returns entries shaped
+  `{ node: { id, first_name, last_name }, role }`, where `role` separates Story
+  from Art — confirm the shape against the API docs before building on it. The
+  field rides the pages the sync already fetches, so asking for it costs no
+  extra requests.
+- **Store it like genres, but not *in* genres.** `tags` + `title_tags` are the
+  right shape — a shared catalog-level annotation, with a provenance rule
+  (`mal_genre_id`, insert-only from sync) that lets a local rename survive
+  every later sync. An author is not a tag, though: `tags.kind` is
+  `check (kind in ('genre','trope','theme','format'))` and `mal_genre_id` is a
+  genre id, so reusing the table means widening a check constraint and adding a
+  second nullable provenance column for a different MAL id namespace
+  (`people`). An `authors` + `title_authors` pair modelled on those two keeps
+  both tables honest. `role` is a property of the link, not of the author.
+- **Supply is the real constraint, and it is the same one the recommendations
+  note describes.** `media_titles` only holds titles somebody tracks, so "more
+  from this author" over the local catalog returns the two you already have and
+  implies the author wrote nothing else. MAL's v2 API has no author search —
+  `/manga?q=` matches title text only — so there is no cheap way to fill that
+  in on demand.
+
+  Two honest shapes, and the difference is worth deciding before any schema
+  work: show only what is local and *say so* ("Also in your library"), or make
+  the author's name a link to `myanimelist.net/people/{id}` and do not pretend
+  to a shelf at all. The second is a line of JSX once the id is stored, and it
+  never lies. The first is a real section, and it needs the catalog to grow
+  past what users happen to track first.
+
 ### Recommended titles — an automated "add these" collection
 
 Collections shipped with two shapes (curated and user-owned; see
@@ -240,26 +356,6 @@ merging in the other direction (splitting a tag MAL treats as one genre into
 two an admin wants distinguished) is a different, harder problem this table
 doesn't solve. Build it when a real MAL genre pair turns out to annoy someone
 browsing the tag pages, not before.
-
-### Letting a user opt in to mature titles in search
-
-`searchManga` hides adult titles from the add-a-title search: it sends
-`nsfw: false` and drops anything MAL rates `gray` or `black` that arrives
-anyway (`isMature`, `lib/mal/endpoints.ts`). The switch already exists as an
-`includeMature` option on the call, so turning it on for a user is a parameter,
-not a rewrite.
-
-What is missing is where the preference lives. `library_prefs` is the obvious
-home — a `show_mature boolean not null default false` column beside
-`hide_hiatus` and `owned_only`, read in the search route and passed through.
-The UI is a settings toggle rather than a filter chip: it is a standing
-statement about what someone wants to see, not a view of a shelf.
-
-Note the sync deliberately does **not** filter — `getMangaList` still sends
-`nsfw: true`, because hiding a title the user put on their own MyAnimeList list
-would drop rows out of their library and look like data loss. Any opt-in work
-here applies to discovery only, and that asymmetry is the point rather than an
-oversight.
 
 ### Latest available chapter, from the source itself
 

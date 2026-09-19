@@ -8,6 +8,7 @@ import {
   type CollectionSummary,
   type RawCollection,
 } from "@/lib/data/collection-items";
+import { readAllRows } from "@/lib/data/pagination";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -71,16 +72,28 @@ export type {
 export async function getTrackedEntries(): Promise<Map<number, number>> {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("user_entries")
-    .select("id, title_id");
+  // Paged: this answers "do I already have this" for every card on the page,
+  // and a row lost to `max_rows` reads as a confident no. Two narrow columns
+  // per row, so even the largest library is one or two queries.
+  let rows;
+  try {
+    rows = await readAllRows(
+      (from, to) =>
+        supabase
+          .from("user_entries")
+          .select("id, title_id", { count: "exact" })
+          .order("id", { ascending: true })
+          .range(from, to),
+      "tracked titles",
+    );
+  } catch {
+    // Degrade to "you track nothing": every card then offers to add its title,
+    // which is wrong but recoverable — adding one already on the shelf is a
+    // no-op upsert against MAL. Taking the page down over it would not be.
+    return new Map();
+  }
 
-  // Degrade to "you track nothing": every card then offers to add its title,
-  // which is wrong but recoverable — adding one already on the shelf is a
-  // no-op upsert against MAL. Taking the page down over it would not be.
-  if (error) return new Map();
-
-  return new Map((data ?? []).map((row) => [row.title_id, row.id]));
+  return new Map(rows.map((row) => [row.title_id, row.id]));
 }
 
 /**
@@ -205,20 +218,30 @@ export async function getMyCollection(id: number): Promise<Collection | null> {
  * Deliberately not getLibrary(): that query carries every entry's sources and
  * progress so the grid can filter on them, none of which a picker shows. This
  * is the same rows, narrowed to a name and a cover.
+ *
+ * Paged for the same reason getLibrary is: the picker's whole job is to let
+ * you find a title you own, and a row cut off at `max_rows` would present as
+ * a title you do not. See lib/data/pagination.ts.
  */
 export async function getLibraryTitles() {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("user_entries")
-    .select(
-      `id, media_titles!inner ( id, title, main_picture_url )`,
-    )
-    .order("mal_updated_at", { ascending: false, nullsFirst: false });
+  const rows = await readAllRows(
+    (from, to) =>
+      supabase
+        .from("user_entries")
+        .select(`id, media_titles!inner ( id, title, main_picture_url )`, {
+          count: "exact",
+        })
+        .order("mal_updated_at", { ascending: false, nullsFirst: false })
+        // A unique tiebreak, so a page boundary cannot fall inside a run of
+        // rows that share an update stamp.
+        .order("id", { ascending: true })
+        .range(from, to),
+    "your library",
+  );
 
-  if (error) throw new Error(`Failed to load your library: ${error.message}`);
-
-  return (data ?? []) as unknown as {
+  return rows as unknown as {
     id: number;
     media_titles: { id: number; title: string; main_picture_url: string | null };
   }[];

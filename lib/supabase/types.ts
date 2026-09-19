@@ -241,6 +241,8 @@ export type Database = {
         Row: {
           hide_hiatus: boolean
           owned_only: boolean
+          search_include_nsfw: boolean
+          search_media_kind: string | null
           sort: string | null
           source: string | null
           status: string | null
@@ -250,6 +252,8 @@ export type Database = {
         Insert: {
           hide_hiatus?: boolean
           owned_only?: boolean
+          search_include_nsfw?: boolean
+          search_media_kind?: string | null
           sort?: string | null
           source?: string | null
           status?: string | null
@@ -259,6 +263,8 @@ export type Database = {
         Update: {
           hide_hiatus?: boolean
           owned_only?: boolean
+          search_include_nsfw?: boolean
+          search_media_kind?: string | null
           sort?: string | null
           source?: string | null
           status?: string | null

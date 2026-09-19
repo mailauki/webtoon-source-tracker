@@ -255,6 +255,11 @@ export function useEntryCardActions({
     run: () => onOpenDialog({ mode: "add" }),
   });
 
+  // TODO(remove-entry): there is no "remove from my library" here, so a title
+  // can only ever be added. Note it is NOT the "Dropped" status the progress
+  // editor offers, which keeps the row and everything hanging off it — the two
+  // read alike as menu items and differ by a cascade through entry_sources
+  // that no re-sync can rebuild. See TODO.md.
   return actions;
 }
 

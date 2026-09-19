@@ -110,6 +110,10 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
               ) : null}
             </div>
 
+            {/* TODO(authors): the title's author is not shown, because it is
+                not synced — so "more from this author" has nowhere to hang.
+                See TODO.md for why the storage shape is the decision, and why
+                the local catalog alone cannot answer the question honestly. */}
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="secondary" className="rounded-pill">
                 {STATUS_LABELS[entry.list_status] ?? entry.list_status}
