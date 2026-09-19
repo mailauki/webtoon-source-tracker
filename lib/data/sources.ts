@@ -34,6 +34,13 @@ export type { Source };
  *
  * RLS scopes entry_sources to the caller, so no explicit user filter is
  * needed — the same reason getSources can select the whole table.
+ *
+ * Deliberately not paged, unlike the library reads. `entry_sources` crosses
+ * `max_rows` before the library does — a title can have several — but this
+ * only ranks the shortcuts offered in a menu, and the ordering of "the sites I
+ * use most" does not change between a thousand assignments and all of them. A
+ * truncated read here costs nothing a user would notice; a truncated shelf
+ * loses titles.
  */
 export async function getTopSources(): Promise<RankedSource[]> {
   const supabase = await createClient();
