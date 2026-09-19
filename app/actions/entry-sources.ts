@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { verifySession } from "@/lib/auth/dal";
+import { canonicalUrl } from "@/lib/data/canonical-url";
 import { parseRanges, toMultirange } from "@/lib/data/chapter-ranges";
 import { createClient } from "@/lib/supabase/server";
 
@@ -18,9 +19,16 @@ export type EntrySourceState = { error?: string; message?: string } | null;
  * standing between a bug and someone else's data.
  */
 
+/**
+ * Validated first, then canonicalised — see lib/data/canonical-url.ts for why
+ * the stored form matters. The order is what makes the error message the
+ * user's ("Enter a valid URL") rather than something the normaliser invented:
+ * it only ever sees input zod has already accepted.
+ */
 const urlSchema = z
   .union([z.literal(""), z.url("Enter a valid URL (including https://).")])
-  .optional();
+  .optional()
+  .transform((url) => (url ? canonicalUrl(url) : url));
 
 const addSchema = z.object({
   entryId: z.coerce.number().int().positive(),
