@@ -29,7 +29,7 @@ export function SourceFilter({ sources }: { sources: Chip[] }) {
       <ChipRow
         label="Source"
         chips={[
-          { value: "", label: "All" },
+          { value: "", label: "All sources" },
           { value: "none", label: "No source" },
           ...sources,
         ]}
