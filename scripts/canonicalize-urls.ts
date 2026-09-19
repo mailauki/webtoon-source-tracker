@@ -13,6 +13,12 @@
  * One-off, not a scheduled job: once this has run, the action keeps new rows
  * canonical and there is nothing left for it to find.
  *
+ * Run once against production and found nothing: all 81 stored links were
+ * already canonical. Kept because the action's guarantee only starts at the
+ * commit that added it, so any row restored from an older backup, or written
+ * by a future import path that bypasses the action, still wants this. See
+ * TODO(deep-links) in TODO.md for what that result ruled out.
+ *
  * Writes are gated behind --yes, unlike scripts/backfill-genres.ts. That one
  * fills in a column that was empty; this one overwrites hand-entered data that
  * exists nowhere else, so the default is to show the rewrite and stop.
