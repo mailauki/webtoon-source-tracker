@@ -13,7 +13,15 @@ import {
   type MalUser,
 } from "./types";
 
-/** Fields requested for list entries — enough to render a card without extra calls. */
+/**
+ * Fields requested for list entries — enough to render a card without extra
+ * calls.
+ *
+ * TODO(authors): `authors{first_name,last_name}` is not here, so nothing in
+ * the app knows who wrote a title and "more from this author" has no data to
+ * stand on. The field rides these same pages, so asking for it costs no extra
+ * requests — the work is where to store it. See TODO.md.
+ */
 const LIST_FIELDS =
   "list_status,alternative_titles,main_picture,num_chapters,num_volumes,media_type,status,genres,nsfw";
 
@@ -118,6 +126,11 @@ export async function searchManga(
  *
  * The body is form-encoded, NOT JSON — MAL rejects JSON here, and this is a
  * common source of silent 400s.
+ *
+ * TODO(remove-entry): the delete side of this is missing. MAL exposes
+ * `DELETE /manga/{id}/my_list_status` and MalClient already accepts the
+ * method, so a `deleteListStatus` belongs right here — what needs care is
+ * everything downstream of it. See TODO.md.
  */
 export async function updateListStatus(
   client: MalClient,

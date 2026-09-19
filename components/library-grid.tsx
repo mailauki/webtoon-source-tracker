@@ -34,6 +34,11 @@ import type { Source } from "@/lib/data/rank-sources";
  * finding one to add are the same gesture, and only one of them belonged on
  * this page. Both now live at /search, which searches this shelf and the
  * MyAnimeList catalog off one term. The chips stay here, where the shelf is.
+ *
+ * TODO(bulk-edit): a multi-select would belong in this provider too — it
+ * already owns the rows and already spans the header and the grid, and the
+ * chips have just narrowed the shelf to the set someone wants to act on. The
+ * hard part is the write side, not the selection; see TODO.md.
  */
 
 type Filters = {
