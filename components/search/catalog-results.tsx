@@ -10,6 +10,7 @@ import { CoverImage } from "@/components/cover-image";
 import { useSearchFilters } from "@/components/search/search-filters";
 import { Button } from "@/components/ui/button";
 import { MIN_QUERY_LENGTH, type MediaKind } from "@/lib/data/search";
+import { displayTitle } from "@/lib/data/display-title";
 
 /**
  * MyAnimeList catalog results — the half of the page that finds titles you do
@@ -260,7 +261,7 @@ function CatalogResultCard({
       <div className="relative aspect-[1/2] overflow-hidden rounded-md bg-muted">
         <CoverImage
           src={result.main_picture_url}
-          title={result.title}
+          title={displayTitle(result)}
           sizes="(max-width: 640px) 33vw, (max-width: 1024px) 20vw, 130px"
           className="object-cover"
         />
@@ -269,7 +270,7 @@ function CatalogResultCard({
 
         <div className="absolute inset-x-0 bottom-0 grid gap-0.5 p-2">
           <h3 className="line-clamp-3 font-display text-sm font-bold leading-tight text-white drop-shadow">
-            {result.title}
+            {displayTitle(result)}
           </h3>
           {/* MAL's own value, underscores and all ("light_novel"). Worth the
               line here in a way it is not on the library card: this page

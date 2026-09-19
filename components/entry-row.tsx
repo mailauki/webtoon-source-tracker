@@ -21,6 +21,7 @@ import {
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { ownsEveryChapter } from "@/lib/data/chapter-ranges";
 import { chapterTotal } from "@/lib/data/chapter-totals";
+import { displayTitle } from "@/lib/data/display-title";
 import type { LibraryRow } from "@/lib/data/entries";
 import { isOnHiatus } from "@/lib/data/pick-random";
 import type { RankedSource, Source } from "@/lib/data/rank-sources";
@@ -60,6 +61,8 @@ export function EntryRow({
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const title = entry.media_titles;
+  // See EntryCard: one binding for the heading and the accessible name.
+  const name = displayTitle(title);
   const sources = entry.entry_sources;
 
   // Primary source first, so the most relevant pill is never the one dropped.
@@ -97,7 +100,7 @@ export function EntryRow({
             href={`/entry/${entry.id}`}
             // The title alone, or the accessible name is the whole row —
             // cover alt, badges, status, both stats — as one run-on string.
-            aria-label={title.title}
+            aria-label={name}
             // `pr-24` keeps the text clear of the controls parked on the right.
             className="group flex items-stretch gap-3 overflow-hidden rounded-xl border border-border bg-card pr-24 shadow-sm ring-offset-background transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
@@ -106,7 +109,7 @@ export function EntryRow({
             <div className="relative w-16 shrink-0 self-stretch overflow-hidden bg-muted">
               <CoverImage
                 src={title.main_picture_url}
-                title={title.title}
+                title={name}
                 sizes="64px"
                 className="object-cover transition-transform duration-200 group-hover/row:scale-105"
               />
@@ -115,7 +118,7 @@ export function EntryRow({
             <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 py-2">
               <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                 <h3 className="truncate font-display text-sm font-bold leading-tight">
-                  {title.title}
+                  {name}
                 </h3>
                 {/* Inline with the title rather than over artwork, so these
                 take their on-page treatment — `overlay` is for cover art. */}
@@ -205,7 +208,7 @@ export function EntryRow({
                 target="_blank"
                 rel="noopener noreferrer"
                 title={`Read on ${readAt.sources!.name}`}
-                aria-label={`Read ${title.title} on ${readAt.sources!.name}`}
+                aria-label={`Read ${name} on ${readAt.sources!.name}`}
                 className="inline-flex size-8 items-center justify-center rounded-full bg-secondary text-secondary-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background pointer-coarse:size-10"
               >
                 <ExternalLink className="size-4" />
@@ -215,7 +218,7 @@ export function EntryRow({
             <button
               type="button"
               onClick={() => setSheetOpen(true)}
-              aria-label={`Actions for ${title.title}`}
+              aria-label={`Actions for ${name}`}
               className="inline-flex size-10 items-center justify-center rounded-full bg-secondary text-secondary-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background pointer-fine:sr-only pointer-fine:focus-visible:not-sr-only"
             >
               <Ellipsis className="size-5" />
@@ -234,7 +237,7 @@ export function EntryRow({
       close and would take them with it. */}
       <EntryCardSheet
         entry={entry}
-        entryTitle={title.title}
+        entryTitle={name}
         topSources={topSources}
         open={sheetOpen}
         onOpenChange={setSheetOpen}
@@ -243,7 +246,7 @@ export function EntryRow({
 
       <EntrySourceDialog
         entryId={entry.id}
-        entryTitle={title.title}
+        entryTitle={name}
         request={dialog}
         attached={entry.entry_sources}
         catalog={catalog}

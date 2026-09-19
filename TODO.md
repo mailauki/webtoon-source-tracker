@@ -471,6 +471,83 @@ Worth doing when the live link starts getting traffic from people who are not
 already signed in. Until then the seeded account plus the screenshots in
 `docs/screenshots/` cover the same ground for a portfolio reader.
 
+### `TODO(deep-links)` — the blank sheet before an external link opens its app
+
+**Where:** `components/entry-card.tsx` and `components/entry-row.tsx` (the read
+link), `app/manifest.ts` (`display`), `lib/data/canonical-url.ts`
+
+Tapping a read link from the installed app on iOS sometimes shows an empty
+in-app browser sheet — white body, empty URL bar — for a beat before the native
+app takes over. Reported against WEBTOON and Manta; **not** against Tapas.
+
+**The mechanism.** `display: "standalone"` means iOS hands every external link
+to the system in-app browser rather than to Safari. That sheet is presented
+*before* iOS evaluates whether the URL is a universal link some installed app
+claims. When one does, the load is cancelled mid-flight and the app is brought
+forward — leaving the sheet blank for however long the handoff takes. No web
+API can suppress, detect, or close it: the sheet belongs to the OS, and the
+page is cross-origin so `window.close()` is not available either.
+
+**What shipped, and what it did not fix.** `canonicalUrl` removes the redirect
+hops that widen that window — `http://` upgrading to https, a bare or `m.` host
+redirecting to the canonical one, a share sheet's `utm_` tail — on the theory
+that universal links are matched against the URL actually requested, not
+against wherever a 301 lands.
+
+**That theory has now been measured, and it does not explain the symptom.**
+`planRewrites` over all 81 stored links returns **zero rewrites** — every one
+was already canonical before any of this shipped. The hosts:
+
+```
+ 40  www.webtoons.com      canonical
+ 30  tapas.io              canonical
+  4  mangaplus.shueisha.co.jp
+  3  only.tappytoon.com    shortlink
+  3  link.manta.net        shortlink
+  1  www.tappytoon.com
+```
+
+Read that against the report — WEBTOON and Manta blank, Tapas does not:
+
+- **WEBTOON is the case that settles it.** Forty links, already canonical, no
+  redirect to remove, and it blanks anyway. Whatever causes the flash there is
+  not a redirect hop, so no amount of URL cleanup will touch it.
+- **Tapas is canonical too, and does not blank** — so the difference between
+  the two is not in the stored URL at all. The remaining explanation is the
+  device: which of these apps is installed, and therefore which links iOS
+  actually hands off. Under that reading the blank sheet *is* the universal
+  link working.
+- **Manta is the one place a hop is real.** All three are `link.manta.net`
+  shortlinks, which must redirect before anything can claim them. Still
+  unquantified: the sandbox this was measured from cannot reach those hosts
+  (the proxy 403s `link.manta.net`, `only.tappytoon.com`, `webtoons.com` and
+  `tapas.io` alike), so the chain length is unknown. Three rows — repasting the
+  canonical series URLs by hand settles it faster than any code would.
+
+So `canonicalUrl` keeps new links clean, which is worth having and costs
+nothing, but it was never the fix for this. **The open question is the device,
+not the data**: which of WEBTOON, Manta and Tapas are installed.
+
+**If it is the handoff**, the only thing that skips the web view is a custom
+scheme (`webtoon://`, `tapas://`) opened directly. Costs, all real:
+
+- A nullable `app_scheme` on `sources`, plus a per-source template for turning
+  a stored series URL into a scheme URL — the id is in the URL for WEBTOON
+  (`title_no`) and MangaDex, and is not reliably extractable for the rest.
+- **Silent failure when the app is not installed.** Navigating to an unhandled
+  scheme does nothing visible, so it needs a fallback timer to the https URL,
+  which is a race with no reliable "did it work" signal.
+- iOS shows an "Open in …?" confirmation, so the tap costs a second tap.
+
+That is a worse interaction than a brief flash for everyone who has the app,
+and strictly worse for everyone who does not. **Probably not worth building** —
+but it is the honest answer to "remove the blank frame entirely", and it should
+be written down as evaluated rather than rediscovered.
+
+`display: "browser"` in the manifest is the other lever: links open a real
+Safari tab and the handoff is the ordinary one. It fixes the symptom by giving
+up the standalone window, which is not a trade worth making for a flash.
+
 ### Offline support / service worker
 
 `app/manifest.ts` makes the app installable, which per Next's PWA guide needs

@@ -13,6 +13,7 @@ import {
 import { CoverImage } from "@/components/cover-image";
 import { Button } from "@/components/ui/button";
 import type { CollectionItem } from "@/lib/data/collection-items";
+import { displayTitle } from "@/lib/data/display-title";
 
 /**
  * One title on a collection shelf or grid.
@@ -95,7 +96,7 @@ export function CollectionCard({
 
       <div className="absolute inset-x-0 bottom-0 p-2">
         <h3 className="line-clamp-3 text-center font-display text-sm font-bold leading-tight text-white drop-shadow">
-          {title.title}
+          {displayTitle(title)}
         </h3>
       </div>
     </div>
@@ -128,7 +129,7 @@ export function CollectionCard({
           <button
             type="submit"
             disabled={removing}
-            aria-label={`Remove ${title.title} from this collection`}
+            aria-label={`Remove ${displayTitle(title)} from this collection`}
             className="grid size-6 place-items-center rounded-pill bg-black/60 text-white backdrop-blur transition-colors hover:bg-alert disabled:opacity-50"
           >
             {removing ? (

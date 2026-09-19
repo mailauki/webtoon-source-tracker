@@ -20,6 +20,7 @@ import { EntryCardSheet } from "@/components/entry-card-sheet";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { ownsEveryChapter } from "@/lib/data/chapter-ranges";
 import { chapterTotal } from "@/lib/data/chapter-totals";
+import { displayTitle } from "@/lib/data/display-title";
 import type { LibraryRow } from "@/lib/data/entries";
 import { isOnHiatus } from "@/lib/data/pick-random";
 import type { RankedSource } from "@/lib/data/rank-sources";
@@ -55,6 +56,10 @@ export function EntryCard({
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const title = entry.media_titles;
+  // English where MAL has one — see lib/data/display-title.ts. Bound once
+  // because it is the accessible name as well as the heading, and the two
+  // drifting apart is exactly the bug a screen reader would surface.
+  const name = displayTitle(title);
   const sources = entry.entry_sources;
 
   // Primary source first, so the most relevant pill is never the one truncated.
@@ -104,7 +109,7 @@ export function EntryCard({
             // Labelled with the title alone. Without it the accessible name is
             // everything inside — cover alt, badges, status, progress — read
             // out as one run-on string.
-            aria-label={title.title}
+            aria-label={name}
             // Overlay style: the art IS the card. Everything — title, chips,
             // stats — sits on top of it, so the frame is just a clipping
             // boundary with a radius rather than a surface of its own.
@@ -116,7 +121,7 @@ export function EntryCard({
             <div className="relative aspect-[9/16] overflow-hidden">
               <CoverImage
                 src={title.main_picture_url}
-                title={title.title}
+                title={name}
                 sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 320px"
                 // `object-top` so what little a 9/16 window crops off a ~2:3
                 // cover comes off the bottom: webtoon covers put the title
@@ -157,7 +162,7 @@ export function EntryCard({
                 {/* Two lines at most — `h-17` above is what that second line
                 is budgeted against. */}
                 <h3 className="line-clamp-2 text-balance font-display text-xl font-semibold leading-tight text-white drop-shadow">
-                  {title.title}
+                  {name}
                 </h3>
               </div>
 
@@ -266,7 +271,7 @@ export function EntryCard({
                 target="_blank"
                 rel="noopener noreferrer"
                 title={`Read on ${readAt.sources!.name}`}
-                aria-label={`Read ${title.title} on ${readAt.sources!.name}`}
+                aria-label={`Read ${name} on ${readAt.sources!.name}`}
                 className="inline-flex size-7 items-center justify-center rounded-full bg-slate-900/70 text-white backdrop-blur-sm transition-colors hover:bg-slate-900/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background pointer-coarse:size-10 pointer-coarse:[&_svg]:size-5"
               >
                 <ExternalLink className="size-3.5" />
@@ -289,7 +294,7 @@ export function EntryCard({
             <button
               type="button"
               onClick={() => setSheetOpen(true)}
-              aria-label={`Actions for ${title.title}`}
+              aria-label={`Actions for ${name}`}
               className="inline-flex size-10 items-center justify-center rounded-full bg-slate-900/70 text-white backdrop-blur-sm transition-colors hover:bg-slate-900/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background pointer-fine:sr-only pointer-fine:focus-visible:not-sr-only"
             >
               <Ellipsis className="size-5" />
@@ -308,7 +313,7 @@ export function EntryCard({
       close and would take them with it. */}
       <EntryCardSheet
         entry={entry}
-        entryTitle={title.title}
+        entryTitle={name}
         topSources={topSources}
         open={sheetOpen}
         onOpenChange={setSheetOpen}
@@ -317,7 +322,7 @@ export function EntryCard({
 
       <EntrySourceDialog
         entryId={entry.id}
-        entryTitle={title.title}
+        entryTitle={name}
         request={dialog}
         attached={entry.entry_sources}
         catalog={catalog}
