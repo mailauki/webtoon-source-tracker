@@ -162,15 +162,22 @@ export function EntryCard({
               </div>
 
               {/* The source chips, standing where the reference runs its
-              icon-heavy bed/bath/sqft row. `flex-nowrap` + `overflow-hidden`:
-              on a narrow card a pill is clipped rather than wrapped onto a
-              line that would push the strip off the art. */}
+              icon-heavy bed/bath/sqft row. `flex-nowrap` keeps them on one
+              line: a second line here would push the strip off the art.
+
+              The pills may shrink past their content — `min-w-0` plus the
+              `truncate` below override the badge's own `shrink-0` and
+              `nowrap`. Two chips at `text-xs` are wider than a card in a
+              2-up grid, and a name ellipsised inside a whole pill reads as a
+              long name, where a pill sliced off mid-word by the container
+              just looks broken. */}
               <div className="flex flex-nowrap items-center gap-1 overflow-hidden pt-1">
                 {visible.map((es) =>
                   es.sources ? (
                     <SourceBadge
                       key={es.id}
                       overlay
+                      className="min-w-0 shrink [&>span]:truncate"
                       source={{
                         name: es.sources.name,
                         isPrimary: es.is_primary,
@@ -243,7 +250,10 @@ export function EntryCard({
           Both overlay cover art, so every pixel they grow is artwork they
           hide — the read link is sized for a finger on touch and left alone on
           a pointer, and the ⋯ button exists only on touch. */}
-          <div className="absolute right-2 top-2 flex flex-col items-center gap-1">
+          {/* `flex-col-reverse` puts the ⋯ button on top visually while
+          leaving the read link first in the DOM — reading is the common
+          action, so it keeps the first tab stop and is announced first. */}
+          <div className="absolute right-2 top-2 flex flex-col-reverse items-center gap-1">
             {/* The card owns the tap; this owns the read. Always visible: on
             touch there is no hover to reveal it, and "where do I read this" is
             the question the shelf exists to answer.

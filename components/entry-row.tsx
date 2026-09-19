@@ -144,7 +144,7 @@ export function EntryRow({
                   ) : null,
                 )}
                 {overflow > 0 ? (
-                  <span className="rounded-pill bg-secondary px-2 text-[11px] font-semibold text-secondary-foreground">
+                  <span className="rounded-pill bg-secondary px-2 text-xs font-semibold text-secondary-foreground">
                     +{overflow}
                   </span>
                 ) : null}

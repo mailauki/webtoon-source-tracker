@@ -46,7 +46,9 @@ export function SourceBadge({
       {source.isPrimary ? (
         <Crown className="size-2.5" aria-label="Primary source" />
       ) : null}
-      {source.name}
+      {/* Wrapped rather than bare so a caller can let the name truncate while
+          the icons keep their size — see the card's chip row. */}
+      <span className="min-w-0">{source.name}</span>
       {source.isPaid ? (
         <Lock className="size-2.5" aria-label="Paid" />
       ) : null}

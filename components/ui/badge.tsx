@@ -25,19 +25,19 @@ const badgeVariants = cva(
         // frosted: sits over cover art, so it uses fixed white/alpha rather
         // than theme tokens — the backdrop is always the image, never the page.
         frosted:
-          "bg-white/20 text-white backdrop-blur-sm rounded-badge px-1 text-[10px] font-bold",
+          "bg-white/20 text-white backdrop-blur-sm rounded-badge px-1 text-xs font-bold",
         // alert: the "No source" marker. Deliberately loud — an unassigned
         // title is the gap this whole app exists to surface.
         alert:
-          "bg-alert text-alert-foreground rounded-badge px-1.5 text-[10px] font-bold",
+          "bg-alert text-alert-foreground rounded-badge px-1.5 text-xs font-bold",
         source:
-          "bg-secondary text-secondary-foreground rounded-pill px-2 text-[11px] font-semibold",
+          "bg-secondary text-secondary-foreground rounded-pill px-2 text-xs font-semibold",
         // hiatus: the "paused everywhere" marker. Deliberately NOT `alert` —
         // a paused series is a normal state, not the missing-data gap that
         // red is reserved for. But it still needs a solid ground: the frosted
         // treatment vanished against pale cover art.
         hiatus:
-          "bg-slate-900/85 text-white rounded-badge px-1.5 text-[10px] font-bold backdrop-blur-sm",
+          "bg-slate-900/85 text-white rounded-badge px-1.5 text-xs font-bold backdrop-blur-sm",
         // owned: the "you bought this" marker. Shares `hiatus`'s solid-ground
         // shape for the same reason — the frosted treatment vanishes against
         // pale cover art — but carries the brand amber rather than slate.
@@ -46,7 +46,7 @@ const badgeVariants = cva(
         // voice. Still not `alert`: red stays with the missing-source gap,
         // which is the only badge here that asks to be acted on.
         owned:
-          "bg-brand/90 text-brand-foreground rounded-badge px-1.5 text-[10px] font-bold backdrop-blur-sm",
+          "bg-brand/90 text-brand-foreground rounded-badge px-1.5 text-xs font-bold backdrop-blur-sm",
       },
     },
     defaultVariants: {
