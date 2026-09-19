@@ -19,6 +19,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import type { LibraryTitle } from "@/lib/data/collections";
+import { displayTitle } from "@/lib/data/display-title";
+import { matchesTitle } from "@/lib/data/search";
 
 /**
  * Adds titles from the viewer's library to one of their collections.
@@ -67,7 +69,10 @@ export function AddTitlesDialog({
     return library.filter((row) => {
       if (present.has(row.media_titles.id)) return false;
       if (!term) return true;
-      return row.media_titles.title.toLowerCase().includes(term);
+      // Both names, not just the shown one: the list displays the English
+      // title, and someone who knows a series by its romanised name should
+      // still find it. Same bar as lib/data/search.ts's matchesTitle.
+      return matchesTitle(row.media_titles, term);
     });
   }, [library, present, query]);
 
@@ -140,7 +145,7 @@ export function AddTitlesDialog({
                           />
                         </div>
                         <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                          {title.title}
+                          {displayTitle(title)}
                         </span>
                         {done ? (
                           <Check className="size-4 shrink-0 text-brand" />

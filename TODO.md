@@ -471,6 +471,63 @@ Worth doing when the live link starts getting traffic from people who are not
 already signed in. Until then the seeded account plus the screenshots in
 `docs/screenshots/` cover the same ground for a portfolio reader.
 
+### `TODO(deep-links)` — the blank sheet before an external link opens its app
+
+**Where:** `components/entry-card.tsx` and `components/entry-row.tsx` (the read
+link), `app/manifest.ts` (`display`), `lib/data/canonical-url.ts`
+
+Tapping a read link from the installed app on iOS sometimes shows an empty
+in-app browser sheet — white body, empty URL bar — for a beat before the native
+app takes over. Reported against WEBTOON and Manta; **not** against Tapas.
+
+**The mechanism.** `display: "standalone"` means iOS hands every external link
+to the system in-app browser rather than to Safari. That sheet is presented
+*before* iOS evaluates whether the URL is a universal link some installed app
+claims. When one does, the load is cancelled mid-flight and the app is brought
+forward — leaving the sheet blank for however long the handoff takes. No web
+API can suppress, detect, or close it: the sheet belongs to the OS, and the
+page is cross-origin so `window.close()` is not available either.
+
+**What shipped, and what it did not fix.** `canonicalUrl` removes the redirect
+hops that widen that window — `http://` upgrading to https, a bare or `m.` host
+redirecting to the canonical one, a share sheet's `utm_` tail — on the theory
+that universal links are matched against the URL actually requested, not
+against wherever a 301 lands. That is real but partial, and **two things make
+it untested against the symptom**:
+
+- `scripts/canonicalize-urls.ts` has never been run, so every row that predates
+  it still holds whatever was pasted. `yarn backfill:urls` is a read-only dry
+  run and settles whether the stored links were ever the problem.
+- The WEBTOON/Manta-vs-Tapas split has a simpler explanation that the fix
+  cannot touch: **those are the apps that are installed**. If Tapas is not on
+  the device, its links have nothing to hand off to, so the sheet just loads
+  the website and there is no blank frame to see. Under that reading the blank
+  sheet *is* the universal link working, and the only remaining lever is to
+  stop presenting the sheet at all.
+
+Settle which it is before building anything — the dry run plus "which of these
+apps do you actually have installed" answers it.
+
+**If it is the handoff**, the only thing that skips the web view is a custom
+scheme (`webtoon://`, `tapas://`) opened directly. Costs, all real:
+
+- A nullable `app_scheme` on `sources`, plus a per-source template for turning
+  a stored series URL into a scheme URL — the id is in the URL for WEBTOON
+  (`title_no`) and MangaDex, and is not reliably extractable for the rest.
+- **Silent failure when the app is not installed.** Navigating to an unhandled
+  scheme does nothing visible, so it needs a fallback timer to the https URL,
+  which is a race with no reliable "did it work" signal.
+- iOS shows an "Open in …?" confirmation, so the tap costs a second tap.
+
+That is a worse interaction than a brief flash for everyone who has the app,
+and strictly worse for everyone who does not. **Probably not worth building** —
+but it is the honest answer to "remove the blank frame entirely", and it should
+be written down as evaluated rather than rediscovered.
+
+`display: "browser"` in the manifest is the other lever: links open a real
+Safari tab and the handoff is the ordinary one. It fixes the symptom by giving
+up the standalone window, which is not a trade worth making for a flash.
+
 ### Offline support / service worker
 
 `app/manifest.ts` makes the app installable, which per Next's PWA guide needs

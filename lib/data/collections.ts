@@ -230,9 +230,12 @@ export async function getLibraryTitles() {
     (from, to) =>
       supabase
         .from("user_entries")
-        .select(`id, media_titles!inner ( id, title, main_picture_url )`, {
-          count: "exact",
-        })
+        .select(
+          `id, media_titles!inner ( id, title, title_en, main_picture_url )`,
+          {
+            count: "exact",
+          },
+        )
         .order("mal_updated_at", { ascending: false, nullsFirst: false })
         // A unique tiebreak, so a page boundary cannot fall inside a run of
         // rows that share an update stamp.
@@ -243,7 +246,12 @@ export async function getLibraryTitles() {
 
   return rows as unknown as {
     id: number;
-    media_titles: { id: number; title: string; main_picture_url: string | null };
+    media_titles: {
+      id: number;
+      title: string;
+      title_en: string | null;
+      main_picture_url: string | null;
+    };
   }[];
 }
 

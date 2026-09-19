@@ -19,6 +19,7 @@ import {
 import { pickNext, selectByMode, type PickMode } from "@/lib/data/pick-random";
 import { readingLink } from "@/lib/data/source-links";
 import type { LibraryRow } from "@/lib/data/entries";
+import { displayTitle } from "@/lib/data/display-title";
 import { cn } from "@/lib/utils";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -243,7 +244,7 @@ function PickedTitle({
         <div className="relative aspect-[3/4] w-24 shrink-0 overflow-hidden rounded-md bg-muted">
           <CoverImage
             src={title.main_picture_url}
-            title={title.title}
+            title={displayTitle(title)}
             sizes="96px"
             className="object-cover"
           />
@@ -251,7 +252,7 @@ function PickedTitle({
 
         <div className="grid content-start gap-1.5">
           <p data-testid="picked-title" className="font-display font-semibold">
-            {title.title}
+            {displayTitle(title)}
           </p>
           <p className="text-sm text-muted-foreground">
             {STATUS_LABELS[entry.list_status] ?? entry.list_status} ·{" "}

@@ -15,6 +15,11 @@
  * the canonical one, a share sheet's `?utm_…` tail. None of that changes where
  * the link goes; all of it costs a round trip in front of the handoff.
  *
+ * TODO(deep-links): this narrows the window, it does not close it. The sheet is
+ * presented before iOS decides whether to hand off at all, so a clean handoff
+ * still flashes it. See TODO.md for what would actually remove it, why that is
+ * probably not worth building, and the diagnostic that has not been run yet.
+ *
  * Kept in `lib/data` rather than beside the form for the reason
  * `source-links.ts` gives: the form module imports the server actions it
  * submits, and the actions, the backfill script and the tests all need this

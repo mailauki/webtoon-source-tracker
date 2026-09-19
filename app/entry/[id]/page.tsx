@@ -12,6 +12,7 @@ import { ProgressEditor } from "@/components/progress-editor";
 import { Badge } from "@/components/ui/badge";
 import { isAdmin, verifySession } from "@/lib/auth/dal";
 import { chapterTotal } from "@/lib/data/chapter-totals";
+import { displayTitle, secondaryTitle } from "@/lib/data/display-title";
 import { getCollectionTargets } from "@/lib/data/collections";
 import { getEntry } from "@/lib/data/entries";
 import { getSources } from "@/lib/data/sources";
@@ -29,7 +30,7 @@ export async function generateMetadata({ params }: PageProps<"/entry/[id]">) {
   const { id } = await params;
   const entry = await getEntry(Number(id));
   return {
-    title: entry ? entry.media_titles.title : "Not found",
+    title: entry ? displayTitle(entry.media_titles) : "Not found",
   };
 }
 
@@ -57,6 +58,11 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
   if (!entry) notFound();
 
   const title = entry.media_titles;
+  // The heading takes the English name where MAL has one; `alsoKnownAs` is the
+  // canonical one, and is null when it would only repeat the heading. This
+  // page is the one surface with room for both — see lib/data/display-title.ts.
+  const name = displayTitle(title);
+  const alsoKnownAs = secondaryTitle(title);
   const total = title.num_chapters;
   const pct =
     total && total > 0
@@ -93,7 +99,7 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
           <div className="relative aspect-[1/2] w-full max-w-[160px] overflow-hidden rounded-md bg-muted">
             <CoverImage
               src={title.main_picture_url}
-              title={title.title}
+              title={name}
               sizes="160px"
               className="object-cover"
               preload
@@ -102,11 +108,9 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
 
           <div className="grid content-start gap-3">
             <div>
-              <h1 className="font-display text-2xl font-bold">{title.title}</h1>
-              {title.title_en && title.title_en !== title.title ? (
-                <p className="text-sm text-muted-foreground">
-                  {title.title_en}
-                </p>
+              <h1 className="font-display text-2xl font-bold">{name}</h1>
+              {alsoKnownAs ? (
+                <p className="text-sm text-muted-foreground">{alsoKnownAs}</p>
               ) : null}
             </div>
 
