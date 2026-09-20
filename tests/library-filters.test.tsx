@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -22,11 +22,8 @@ vi.mock("@/components/entry-card", () => ({
   ),
 }));
 
-import { HiatusFilter } from "@/components/hiatus-filter";
+import { LibraryFilterMenu } from "@/components/library-filter-menu";
 import { LibraryFilters, LibraryGrid } from "@/components/library-grid";
-import { OwnedFilter } from "@/components/owned-filter";
-import { SourceFilter } from "@/components/source-filter";
-import { StatusFilter } from "@/components/status-filter";
 import { DEFAULT_SORT } from "@/lib/data/library-prefs";
 import type { LibraryRow } from "@/lib/data/entries";
 
@@ -74,8 +71,7 @@ const SOURCES = [
 function setup(initial = { status: "", source: "" }) {
   return render(
     <LibraryFilters initial={{ sort: DEFAULT_SORT, ...initial }}>
-      <StatusFilter statuses={STATUSES} />
-      <SourceFilter sources={SOURCES} />
+      <LibraryFilterMenu statuses={STATUSES} sources={SOURCES} />
       <LibraryGrid
         entries={ROWS}
         emptyFiltered={<p>No titles match</p>}
@@ -89,21 +85,55 @@ const visibleIds = () =>
   screen.queryAllByTestId("entry").map((n) => Number(n.textContent));
 
 /**
- * The chip a user would click.
+ * Opens the filter menu. Every control now lives behind this one trigger.
  *
- * Scoped by group because both rows render an "All" chip. The status row also
- * renders its active chip twice — once in the full row, once as the collapsed
- * mobile summary — and jsdom applies no CSS, so both are "visible" here. The
- * first match is the real row; the duplicate is the `sm:hidden` summary.
+ * The toggles deliberately leave the menu open, so a helper called after one
+ * of them would otherwise find the trigger covered. Closing first makes every
+ * helper safe to call from any state.
  */
-function chip(group: "status" | "source", label: string) {
-  const region = screen.getByRole("group", {
-    name: group === "status" ? "Filter by status" : "Filter by source",
-  });
-  const matches = within(region).getAllByRole("button", {
-    name: new RegExp(`^${label}`),
-  });
-  return matches[0];
+async function openMenu() {
+  const trigger = screen.queryByRole("button", { name: /^Filters:/ });
+  if (!trigger) {
+    // A menu is already open over it.
+    await userEvent.keyboard("{Escape}");
+  }
+  await userEvent.click(screen.getByRole("button", { name: /^Filters:/ }));
+}
+
+/**
+ * Pick a status or source, the way a user would: open the menu, open that
+ * filter's submenu, click the item.
+ *
+ * Both submenus contain an "All" item, so the item lookup is scoped to the
+ * submenu that was just opened rather than searched for document-wide.
+ */
+async function choose(group: "Status" | "Source", label: string) {
+  await openMenu();
+  await userEvent.click(await screen.findByRole("menuitem", { name: new RegExp(`^${group}`) }));
+
+  const items = await screen.findAllByRole("menuitemradio");
+  const match = items.find((el) =>
+    new RegExp(`^${label}`).test(el.textContent ?? ""),
+  );
+  if (!match) throw new Error(`No ${group} option matching ${label}`);
+  await userEvent.click(match);
+}
+
+/** The checkbox item for one of the two boolean filters. */
+async function toggleItem(name: RegExp) {
+  await openMenu();
+  const item = await screen.findByRole("menuitemcheckbox", { name });
+  await userEvent.click(item);
+  return item;
+}
+
+/** Reads a toggle's state without leaving the menu open for the next act. */
+async function toggleState(name: RegExp) {
+  await openMenu();
+  const item = await screen.findByRole("menuitemcheckbox", { name });
+  const checked = item.getAttribute("aria-checked");
+  await userEvent.keyboard("{Escape}");
+  return checked;
 }
 
 // Vitest does not enable RTL's auto-cleanup, so renders would otherwise
@@ -121,27 +151,27 @@ describe("filtering", () => {
 
   it("narrows the grid to the chosen status", async () => {
     setup();
-    await userEvent.click(chip("status", "Reading"));
+    await choose("Status", "Reading");
     expect(visibleIds()).toEqual([1, 2]);
   });
 
   it("matches a title on any of its sources, not just the first", async () => {
     setup();
-    await userEvent.click(chip("source", "Tapas"));
+    await choose("Source", "Tapas");
     // Row 4 lists webtoon first; it must still match on tapas.
     expect(visibleIds()).toEqual([3, 4]);
   });
 
   it("treats 'No source' as titles with no sources at all", async () => {
     setup();
-    await userEvent.click(chip("source", "No source"));
+    await choose("Source", "No source");
     expect(visibleIds()).toEqual([2]);
   });
 
   it("combines status and source", async () => {
     setup();
-    await userEvent.click(chip("status", "Reading"));
-    await userEvent.click(chip("source", "Webtoon"));
+    await choose("Status", "Reading");
+    await choose("Source", "Webtoon");
     expect(visibleIds()).toEqual([1]);
   });
 
@@ -156,8 +186,8 @@ describe("empty states", () => {
     setup();
     expect(screen.queryByText("Nothing synced yet")).not.toBeInTheDocument();
 
-    await userEvent.click(chip("status", "Completed"));
-    await userEvent.click(chip("source", "Webtoon"));
+    await choose("Status", "Completed");
+    await choose("Source", "Webtoon");
 
     expect(screen.getByText("No titles match")).toBeInTheDocument();
     expect(screen.queryByText("Nothing synced yet")).not.toBeInTheDocument();
@@ -170,8 +200,7 @@ describe("empty states", () => {
       <LibraryFilters
         initial={{ status: "", source: "", sort: DEFAULT_SORT }}
       >
-        <StatusFilter statuses={STATUSES} />
-        <SourceFilter sources={SOURCES} />
+        <LibraryFilterMenu statuses={STATUSES} sources={SOURCES} />
         <LibraryGrid
           entries={[]}
           emptyFiltered={<p>No titles match</p>}
@@ -188,23 +217,56 @@ describe("empty states", () => {
 describe("persistence", () => {
   it("saves the selection", async () => {
     setup();
-    await userEvent.click(chip("status", "Reading"));
+    await choose("Status", "Reading");
     expect(saveLibraryPrefs).toHaveBeenCalledWith({ status: "reading" });
   });
 
-  // Regression: clicking the active chip clears it, and "" must be stored as
-  // the explicit `all` sentinel — null would read as "never chose" and the old
-  // filter would come back on the next visit.
+  // Regression: "" must be stored as the explicit `all` sentinel — null would
+  // read as "never chose", and the old filter would come back on the next
+  // visit. The chips used to clear by re-clicking the active one; in a radio
+  // group that is a no-op (see below), so "All" is the route now.
   it("stores a cleared filter as the explicit sentinel", async () => {
     setup({ status: "reading", source: "" });
-    await userEvent.click(chip("status", "Reading"));
+    await choose("Status", "All");
     expect(saveLibraryPrefs).toHaveBeenCalledWith({ status: "all" });
     expect(visibleIds()).toEqual([1, 2, 3, 4]);
   });
 
+  // The chips toggled: clicking the active one cleared the filter. A menu
+  // item must not — an item showing itself as chosen that unsets on click is
+  // a trap, and "All" is right there.
+  it("leaves the filter alone when the active item is re-selected", async () => {
+    setup({ status: "reading", source: "" });
+    await choose("Status", "Reading");
+    expect(saveLibraryPrefs).not.toHaveBeenCalled();
+    expect(visibleIds()).toEqual([1, 2]);
+  });
+
+  // Clearing is four independent writes rather than one action, so each
+  // filter that was set has to come back off — and the ones already off must
+  // not be written at all.
+  it("clears every active filter at once", async () => {
+    setup({ status: "reading", source: "webtoon" });
+    await openMenu();
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Clear all" }));
+
+    expect(saveLibraryPrefs).toHaveBeenCalledWith({ status: "all" });
+    expect(saveLibraryPrefs).toHaveBeenCalledWith({ source: "all" });
+    expect(visibleIds()).toEqual([1, 2, 3, 4]);
+  });
+
+  // Nothing to clear means no dead row in the menu.
+  it("offers no clear action on an unfiltered shelf", async () => {
+    setup();
+    await openMenu();
+    expect(
+      screen.queryByRole("menuitem", { name: "Clear all" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("saves only the filter that changed", async () => {
     setup({ status: "reading", source: "webtoon" });
-    await userEvent.click(chip("source", "Tapas"));
+    await choose("Source", "Tapas");
     // A source click must not overwrite the saved status.
     expect(saveLibraryPrefs).toHaveBeenCalledWith({ source: "tapas" });
   });
@@ -222,8 +284,7 @@ describe("hide hiatus toggle", () => {
   function setupShelf(initial = { status: "", source: "" }) {
     return render(
       <LibraryFilters initial={{ sort: DEFAULT_SORT, ...initial }}>
-        <HiatusFilter />
-        <SourceFilter sources={SOURCES} />
+        <LibraryFilterMenu statuses={STATUSES} sources={SOURCES} />
         <LibraryGrid
           entries={SHELF}
           emptyFiltered={<p>No titles match</p>}
@@ -233,48 +294,47 @@ describe("hide hiatus toggle", () => {
     );
   }
 
-  const toggle = () => screen.getByRole("button", { name: /Hide hiatus/ });
+  const HIATUS = /Hide hiatus/;
 
-  it("shows hiatus titles by default", () => {
+  it("shows hiatus titles by default", async () => {
     setupShelf();
     expect(visibleIds()).toEqual([1, 2, 3, 4, 5, 6]);
-    expect(toggle()).toHaveAttribute("aria-pressed", "false");
+    expect(await toggleState(HIATUS)).toBe("false");
   });
 
   it("hides only fully-paused titles when pressed", async () => {
     setupShelf();
-    await userEvent.click(toggle());
+    await toggleItem(HIATUS);
 
     // 5 goes; 6 stays, because it still updates on Tapas.
     expect(visibleIds()).toEqual([1, 2, 3, 4, 6]);
-    expect(toggle()).toHaveAttribute("aria-pressed", "true");
+    expect(await toggleState(HIATUS)).toBe("true");
   });
 
   it("brings them back when pressed again", async () => {
     setupShelf();
-    await userEvent.click(toggle());
-    await userEvent.click(toggle());
+    const item = await toggleItem(HIATUS);
+    await userEvent.click(item);
     expect(visibleIds()).toEqual([1, 2, 3, 4, 5, 6]);
   });
 
   it("persists the choice as a boolean, not a sentinel", async () => {
     setupShelf();
-    await userEvent.click(toggle());
+    await toggleItem(HIATUS);
     expect(saveLibraryPrefs).toHaveBeenCalledWith({ hideHiatus: true });
 
-    await userEvent.click(toggle());
+    await toggleItem(HIATUS);
     // false must survive as false — it is "show them again", not an empty
     // value to be normalised to the `all` sentinel.
     expect(saveLibraryPrefs).toHaveBeenLastCalledWith({ hideHiatus: false });
   });
 
-  it("starts pressed when the stored preference says so", () => {
+  it("starts pressed when the stored preference says so", async () => {
     render(
       <LibraryFilters
         initial={{ status: "", source: "", hideHiatus: true, sort: DEFAULT_SORT }}
       >
-        <HiatusFilter />
-        <SourceFilter sources={SOURCES} />
+        <LibraryFilterMenu statuses={STATUSES} sources={SOURCES} />
         <LibraryGrid
           entries={SHELF}
           emptyFiltered={<p>No titles match</p>}
@@ -283,13 +343,13 @@ describe("hide hiatus toggle", () => {
       </LibraryFilters>,
     );
 
-    expect(toggle()).toHaveAttribute("aria-pressed", "true");
+    expect(await toggleState(HIATUS)).toBe("true");
     expect(visibleIds()).toEqual([1, 2, 3, 4, 6]);
   });
 
   it("narrows alongside a source chip rather than replacing it", async () => {
     setupShelf({ status: "", source: "tapas" });
-    await userEvent.click(toggle());
+    await toggleItem(HIATUS);
     // On Tapas: 3, 4 and 6 — none of which is paused everywhere.
     expect(visibleIds()).toEqual([3, 4, 6]);
   });
@@ -297,8 +357,7 @@ describe("hide hiatus toggle", () => {
   it("shows the filtered empty state when it hides the last title", async () => {
     render(
       <LibraryFilters initial={{ status: "", source: "", sort: DEFAULT_SORT }}>
-        <HiatusFilter />
-        <SourceFilter sources={SOURCES} />
+        <LibraryFilterMenu statuses={STATUSES} sources={SOURCES} />
         <LibraryGrid
           entries={[row(9, "reading", ["webtoon"], "Title 9", null, [true])]}
           emptyFiltered={<p>No titles match</p>}
@@ -307,7 +366,7 @@ describe("hide hiatus toggle", () => {
       </LibraryFilters>,
     );
 
-    await userEvent.click(toggle());
+    await toggleItem(HIATUS);
     // "your filters hid it", not "nothing synced yet" — the shelf is not empty.
     expect(screen.getByText("No titles match")).toBeInTheDocument();
   });
@@ -328,8 +387,7 @@ describe("owned only toggle", () => {
   function setupShelf(initial = { status: "", source: "" }) {
     return render(
       <LibraryFilters initial={{ sort: DEFAULT_SORT, ...initial }}>
-        <OwnedFilter />
-        <SourceFilter sources={SOURCES} />
+        <LibraryFilterMenu statuses={STATUSES} sources={SOURCES} />
         <LibraryGrid
           entries={SHELF}
           emptyFiltered={<p>No titles match</p>}
@@ -339,48 +397,47 @@ describe("owned only toggle", () => {
     );
   }
 
-  const toggle = () => screen.getByRole("button", { name: /Owned only/ });
+  const OWNED = /Owned only/;
 
-  it("shows the whole shelf by default", () => {
+  it("shows the whole shelf by default", async () => {
     setupShelf();
     expect(visibleIds()).toEqual([1, 2, 3, 4, 7, 8, 9]);
-    expect(toggle()).toHaveAttribute("aria-pressed", "false");
+    expect(await toggleState(OWNED)).toBe("false");
   });
 
   it("keeps only owned titles when pressed", async () => {
     setupShelf();
-    await userEvent.click(toggle());
+    await toggleItem(OWNED);
 
     // 8 stays on the strength of its Tapas copy; 9 and the unowned ROWS go.
     expect(visibleIds()).toEqual([7, 8]);
-    expect(toggle()).toHaveAttribute("aria-pressed", "true");
+    expect(await toggleState(OWNED)).toBe("true");
   });
 
   it("brings the rest back when pressed again", async () => {
     setupShelf();
-    await userEvent.click(toggle());
-    await userEvent.click(toggle());
+    const item = await toggleItem(OWNED);
+    await userEvent.click(item);
     expect(visibleIds()).toEqual([1, 2, 3, 4, 7, 8, 9]);
   });
 
   it("persists the choice as a boolean, not a sentinel", async () => {
     setupShelf();
-    await userEvent.click(toggle());
+    await toggleItem(OWNED);
     expect(saveLibraryPrefs).toHaveBeenCalledWith({ ownedOnly: true });
 
-    await userEvent.click(toggle());
+    await toggleItem(OWNED);
     // false must survive as false — it is "show the whole shelf again", not an
     // empty value to be normalised to the `all` sentinel.
     expect(saveLibraryPrefs).toHaveBeenLastCalledWith({ ownedOnly: false });
   });
 
-  it("starts pressed when the stored preference says so", () => {
+  it("starts pressed when the stored preference says so", async () => {
     render(
       <LibraryFilters
         initial={{ status: "", source: "", ownedOnly: true, sort: DEFAULT_SORT }}
       >
-        <OwnedFilter />
-        <SourceFilter sources={SOURCES} />
+        <LibraryFilterMenu statuses={STATUSES} sources={SOURCES} />
         <LibraryGrid
           entries={SHELF}
           emptyFiltered={<p>No titles match</p>}
@@ -389,13 +446,13 @@ describe("owned only toggle", () => {
       </LibraryFilters>,
     );
 
-    expect(toggle()).toHaveAttribute("aria-pressed", "true");
+    expect(await toggleState(OWNED)).toBe("true");
     expect(visibleIds()).toEqual([7, 8]);
   });
 
   it("narrows alongside a source chip rather than replacing it", async () => {
     setupShelf({ status: "", source: "tapas" });
-    await userEvent.click(toggle());
+    await toggleItem(OWNED);
     // On Tapas: 4 and 8 — of which only 8 is owned anywhere.
     expect(visibleIds()).toEqual([8]);
   });
@@ -403,8 +460,7 @@ describe("owned only toggle", () => {
   it("shows the filtered empty state when nothing is owned", async () => {
     render(
       <LibraryFilters initial={{ status: "", source: "", sort: DEFAULT_SORT }}>
-        <OwnedFilter />
-        <SourceFilter sources={SOURCES} />
+        <LibraryFilterMenu statuses={STATUSES} sources={SOURCES} />
         <LibraryGrid
           entries={[row(1, "reading", ["webtoon"])]}
           emptyFiltered={<p>No titles match</p>}
@@ -413,7 +469,7 @@ describe("owned only toggle", () => {
       </LibraryFilters>,
     );
 
-    await userEvent.click(toggle());
+    await toggleItem(OWNED);
     // "your filters hid it", not "nothing synced yet" — the shelf has a title
     // on it, the user just owns none of it. This is the case that makes
     // off-by-default matter.

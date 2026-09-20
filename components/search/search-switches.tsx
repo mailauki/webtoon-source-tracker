@@ -89,8 +89,8 @@ function MediaKindSwitch() {
  * on their own list would look like the app lost their data, while a discovery
  * search should start from the safe side.
  *
- * The icon swaps with the state instead of staying fixed the way HiatusFilter's
- * does, because the label cannot carry it: "Include NSFW" describes the switch
+ * The icon swaps with the state instead of staying fixed, because the label
+ * cannot carry it: "Include NSFW" describes the switch
  * in both positions, and on a phone the label is the first thing dropped — so
  * without the swap the only signal left would be the border.
  */

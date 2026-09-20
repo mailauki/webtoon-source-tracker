@@ -22,7 +22,7 @@ vi.mock("@/components/entry-card", () => ({
 }));
 
 import { LibraryFilters, LibraryGrid } from "@/components/library-grid";
-import { SortFilter } from "@/components/sort-filter";
+import { LibraryFilterMenu } from "@/components/library-filter-menu";
 import { DEFAULT_SORT, type Sort } from "@/lib/data/library-prefs";
 import type { LibraryRow } from "@/lib/data/entries";
 
@@ -45,7 +45,7 @@ const ROWS = [
 function setup(sort: Sort = DEFAULT_SORT) {
   return render(
     <LibraryFilters initial={{ status: "", source: "", sort }}>
-      <SortFilter />
+      <LibraryFilterMenu statuses={[]} sources={[]} />
       <LibraryGrid
         entries={ROWS}
         emptyFiltered={<p>No titles match</p>}
@@ -58,9 +58,15 @@ function setup(sort: Sort = DEFAULT_SORT) {
 const visibleIds = () =>
   screen.queryAllByTestId("entry").map((n) => Number(n.textContent));
 
-/** Opens the sort menu and returns once its items are on screen. */
+/**
+ * Opens the filter menu and steps into its Sort submenu.
+ *
+ * Sort used to have a trigger of its own; it is one branch of the single
+ * filter menu now, so getting to an option is two clicks rather than one.
+ */
 async function openMenu() {
-  await userEvent.click(screen.getByRole("button", { name: /^Sort by/ }));
+  await userEvent.click(screen.getByRole("button", { name: /^Filters:/ }));
+  await userEvent.click(await screen.findByRole("menuitem", { name: /^Sort/ }));
 }
 
 // Vitest does not enable RTL's auto-cleanup.
@@ -68,12 +74,15 @@ afterEach(cleanup);
 beforeEach(() => saveLibraryPrefs.mockClear());
 
 describe("the sort menu", () => {
-  it("names the current order on the trigger", () => {
+  // A grid of covers gives no other clue as to how it is ordered, so the
+  // order has to be readable without opening the submenu. It moved from a
+  // dedicated trigger to the Sort row of the one filter menu.
+  it("names the current order on the menu row", async () => {
     setup({ key: "added", direction: "asc" });
-    // A grid of covers gives no other clue as to how it is ordered.
-    expect(
-      screen.getByRole("button", { name: "Sort by Date added, Oldest first" }),
-    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /^Filters:/ }));
+
+    const row = await screen.findByRole("menuitem", { name: /^Sort/ });
+    expect(row).toHaveTextContent("Oldest");
   });
 
   it("reorders the grid when a key is chosen", async () => {

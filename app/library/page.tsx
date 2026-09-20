@@ -1,13 +1,9 @@
 import Link from "next/link";
 
 import { AppShell } from "@/components/app-shell";
-import { HiatusFilter } from "@/components/hiatus-filter";
+import { LibraryFilterMenu } from "@/components/library-filter-menu";
 import { LibraryFilters, LibraryGrid } from "@/components/library-grid";
-import { OwnedFilter } from "@/components/owned-filter";
 import { RandomPick } from "@/components/random-pick";
-import { SortFilter } from "@/components/sort-filter";
-import { SourceFilter } from "@/components/source-filter";
-import { StatusFilter } from "@/components/status-filter";
 import { SyncButton } from "@/components/sync-button";
 import { Button } from "@/components/ui/button";
 import {
@@ -98,8 +94,8 @@ export default async function LibraryPage() {
     .map((s) => ({ value: s.slug ?? `custom-${s.id}`, label: s.name }));
 
   return (
-    // Wraps the whole shell: the status chips render into the header slot and
-    // the grid into the body, and a click on either has to move the other.
+    // Wraps the whole shell: the filter menu renders into the header slot and
+    // the grid into the body, and a choice in the menu has to move the grid.
     <LibraryFilters
       initial={{
         status: activeStatus,
@@ -111,37 +107,21 @@ export default async function LibraryPage() {
       entries={entries}
     >
       <AppShell
+        // One row, one control. This used to be two sticky tiers — status
+        // chips and three buttons above, source chips below — which on a
+        // phone cost more height than the first row of covers. Everything
+        // they did now lives in the menu; see LibraryFilterMenu for why each
+        // filter became the kind of menu item it did.
         secondaryRow={
-          // All of these live in the secondary row: the chips narrow the
-          // shelf and the controls opposite act on what is left, and none is
-          // much use without seeing the others.
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <StatusFilter statuses={statusChips} />
-            {/* All three act on the shelf the chips have narrowed: two
-                change which titles are left — dropping the paused ones,
-                keeping only the owned ones — and the third orders what
-                remains. The two narrowing toggles sit together, with the sort
-                last, so the group reads as "what, then in what order".
-                `flex-wrap` on the parent lets it drop to its own line rather
-                than squeezing the status row on a phone. */}
-            <div className="flex shrink-0 items-center gap-1.5">
-              <HiatusFilter />
-              <OwnedFilter />
-              <SortFilter />
-            </div>
-          </div>
+          <LibraryFilterMenu statuses={statusChips} sources={sourceChips} />
         }
-        // The source chips stick as a second tier under the status row rather
-        // than scrolling away above the shelf: they narrow the same grid the
-        // status chips do, and reaching one meant scrolling back to the top.
-        tertiaryRow={<SourceFilter sources={sourceChips} />}
       >
         <div className="grid gap-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <h1 className="font-display text-2xl font-bold">Library</h1>
               {/* The whole shelf, deliberately — this is a standing fact
-                  about the library, not a running count of what the chips
+                  about the library, not a running count of what the filters
                   have left. The grid below shows that. */}
               <p className="text-sm text-muted-foreground">
                 {entries.length} {entries.length === 1 ? "title" : "titles"} ·
@@ -156,8 +136,8 @@ export default async function LibraryPage() {
           </div>
 
           {/* Above the shelf rather than in the filter row: two of its three
-              questions reach past the chips, so it is not a filter control
-              and sitting among them would suggest it was. */}
+              questions reach past the filters, so it is not a filter control
+              and sitting beside the menu would suggest it was. */}
           <RandomPick />
 
           {connection.status === "needs_reauth" ? (
@@ -180,7 +160,7 @@ export default async function LibraryPage() {
               />
             }
             // Both empty states are supplied as rendered nodes and the grid
-            // picks between them: which one applies depends on the chips,
+            // picks between them: which one applies depends on the filters,
             // which are client state, and a node cannot be chosen here
             // without re-rendering this page per click.
             emptyUnfiltered={
