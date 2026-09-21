@@ -8,6 +8,31 @@ export default function DiscoverLoading() {
         <Skeleton className="h-4 w-72" />
       </div>
 
+      {/* The category panel. A fixed run of pills at plausible widths: the
+          real set depends on what the curated titles happen to be tagged
+          with, and a skeleton that guessed the exact count would be wrong
+          more often than one that just holds the space. */}
+      <div className="grid gap-3 rounded-xl border border-border bg-muted/40 p-4">
+        <Skeleton className="h-5 w-44" />
+        {[
+          [64, 88, 72, 96, 80],
+          [96, 72, 84],
+        ].map((row, group) => (
+          <div key={group} className="grid gap-2">
+            <Skeleton className="h-3 w-16" />
+            <div className="flex flex-wrap gap-2">
+              {row.map((width, i) => (
+                <Skeleton
+                  key={i}
+                  className="h-9 rounded-pill"
+                  style={{ width }}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* Two shelves' worth. The real page renders as many as there are
           collections, but a skeleton that guessed high would jump the layout
           more than one that guesses low. */}
