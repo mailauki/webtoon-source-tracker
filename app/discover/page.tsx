@@ -1,18 +1,16 @@
 import Link from "next/link";
-import { Compass } from "lucide-react";
+import { Compass, LayoutGrid } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { CollectionShelf } from "@/components/collection-shelf";
-import { CategoryNav } from "@/components/discover/category-nav";
+import { Button } from "@/components/ui/button";
 import { verifySession } from "@/lib/auth/dal";
 import { getCuratedShelves } from "@/lib/data/collections";
-import { groupByKind } from "@/lib/data/tag-items";
-import { getActiveTags, getTaggedTitleCounts } from "@/lib/data/tags";
 
 export const metadata = { title: "Discover" };
 
 /**
- * Curated collections, as stacked shelves, over a category index.
+ * Curated collections, as stacked shelves.
  *
  * Deliberately separate from /library. The library is your own shelf and
  * already carries status chips, source chips, sort, hide-hiatus and search;
@@ -20,12 +18,11 @@ export const metadata = { title: "Discover" };
  * different set of rows — titles you may not track at all. Putting these
  * shelves above the grid would have crowded both.
  *
- * The categories above them are navigation, not a filter over the shelves:
- * each pill opens /discover/tag/[slug], the page that already answers
- * "everything carrying this tag". Those pages existed before this panel did
- * but could only be reached from a chip on a title you had already opened,
- * which is the wrong way round for browsing. The collections stay the page's
- * content; the index is four short rows above them.
+ * Browsing by category is one link from here, not a panel on the page. The
+ * categories briefly sat above the shelves, and even capped to eight pills a
+ * kind they ran to four rows before the first collection — which inverted
+ * what this page is for. They live at /discover/categories now, and the
+ * collections get the page back.
  *
  * Signed-in only, like the rest of the app: every RLS policy here is
  * `to authenticated`, so an anonymous visitor would see neither the
@@ -34,34 +31,36 @@ export const metadata = { title: "Discover" };
 export default async function DiscoverPage() {
   await verifySession();
 
-  const [shelves, tags, taggedCounts] = await Promise.all([
-    getCuratedShelves(),
-    getActiveTags(),
-    getTaggedTitleCounts(),
-  ]);
-
-  // A tag no title carries is dropped before grouping: its page would be an
-  // empty grid, and an empty page reached from a deliberate press reads as a
-  // broken link rather than as an honest "nothing here yet". groupByKind then
-  // drops any kind left with nothing.
-  const groups = groupByKind(
-    tags.filter((tag) => (taggedCounts.get(tag.id) ?? 0) > 0),
-  );
+  const shelves = await getCuratedShelves();
 
   return (
     <AppShell>
       <div className="grid gap-8">
-        <div className="grid gap-1">
-          <h1 className="font-display text-2xl font-bold tracking-tight">
-            Discover
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Collections of titles worth a look — add any of them straight to
-            your library.
-          </p>
-        </div>
+        {/* Stacks under the heading on a phone and sits beside it once there
+            is room, the same shape CollectionShelf's own heading row takes. */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="grid gap-1">
+            <h1 className="font-display text-2xl font-bold tracking-tight">
+              Discover
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Collections of titles worth a look — add any of them straight to
+              your library.
+            </p>
+          </div>
 
-        <CategoryNav groups={groups} />
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="rounded-pill self-start sm:self-auto"
+          >
+            <Link href="/discover/categories">
+              <LayoutGrid data-icon="inline-start" />
+              Browse by category
+            </Link>
+          </Button>
+        </div>
 
         {shelves.length === 0 ? (
           // Curated collections are seeded server-side (there is no admin UI),

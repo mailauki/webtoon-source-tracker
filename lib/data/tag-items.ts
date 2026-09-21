@@ -79,13 +79,3 @@ export function groupByKind(tags: Tag[]): TagGroup[] {
   })).filter((group) => group.tags.length > 0);
 }
 
-/**
- * The pills one group shows before "show all".
- *
- * /discover is a page about curated collections; the category index above them
- * is the thing you reach for occasionally, so a genre list long enough to push
- * the first shelf off the screen has already cost more than it gave. MAL's
- * theme vocabulary alone runs to about fifty entries, so some cut is not
- * optional.
- */
-export const PILLS_PER_GROUP = 8;
