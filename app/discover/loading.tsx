@@ -3,9 +3,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function DiscoverLoading() {
   return (
     <div className="grid gap-8">
-      <div className="grid gap-2">
-        <Skeleton className="h-8 w-40" />
-        <Skeleton className="h-4 w-72" />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="grid gap-2">
+          <Skeleton className="h-8 w-40" />
+          <Skeleton className="h-4 w-72" />
+        </div>
+        <Skeleton className="h-8 w-44 self-start rounded-pill sm:self-auto" />
       </div>
 
       {/* Two shelves' worth. The real page renders as many as there are

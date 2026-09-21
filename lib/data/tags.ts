@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { CollectionTitle } from "@/lib/data/collection-items";
+import { readAllRows } from "@/lib/data/pagination";
 import { sortTags, type Tag } from "@/lib/data/tag-items";
 import { createClient } from "@/lib/supabase/server";
 
@@ -49,6 +50,59 @@ export async function getTagBySlug(slug: string): Promise<Tag | null> {
 
   if (error) throw new Error(`Failed to load tag: ${error.message}`);
   return (data as Tag) ?? null;
+}
+
+/**
+ * How many catalog titles carry each tag, keyed by tag id.
+ *
+ * This is what /discover's category index needs, and the only thing it needs:
+ * a tag nothing carries would be a pill leading to an empty page, and an empty
+ * page reached from a deliberate press reads as a broken link rather than as
+ * an honest "nothing here yet".
+ *
+ * Counted rather than joined to the titles themselves — the pills show a name
+ * and a glyph, never a cover — so this reads one narrow column and never
+ * touches `media_titles`.
+ *
+ * Paged for the same reason the library is: this is the whole curated link
+ * table, and a row lost to `max_rows` would silently retire a tag from the
+ * index while its page still works.
+ *
+ * Returns an empty map rather than throwing when the read fails. The index is
+ * a way into the collections, not the collections themselves; losing it leaves
+ * /discover as the shelf page it was before categories existed, which is a far
+ * better answer than an error boundary over the whole route.
+ */
+export async function getTaggedTitleCounts(): Promise<Map<number, number>> {
+  const supabase = await createClient();
+
+  let rows;
+  try {
+    rows = await readAllRows(
+      (from, to) =>
+        supabase
+          .from("title_tags")
+          .select("id, tag_id", { count: "exact" })
+          // Curated links only, matching every other tag read here: a private
+          // user tag must not widen somebody else's index.
+          .is("owner_id", null)
+          // A unique tiebreak, so a page boundary cannot fall inside a run of
+          // rows that share a tag.
+          .order("id", { ascending: true })
+          .range(from, to),
+      "tagged titles",
+    );
+  } catch {
+    return new Map();
+  }
+
+  const counts = new Map<number, number>();
+
+  for (const row of rows as unknown as { tag_id: number }[]) {
+    counts.set(row.tag_id, (counts.get(row.tag_id) ?? 0) + 1);
+  }
+
+  return counts;
 }
 
 /** Active tags on one title, for the entry page's chips. */

@@ -13,6 +13,21 @@ export type TagKind = "genre" | "trope" | "theme" | "format";
 /** Display order of the kinds. Genres first: they are the coarsest grouping. */
 export const TAG_KINDS: TagKind[] = ["genre", "trope", "theme", "format"];
 
+/**
+ * Plural headings for the kinds, for a surface that groups tags under them.
+ *
+ * The kind itself is a singular lowercase slug — it is a column value, not a
+ * label — so anything that shows a heading would otherwise capitalise and
+ * pluralise it inline, and /discover and the admin list would be one edit
+ * away from disagreeing about what a `format` is called.
+ */
+export const KIND_LABELS: Record<TagKind, string> = {
+  genre: "Genres",
+  trope: "Tropes",
+  theme: "Themes",
+  format: "Formats",
+};
+
 export type Tag = {
   id: number;
   slug: string;
@@ -48,15 +63,19 @@ export function sortTags(tags: Tag[]): Tag[] {
   );
 }
 
+/** One kind's tags, as a surface that groups them renders them. */
+export type TagGroup = { kind: TagKind; tags: Tag[] };
+
 /**
  * Tags bucketed by kind, in TAG_KINDS order, each bucket sorted.
  *
  * Empty kinds are dropped: a heading with nothing under it is worse than no
  * heading.
  */
-export function groupByKind(tags: Tag[]): { kind: TagKind; tags: Tag[] }[] {
+export function groupByKind(tags: Tag[]): TagGroup[] {
   return TAG_KINDS.map((kind) => ({
     kind,
     tags: sortTags(tags.filter((t) => t.kind === kind)),
   })).filter((group) => group.tags.length > 0);
 }
+
