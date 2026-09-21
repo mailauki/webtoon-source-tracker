@@ -22,6 +22,16 @@ import { createClient } from "@/lib/supabase/server";
  * the layout in front of it still gets nothing.
  */
 
+/**
+ * Nothing in this module is narrowed by the adult-content switch
+ * (lib/data/nsfw.ts), and that is deliberate: these are the curation surfaces.
+ * An admin assembling a collection or tagging a title has to see the whole
+ * catalog, and an editorial tool that hid rows according to the editor's own
+ * reading preference would quietly produce shelves with holes in them. The
+ * switch belongs on the surfaces that answer "what should I read", not on the
+ * ones that answer "what is in the catalog".
+ */
+
 const COLLECTION_SELECT = `
   id,
   slug,

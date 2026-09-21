@@ -128,6 +128,24 @@ export const getLibraryPrefs = cache(async (): Promise<LibraryPrefs | null> => {
 });
 
 /**
+ * Whether this user has asked for adult titles to be left out.
+ *
+ * Its own accessor rather than `(await getLibraryPrefs())?.hide_nsfw` at each
+ * of the eight or so reads that need it: they are spread across three data
+ * modules, the null-means-false resolution should be written once, and
+ * `getLibraryPrefs` is already `cache()`d so this costs no extra query however
+ * many of them run in one render.
+ *
+ * False when the user has no preferences row at all, which is the same as
+ * having never touched the switch — and the same direction the column
+ * defaults to. Nothing disappears from a shelf unless it was asked for.
+ */
+export const hidesMatureTitles = cache(async (): Promise<boolean> => {
+  const prefs = await getLibraryPrefs();
+  return prefs?.hide_nsfw ?? false;
+});
+
+/**
  * Whether the signed-in user is an admin.
  *
  * Does not redirect: surfaces that merely *offer* an admin affordance need to

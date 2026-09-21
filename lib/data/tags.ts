@@ -1,6 +1,8 @@
 import "server-only";
 
+import { hidesMatureTitles } from "@/lib/auth/dal";
 import type { CollectionTitle } from "@/lib/data/collection-items";
+import { screenMature } from "@/lib/data/nsfw";
 import { readAllRows } from "@/lib/data/pagination";
 import { sortTags, type Tag } from "@/lib/data/tag-items";
 import { createClient } from "@/lib/supabase/server";
@@ -75,6 +77,7 @@ export async function getTagBySlug(slug: string): Promise<Tag | null> {
  */
 export async function getTaggedTitleCounts(): Promise<Map<number, number>> {
   const supabase = await createClient();
+  const hideMature = await hidesMatureTitles();
 
   let rows;
   try {
@@ -82,7 +85,13 @@ export async function getTaggedTitleCounts(): Promise<Map<number, number>> {
       (from, to) =>
         supabase
           .from("title_tags")
-          .select("id, tag_id", { count: "exact" })
+          // The catalog row comes along for its rating, so a category whose
+          // only titles are adult drops out of the index for a user who asked
+          // not to see them — otherwise its pill would still be offered and
+          // its page would open empty, which is the dead link this count
+          // exists to prevent. `!inner` also drops a link whose catalog row
+          // went missing, the same shape every other read here takes.
+          .select("id, tag_id, media_titles!inner ( nsfw )", { count: "exact" })
           // Curated links only, matching every other tag read here: a private
           // user tag must not widen somebody else's index.
           .is("owner_id", null)
@@ -96,9 +105,15 @@ export async function getTaggedTitleCounts(): Promise<Map<number, number>> {
     return new Map();
   }
 
+  const links = screenMature(
+    rows as unknown as { tag_id: number; media_titles: { nsfw: string | null } }[],
+    hideMature,
+    (row) => row.media_titles,
+  );
+
   const counts = new Map<number, number>();
 
-  for (const row of rows as unknown as { tag_id: number }[]) {
+  for (const row of links) {
     counts.set(row.tag_id, (counts.get(row.tag_id) ?? 0) + 1);
   }
 
@@ -137,20 +152,27 @@ export async function getTitlesForTag(
 ): Promise<CollectionTitle[]> {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("title_tags")
-    .select(
-      `media_titles!inner (
-         id, mal_media_id, title, title_en, main_picture_url,
-         mal_media_kind, num_chapters, mal_status
-       )`,
-    )
-    .eq("tag_id", tagId)
-    .is("owner_id", null);
+  const [{ data, error }, hideMature] = await Promise.all([
+    supabase
+      .from("title_tags")
+      .select(
+        `media_titles!inner (
+           id, mal_media_id, title, title_en, main_picture_url,
+           mal_media_kind, num_chapters, mal_status, nsfw
+         )`,
+      )
+      .eq("tag_id", tagId)
+      .is("owner_id", null),
+    hidesMatureTitles(),
+  ]);
 
   if (error) throw new Error(`Failed to load titles: ${error.message}`);
 
-  return ((data ?? []) as unknown as { media_titles: CollectionTitle }[])
+  const titles = ((data ?? []) as unknown as { media_titles: CollectionTitle }[])
     .map((row) => row.media_titles)
     .sort((a, b) => a.title.localeCompare(b.title));
+
+  // The page's own count is derived from what this returns, so screening here
+  // keeps "12 titles" and the twelve cards under it the same number.
+  return screenMature(titles, hideMature, (title) => title);
 }

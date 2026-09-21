@@ -1,5 +1,6 @@
 import "server-only";
 
+import { hidesMatureTitles } from "@/lib/auth/dal";
 import {
   hydrateCollection,
   type CollectionTarget,
@@ -8,6 +9,7 @@ import {
   type CollectionSummary,
   type RawCollection,
 } from "@/lib/data/collection-items";
+import { screenMature } from "@/lib/data/nsfw";
 import { readAllRows } from "@/lib/data/pagination";
 import { createClient } from "@/lib/supabase/server";
 
@@ -46,7 +48,7 @@ const COLLECTION_SELECT = `
     note,
     media_titles!inner (
       id, mal_media_id, title, title_en, main_picture_url,
-      mal_media_kind, num_chapters, mal_status
+      mal_media_kind, num_chapters, mal_status, nsfw
     )
   )
 `;
@@ -57,6 +59,32 @@ export type {
   CollectionSummary,
   CollectionTarget,
 } from "@/lib/data/collection-items";
+
+/**
+ * A collection with its adult-rated titles taken out.
+ *
+ * Applied to the raw PostgREST rows, before `hydrateCollection` or
+ * `summariseCollection` sees them, so that everything downstream of those two
+ * agrees: the shelf, the item count and the cover preview on the index card
+ * are all derived from the same narrowed list. Filtering afterwards would have
+ * left a card reading "14 titles" above a shelf of eleven.
+ *
+ * `hydrateCollection` and `summariseCollection` stay pure and rating-blind —
+ * they are shared with surfaces that have no user to have a preference (see
+ * lib/data/admin.ts) and are tested on their own.
+ */
+function screenCollection(row: RawCollection, hideMature: boolean): RawCollection {
+  if (!hideMature) return row;
+
+  return {
+    ...row,
+    collection_items: screenMature(
+      row.collection_items,
+      true,
+      (item) => item.media_titles,
+    ),
+  };
+}
 
 /**
  * Catalog title id -> the viewer's own user_entries id for it.
@@ -106,7 +134,7 @@ export async function getTrackedEntries(): Promise<Map<number, number>> {
 export async function getCuratedShelves(perShelf = 12): Promise<Collection[]> {
   const supabase = await createClient();
 
-  const [{ data, error }, tracked] = await Promise.all([
+  const [{ data, error }, tracked, hideMature] = await Promise.all([
     supabase
       .from("collections")
       .select(COLLECTION_SELECT)
@@ -115,12 +143,17 @@ export async function getCuratedShelves(perShelf = 12): Promise<Collection[]> {
       .order("sort_order")
       .order("name"),
     getTrackedEntries(),
+    hidesMatureTitles(),
   ]);
 
   if (error) throw new Error(`Failed to load collections: ${error.message}`);
 
   return ((data ?? []) as unknown as RawCollection[])
-    .map((row) => hydrateCollection(row, tracked, perShelf))
+    .map((row) => hydrateCollection(screenCollection(row, hideMature), tracked, perShelf))
+    // Already dropped empty collections; now it also drops one left empty by
+    // the switch, which is the right reading — a shelf of nothing but adult
+    // titles should disappear for someone who asked not to see them, not
+    // linger as a heading with no covers.
     .filter((collection) => collection.items.length > 0);
 }
 
@@ -137,7 +170,7 @@ export async function getCuratedCollection(
 ): Promise<Collection | null> {
   const supabase = await createClient();
 
-  const [{ data, error }, tracked] = await Promise.all([
+  const [{ data, error }, tracked, hideMature] = await Promise.all([
     supabase
       .from("collections")
       .select(COLLECTION_SELECT)
@@ -146,12 +179,19 @@ export async function getCuratedCollection(
       .eq("slug", slug)
       .maybeSingle(),
     getTrackedEntries(),
+    hidesMatureTitles(),
   ]);
 
   if (error) throw new Error(`Failed to load collection: ${error.message}`);
   if (!data) return null;
 
-  return hydrateCollection(data as unknown as RawCollection, tracked);
+  // Still a page, even if the switch empties it. The collection exists and its
+  // description still says what it is about; 404ing here would claim it does
+  // not, which is a different and untrue thing.
+  return hydrateCollection(
+    screenCollection(data as unknown as RawCollection, hideMature),
+    tracked,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -173,15 +213,23 @@ export async function getCuratedCollection(
 export async function getMyCollections(): Promise<CollectionSummary[]> {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("collections")
-    .select(COLLECTION_SELECT)
-    .not("owner_id", "is", null)
-    .order("created_at", { ascending: false });
+  const [{ data, error }, hideMature] = await Promise.all([
+    supabase
+      .from("collections")
+      .select(COLLECTION_SELECT)
+      .not("owner_id", "is", null)
+      .order("created_at", { ascending: false }),
+    hidesMatureTitles(),
+  ]);
 
   if (error) throw new Error(`Failed to load your collections: ${error.message}`);
 
-  return ((data ?? []) as unknown as RawCollection[]).map(summariseCollection);
+  // A collection the switch empties still appears here, unlike a curated
+  // shelf: this is the index of things the user made, and one of their own
+  // collections vanishing from it would read as deletion.
+  return ((data ?? []) as unknown as RawCollection[])
+    .map((row) => screenCollection(row, hideMature))
+    .map(summariseCollection);
 }
 
 /**
@@ -196,7 +244,7 @@ export async function getMyCollections(): Promise<CollectionSummary[]> {
 export async function getMyCollection(id: number): Promise<Collection | null> {
   const supabase = await createClient();
 
-  const [{ data, error }, tracked] = await Promise.all([
+  const [{ data, error }, tracked, hideMature] = await Promise.all([
     supabase
       .from("collections")
       .select(COLLECTION_SELECT)
@@ -204,12 +252,16 @@ export async function getMyCollection(id: number): Promise<Collection | null> {
       .eq("id", id)
       .maybeSingle(),
     getTrackedEntries(),
+    hidesMatureTitles(),
   ]);
 
   if (error) throw new Error(`Failed to load collection: ${error.message}`);
   if (!data) return null;
 
-  return hydrateCollection(data as unknown as RawCollection, tracked);
+  return hydrateCollection(
+    screenCollection(data as unknown as RawCollection, hideMature),
+    tracked,
+  );
 }
 
 /**
@@ -226,12 +278,14 @@ export async function getMyCollection(id: number): Promise<Collection | null> {
 export async function getLibraryTitles() {
   const supabase = await createClient();
 
+  const hideMature = await hidesMatureTitles();
+
   const rows = await readAllRows(
     (from, to) =>
       supabase
         .from("user_entries")
         .select(
-          `id, media_titles!inner ( id, title, title_en, main_picture_url )`,
+          `id, media_titles!inner ( id, title, title_en, main_picture_url, nsfw )`,
           {
             count: "exact",
           },
@@ -244,15 +298,21 @@ export async function getLibraryTitles() {
     "your library",
   );
 
-  return rows as unknown as {
+  const titles = rows as unknown as {
     id: number;
     media_titles: {
       id: number;
       title: string;
       title_en: string | null;
       main_picture_url: string | null;
+      nsfw: string | null;
     };
   }[];
+
+  // The picker offers titles from the user's own shelf, so it follows the same
+  // switch the shelf does: a title hidden from the library that still turned up
+  // here would be the one place the setting leaked.
+  return screenMature(titles, hideMature, (row) => row.media_titles);
 }
 
 export type LibraryTitle = Awaited<ReturnType<typeof getLibraryTitles>>[number];

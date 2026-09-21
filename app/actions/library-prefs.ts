@@ -40,6 +40,12 @@ const prefsSchema = z.object({
   // does not know falls back to the default instead of failing the write.
   includeNsfw: z.boolean().optional(),
   mediaKind: prefSchema.optional(),
+  // The settings switch, and the only preference here that is not about one
+  // page: it narrows the library, the collections and the category pages
+  // alike. Deliberately NOT the same field as `includeNsfw` above — that one
+  // widens what the search page asks MyAnimeList for, this one narrows what
+  // the app shows from its own catalog, and a user may sensibly want both.
+  hideNsfw: z.boolean().optional(),
 });
 
 export type LibraryPrefsPatch = z.input<typeof prefsSchema>;
@@ -63,6 +69,7 @@ export async function saveLibraryPrefs(patch: LibraryPrefsPatch) {
     owned_only?: boolean;
     search_include_nsfw?: boolean;
     search_media_kind?: string | null;
+    hide_nsfw?: boolean;
   } = {
     user_id: userId,
   };
@@ -97,11 +104,19 @@ export async function saveLibraryPrefs(patch: LibraryPrefsPatch) {
   if (parsed.data.mediaKind !== undefined) {
     row.search_media_kind = parsed.data.mediaKind || null;
   }
+  // Straight through again: false is "show them again", the state the column
+  // ships in and the one nothing disappears under.
+  if (parsed.data.hideNsfw !== undefined) {
+    row.hide_nsfw = parsed.data.hideNsfw;
+  }
 
   if (Object.keys(row).length === 1) return;
 
   // No revalidatePath: the chip's own navigation re-renders the page, and
   // revalidating here would make every filter click refetch the library twice.
+  // The settings switch needs no exception — every page it narrows is
+  // server-rendered per request (`ƒ` in the build output), so the next visit
+  // to the library or to /discover already reads the new value.
   const supabase = await createClient();
   await supabase.from("library_prefs").upsert(row, { onConflict: "user_id" });
 }

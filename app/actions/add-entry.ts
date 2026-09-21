@@ -100,6 +100,10 @@ export async function addEntry(
         num_chapters: node.num_chapters ?? null,
         num_volumes: node.num_volumes ?? null,
         mal_status: node.status ?? null,
+        // Kept for the same reason sync-list.ts keeps it: this is the other
+        // path that writes a catalog row, and a title added from search must
+        // carry its rating or it would be invisible to the hide-adult switch.
+        nsfw: node.nsfw ?? null,
         synced_at: now,
       },
       { onConflict: "media_type,mal_media_id" },
