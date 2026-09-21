@@ -378,6 +378,9 @@ export type Database = {
       }
       profiles: {
         Row: {
+          age_assurance_method: string | null
+          age_assured_at: string | null
+          age_range: string | null
           avatar_url: string | null
           created_at: string
           display_name: string | null
@@ -385,6 +388,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          age_assurance_method?: string | null
+          age_assured_at?: string | null
+          age_range?: string | null
           avatar_url?: string | null
           created_at?: string
           display_name?: string | null
@@ -392,6 +398,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          age_assurance_method?: string | null
+          age_assured_at?: string | null
+          age_range?: string | null
           avatar_url?: string | null
           created_at?: string
           display_name?: string | null

@@ -3,6 +3,7 @@ import "server-only";
 import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
 
+import { isAdult } from "@/lib/data/age";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 
@@ -128,19 +129,43 @@ export const getLibraryPrefs = cache(async (): Promise<LibraryPrefs | null> => {
 });
 
 /**
- * Whether this user has asked for adult titles to be left out.
+ * Whether this account has confirmed it is old enough for adult titles.
  *
- * Its own accessor rather than `(await getLibraryPrefs())?.hide_nsfw` at each
- * of the eight or so reads that need it: they are spread across three data
- * modules, the null-means-false resolution should be written once, and
- * `getLibraryPrefs` is already `cache()`d so this costs no extra query however
- * many of them run in one render.
+ * An account that has never confirmed is not. That direction is the whole
+ * point: if "never asked" fell on the permissive side, the confirmation would
+ * be a thing you could simply not do, and skipping it would be strictly better
+ * than answering it honestly.
+ */
+export const isAgeConfirmedAdult = cache(async (): Promise<boolean> => {
+  const profile = await getProfile();
+  return isAdult(profile?.age_range);
+});
+
+/**
+ * Whether adult titles should be left out for this user.
  *
- * False when the user has no preferences row at all, which is the same as
- * having never touched the switch — and the same direction the column
- * defaults to. Nothing disappears from a shelf unless it was asked for.
+ * The one place the age check and the preference meet, and the only thing any
+ * read consults — which is what keeps the two from drifting apart across the
+ * eight or so queries that narrow on it, spread over three data modules.
+ *
+ * Age first, and it is not a default but a floor: an account that has not
+ * confirmed it is 18 or over gets adult titles hidden no matter what the
+ * switch says. Deciding it here rather than in the settings UI is deliberate —
+ * a lock drawn only in the form is a lock on the form, and the server action
+ * behind it is an independently reachable HTTP endpoint. The switch can be
+ * flipped by anyone who wants to; it just does not mean anything until the
+ * bracket says it can.
+ *
+ * Past that floor the stored preference decides, and false when there is no
+ * preferences row at all — the same direction the column defaults to. Nothing
+ * disappears from a confirmed adult's shelf unless they asked for it.
+ *
+ * Both reads are `cache()`d, so this costs no extra query however many
+ * callers run in one render.
  */
 export const hidesMatureTitles = cache(async (): Promise<boolean> => {
+  if (!(await isAgeConfirmedAdult())) return true;
+
   const prefs = await getLibraryPrefs();
   return prefs?.hide_nsfw ?? false;
 });

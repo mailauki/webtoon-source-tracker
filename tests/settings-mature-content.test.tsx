@@ -65,6 +65,28 @@ describe("<MatureContent>", () => {
     expect(control()).toHaveTextContent("Show");
   });
 
+  it("locks the switch for an account that has not confirmed it is 18+", async () => {
+    render(<MatureContent initialHidden={false} locked />);
+
+    // Reads as hidden even though the stored preference is "show": while the
+    // age floor applies, the preference makes no difference to what renders,
+    // so the copy must not claim otherwise.
+    expect(control()).toBeDisabled();
+    expect(control()).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Adult titles are hidden")).toBeInTheDocument();
+    expect(
+      screen.getByText("Confirm you are 18 or over above to change this."),
+    ).toBeInTheDocument();
+  });
+
+  it("writes nothing while locked", async () => {
+    render(<MatureContent initialHidden={false} locked />);
+
+    await userEvent.click(control());
+
+    expect(saveLibraryPrefs).not.toHaveBeenCalled();
+  });
+
   it("does not send the search page's own preference", async () => {
     render(<MatureContent initialHidden={false} />);
 

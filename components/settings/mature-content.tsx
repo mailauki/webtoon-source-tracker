@@ -26,8 +26,23 @@ import { Button } from "@/components/ui/button";
  * would snap back to the page-load one the moment the write finished. The
  * pages this narrows are server-rendered per request, so they pick the new
  * value up on the next visit without one.
+ *
+ * `locked` is the age floor arriving from the server. The control is genuinely
+ * disabled rather than hidden, so the reason is visible instead of the setting
+ * just not being there — but the lock that matters is not this one. It is in
+ * hidesMatureTitles() (lib/auth/dal.ts), which ignores the preference entirely
+ * for an account that has not confirmed it is 18 or over. This prop only says
+ * so; the server is what enforces it, because a disabled button is not a
+ * permission check and the action behind it is its own HTTP endpoint.
  */
-export function MatureContent({ initialHidden }: { initialHidden: boolean }) {
+export function MatureContent({
+  initialHidden,
+  locked = false,
+}: {
+  initialHidden: boolean;
+  /** True when the account has not confirmed it is 18 or over. */
+  locked?: boolean;
+}) {
   const [hidden, setHidden] = useState(initialHidden);
   const [pending, startTransition] = useTransition();
 
@@ -43,36 +58,43 @@ export function MatureContent({ initialHidden }: { initialHidden: boolean }) {
     });
   }
 
+  // The floor, said in the switch's own terms: while it applies, what the
+  // stored preference happens to be makes no difference to what is rendered,
+  // so the copy must not claim otherwise.
+  const effectivelyHidden = locked || hidden;
+
   return (
     <div className="flex items-center justify-between gap-4 rounded-xl border border-border p-4">
       <div className="grid gap-0.5">
         <p className="text-sm font-medium">
-          {hidden ? "Adult titles are hidden" : "Adult titles are shown"}
+          {effectivelyHidden ? "Adult titles are hidden" : "Adult titles are shown"}
         </p>
         <p className="text-sm text-muted-foreground">
-          {hidden
-            ? "They stay out of your library, your collections and the category pages."
-            : "Everything MyAnimeList rates as adult appears wherever it normally would."}
+          {locked
+            ? "Confirm you are 18 or over above to change this."
+            : hidden
+              ? "They stay out of your library, your collections and the category pages."
+              : "Everything MyAnimeList rates as adult appears wherever it normally would."}
         </p>
       </div>
 
       <Button
         type="button"
         onClick={toggle}
-        aria-pressed={hidden}
-        variant={hidden ? "secondary" : "outline"}
+        aria-pressed={effectivelyHidden}
+        variant={effectivelyHidden ? "secondary" : "outline"}
         size="sm"
-        disabled={pending}
+        disabled={pending || locked}
         className="rounded-pill shrink-0"
       >
         {pending ? (
           <Loader2 aria-hidden data-icon="inline-start" className="animate-spin" />
-        ) : hidden ? (
+        ) : effectivelyHidden ? (
           <EyeOff aria-hidden data-icon="inline-start" />
         ) : (
           <Eye aria-hidden data-icon="inline-start" />
         )}
-        {hidden ? "Show" : "Hide"}
+        {effectivelyHidden ? "Show" : "Hide"}
       </Button>
     </div>
   );
