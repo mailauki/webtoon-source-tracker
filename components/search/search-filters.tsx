@@ -54,6 +54,15 @@ type SearchFilterContext = SearchState & {
   deferredQuery: string;
   /** True while a switch is being saved; the switches dim rather than block. */
   pending: boolean;
+  /**
+   * True when the account has not confirmed it is 18 or over.
+   *
+   * Presentation only — it lets the NSFW switch explain itself rather than
+   * appear to work and change nothing. The check that matters is in the
+   * search route, which ignores `nsfw=1` from an unconfirmed account however
+   * the request was made.
+   */
+  matureLocked: boolean;
   /** The user's shelf, for the half of the page that searches it. */
   entries: LibraryRow[];
 };
@@ -72,11 +81,14 @@ export function useSearchFilters(): SearchFilterContext {
 export function SearchFilters({
   initial,
   entries = [],
+  matureLocked = false,
   children,
 }: {
   /** Both optional: each has a default, and a user may have set neither. */
   initial?: Partial<SearchState>;
   entries?: LibraryRow[];
+  /** Defaults to unlocked, so a caller that predates the age gate is unchanged. */
+  matureLocked?: boolean;
   children: React.ReactNode;
 }) {
   const [pending, startTransition] = useTransition();
@@ -119,6 +131,13 @@ export function SearchFilters({
     <SearchContext
       value={{
         ...state,
+        // The floor resolved once, here, rather than at each reader. The
+        // switch is hidden while it applies, but CatalogResults reads this
+        // value directly to build its request — so leaving the stored
+        // preference visible would have the client keep asking for `nsfw=1`
+        // with no control on screen to explain why. The route rejects it
+        // regardless; this stops it being sent at all.
+        includeNsfw: state.includeNsfw && !matureLocked,
         setIncludeNsfw: (includeNsfw) => update({ includeNsfw }),
         setMediaKind: (mediaKind) => update({ mediaKind }),
         query,
@@ -126,6 +145,7 @@ export function SearchFilters({
         deferredQuery,
         pending,
         entries,
+        matureLocked,
       }}
     >
       {children}

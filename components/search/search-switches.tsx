@@ -95,7 +95,19 @@ function MediaKindSwitch() {
  * without the swap the only signal left would be the border.
  */
 function NsfwToggle() {
-  const { includeNsfw, setIncludeNsfw, pending } = useSearchFilters();
+  const { includeNsfw, setIncludeNsfw, pending, matureLocked } =
+    useSearchFilters();
+
+  // Gone entirely, not disabled, for an account that has not confirmed it is
+  // 18 or over. A greyed-out control still advertises the thing it withholds
+  // and invites "how do I turn this on"; an absent one leaves the row reading
+  // as a search page that simply has one switch. Adult titles are not a
+  // feature being withheld from this account — for now they are not part of
+  // the app it has.
+  //
+  // Presentation only. The route ignores `nsfw=1` from an unconfirmed account
+  // however the request was made, which is the check that actually holds.
+  if (matureLocked) return null;
 
   return (
     <Button
@@ -114,3 +126,5 @@ function NsfwToggle() {
     </Button>
   );
 }
+
+
