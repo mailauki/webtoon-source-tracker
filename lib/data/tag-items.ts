@@ -8,10 +8,38 @@
  * `collections.ts`.
  */
 
-export type TagKind = "genre" | "trope" | "theme" | "format";
+export type TagKind =
+  | "genre"
+  | "explicit"
+  | "theme"
+  | "demographic"
+  | "trope"
+  | "format";
 
 /** Display order of the kinds. Genres first: they are the coarsest grouping. */
-export const TAG_KINDS: TagKind[] = ["genre", "trope", "theme", "format"];
+export const TAG_KINDS: TagKind[] = [
+  "genre",
+  "theme",
+  "demographic",
+  "trope",
+  "format",
+  // Last, and only ever shown to a viewer who may see adult titles at all.
+  // Its own kind rather than a flag on `genre` because that is how MyAnimeList
+  // itself splits them — "Manga Explicit Genres" is a separate group in their
+  // taxonomy — and because a kind is what every grouping surface here already
+  // keys on, so one column value gates the heading, its pills and its pages.
+  "explicit",
+];
+
+/** The kinds whose tags describe adult content. */
+export const EXPLICIT_KINDS: ReadonlySet<TagKind> = new Set<TagKind>([
+  "explicit",
+]);
+
+/** Is this tag one a viewer must be a confirmed adult to browse? */
+export function isExplicitKind(kind: string): boolean {
+  return EXPLICIT_KINDS.has(kind as TagKind);
+}
 
 /**
  * Plural headings for the kinds, for a surface that groups tags under them.
@@ -23,9 +51,11 @@ export const TAG_KINDS: TagKind[] = ["genre", "trope", "theme", "format"];
  */
 export const KIND_LABELS: Record<TagKind, string> = {
   genre: "Genres",
-  trope: "Tropes",
   theme: "Themes",
+  demographic: "Demographics",
+  trope: "Tropes",
   format: "Formats",
+  explicit: "Explicit",
 };
 
 export type Tag = {

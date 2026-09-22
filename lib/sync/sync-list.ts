@@ -1,5 +1,6 @@
 import "server-only";
 
+import { kindForMalGenre } from "@/lib/data/mal-taxonomy";
 import { slugify } from "@/lib/data/tag-items";
 import { MalClient } from "@/lib/mal/client";
 import { getMangaList } from "@/lib/mal/endpoints";
@@ -80,7 +81,11 @@ export async function syncGenres(
       mal_genre_id: id,
       slug: slugify(name),
       name,
-      kind: "genre" as const,
+      // MAL sends a flat list with no group, so the kind comes from the
+      // taxonomy map rather than defaulting everything to "genre". This is
+      // what puts Ecchi/Erotica/Hentai under the explicit kind the age gate
+      // reads. Existing rows are untouched: the upsert below is `do nothing`.
+      kind: kindForMalGenre(name),
     })),
     { onConflict: "mal_genre_id", ignoreDuplicates: true },
   );

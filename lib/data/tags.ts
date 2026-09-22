@@ -4,7 +4,7 @@ import { hidesMatureTitles } from "@/lib/auth/dal";
 import type { CollectionTitle } from "@/lib/data/collection-items";
 import { screenMature } from "@/lib/data/nsfw";
 import { readAllRows } from "@/lib/data/pagination";
-import { sortTags, type Tag } from "@/lib/data/tag-items";
+import { isExplicitKind, sortTags, type Tag } from "@/lib/data/tag-items";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -24,13 +24,23 @@ const TAG_COLUMNS =
 export async function getActiveTags(): Promise<Tag[]> {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("tags")
-    .select(TAG_COLUMNS)
-    .eq("is_active", true);
+  const [{ data, error }, hideMature] = await Promise.all([
+    supabase.from("tags").select(TAG_COLUMNS).eq("is_active", true),
+    hidesMatureTitles(),
+  ]);
 
   if (error) throw new Error(`Failed to load tags: ${error.message}`);
-  return sortTags((data ?? []) as Tag[]);
+
+  const tags = (data ?? []) as Tag[];
+
+  // The explicit kind rides the same switch the titles do. Under the age
+  // floor that is not optional; for a confirmed adult who turned hiding on,
+  // the category goes too — the same reading the search switch and the
+  // library menu take, where a category the app is not currently offering is
+  // absent rather than present-and-empty.
+  return sortTags(
+    hideMature ? tags.filter((tag) => !isExplicitKind(tag.kind)) : tags,
+  );
 }
 
 /**
@@ -43,15 +53,28 @@ export async function getActiveTags(): Promise<Tag[]> {
 export async function getTagBySlug(slug: string): Promise<Tag | null> {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("tags")
-    .select(TAG_COLUMNS)
-    .eq("slug", slug)
-    .eq("is_active", true)
-    .maybeSingle();
+  const [{ data, error }, hideMature] = await Promise.all([
+    supabase
+      .from("tags")
+      .select(TAG_COLUMNS)
+      .eq("slug", slug)
+      .eq("is_active", true)
+      .maybeSingle(),
+    hidesMatureTitles(),
+  ]);
 
   if (error) throw new Error(`Failed to load tag: ${error.message}`);
-  return (data as Tag) ?? null;
+
+  const tag = (data as Tag) ?? null;
+
+  // An explicit tag reached by URL is a 404 rather than an empty page while
+  // hiding is on. Hiding the pill in the index is presentation; this is the
+  // check, because /discover/tag/ecchi is one typed URL away and the page
+  // would otherwise render its heading and count for an account that may not
+  // see any of it.
+  if (tag && hideMature && isExplicitKind(tag.kind)) return null;
+
+  return tag;
 }
 
 /**
@@ -124,19 +147,26 @@ export async function getTaggedTitleCounts(): Promise<Map<number, number>> {
 export async function getTagsForTitle(titleId: number): Promise<Tag[]> {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("title_tags")
-    .select(`tags!inner ( ${TAG_COLUMNS} )`)
-    .eq("title_id", titleId)
-    .is("owner_id", null);
+  const [{ data, error }, hideMature] = await Promise.all([
+    supabase
+      .from("title_tags")
+      .select(`tags!inner ( ${TAG_COLUMNS} )`)
+      .eq("title_id", titleId)
+      .is("owner_id", null),
+    hidesMatureTitles(),
+  ]);
 
   // Chips are a garnish; losing them should not take the entry page down.
   if (error) return [];
 
+  // The same gate the index and the tag pages take. Without it an entry
+  // page would render an Ecchi chip linking to a page that now 404s — the
+  // one remaining way a gated category could still be seen and clicked.
   return sortTags(
     ((data ?? []) as unknown as { tags: Tag }[])
       .map((row) => row.tags)
-      .filter((tag) => tag.is_active),
+      .filter((tag) => tag.is_active)
+      .filter((tag) => !(hideMature && isExplicitKind(tag.kind))),
   );
 }
 

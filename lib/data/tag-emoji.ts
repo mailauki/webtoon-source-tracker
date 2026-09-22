@@ -20,9 +20,11 @@ import type { TagKind } from "@/lib/data/tag-items";
 /** The fallback per kind. Deliberately generic: it is the "no entry" case. */
 const BY_KIND: Record<TagKind, string> = {
   genre: "📚",
-  trope: "💫",
   theme: "🎭",
+  demographic: "👥",
+  trope: "💫",
   format: "📐",
+  explicit: "🔞",
 };
 
 /**

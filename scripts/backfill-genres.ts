@@ -292,8 +292,35 @@ export async function syncGenresBatch(
   }
   if (genres.size === 0) return;
 
+  // Inlined copy of lib/data/mal-taxonomy.ts, which this script cannot
+  // import (server-only + "@/*" path mapping; see the header). Pinned by
+  // tests/backfill-nsfw.test.ts, which asserts both copies agree.
+  const EXPLICIT = ["ecchi", "erotica", "hentai"];
+  const DEMOGRAPHIC = ["josei", "kids", "seinen", "shoujo", "shounen"];
+  const THEME = [
+    "adult-cast", "anthropomorphic", "cgdct", "childcare", "combat-sports",
+    "crossdressing", "delinquents", "detective", "educational", "gag-humor",
+    "gore", "harem", "high-stakes-game", "historical", "idols-female",
+    "idols-male", "isekai", "iyashikei", "love-polygon", "love-status-quo",
+    "magical-sex-shift", "mahou-shoujo", "martial-arts", "mecha", "medical",
+    "memoir", "military", "music", "mythology", "organized-crime",
+    "otaku-culture", "parody", "performing-arts", "pets", "psychological",
+    "racing", "reincarnation", "reverse-harem", "samurai", "school",
+    "showbiz", "space", "strategy-game", "super-power", "survival",
+    "team-sports", "time-travel", "urban-fantasy", "vampire", "video-game",
+    "villainess", "visual-arts", "workplace",
+  ];
+
   const slugify = (name: string) =>
     name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
+  const kindForMalGenre = (name: string) => {
+    const slug = slugify(name);
+    if (EXPLICIT.includes(slug)) return "explicit" as const;
+    if (DEMOGRAPHIC.includes(slug)) return "demographic" as const;
+    if (THEME.includes(slug)) return "theme" as const;
+    return "genre" as const;
+  };
 
   // Ownership contract: `ignoreDuplicates: true` is `on conflict do nothing`,
   // never `do update`. MAL may create a tag; it may never modify one that
@@ -307,7 +334,11 @@ export async function syncGenresBatch(
       mal_genre_id: id,
       slug: slugify(name),
       name,
-      kind: "genre" as const,
+      // Mirrors lib/sync/sync-list.ts's syncGenres — see the header comment
+      // for why this file duplicates it rather than importing. The table is
+      // inlined below for the same reason: this script cannot import from
+      // lib/ at all under `node --experimental-strip-types`.
+      kind: kindForMalGenre(name),
     })),
     { onConflict: "mal_genre_id", ignoreDuplicates: true },
   );
