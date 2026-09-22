@@ -1,0 +1,69 @@
+import type { MalListStatus } from "@/lib/mal/types";
+
+import type { AniListListStatus } from "./types";
+
+/**
+ * Translation between AniList's list vocabulary and MyAnimeList's.
+ *
+ * Kept free of server-only imports so the account-sync planner, and the tests,
+ * can use it directly.
+ *
+ * The one mapping that is not one-to-one is re-reading. AniList has a status
+ * for it, REPEATING; MAL has a flag, `is_rereading`, alongside a status. The
+ * app stores MAL's shape, so REPEATING arrives as `reading` + rereading, and
+ * anything with the flag set goes to AniList as REPEATING whatever its status
+ * — MAL's own site pairs the flag with `completed`, and the two must compare
+ * equal or every sync would rewrite the same entry back and forth.
+ */
+
+export type MalShape = { status: MalListStatus; is_rereading: boolean };
+
+const TO_MAL: Record<AniListListStatus, MalShape> = {
+  CURRENT: { status: "reading", is_rereading: false },
+  PLANNING: { status: "plan_to_read", is_rereading: false },
+  COMPLETED: { status: "completed", is_rereading: false },
+  DROPPED: { status: "dropped", is_rereading: false },
+  PAUSED: { status: "on_hold", is_rereading: false },
+  REPEATING: { status: "reading", is_rereading: true },
+};
+
+const TO_ANILIST: Record<MalListStatus, AniListListStatus> = {
+  reading: "CURRENT",
+  plan_to_read: "PLANNING",
+  completed: "COMPLETED",
+  dropped: "DROPPED",
+  on_hold: "PAUSED",
+};
+
+export function toMalStatus(status: AniListListStatus): MalShape {
+  return TO_MAL[status];
+}
+
+export function toAniListStatus(
+  status: MalListStatus,
+  isRereading: boolean,
+): AniListListStatus {
+  return isRereading ? "REPEATING" : TO_ANILIST[status];
+}
+
+/**
+ * A 0–10 score as MAL stores it, from AniList's POINT_10 reading.
+ *
+ * POINT_10 can come back fractional for a user whose own format is
+ * POINT_100 or POINT_10_DECIMAL (an 85 reads as 8.5); MAL only takes whole
+ * numbers, so it is rounded rather than truncated.
+ */
+export function toMalScore(point10: number | null | undefined): number {
+  if (!point10 || !Number.isFinite(point10)) return 0;
+  return Math.min(10, Math.max(0, Math.round(point10)));
+}
+
+/**
+ * The value for SaveMediaListEntry's `scoreRaw`, which is always 0–100 no
+ * matter which format the user displays scores in. Writing `score` instead
+ * would be read in the user's own format — a 7 sent to a POINT_100 user
+ * lands as 7/100.
+ */
+export function toAniListScoreRaw(malScore: number): number {
+  return Math.min(100, Math.max(0, Math.round(malScore * 10)));
+}
