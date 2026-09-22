@@ -46,6 +46,7 @@ type Filters = {
   source: string;
   hideHiatus: boolean;
   ownedOnly: boolean;
+  hideNsfw: boolean;
 };
 type State = Filters & { sort: Sort };
 
@@ -54,9 +55,10 @@ type State = Filters & { sort: Sort };
  * the default everywhere: a caller that has no stored preference — and every
  * caller that predates either toggle — should show the whole shelf.
  */
-type InitialState = Omit<State, "hideHiatus" | "ownedOnly"> & {
+type InitialState = Omit<State, "hideHiatus" | "ownedOnly" | "hideNsfw"> & {
   hideHiatus?: boolean;
   ownedOnly?: boolean;
+  hideNsfw?: boolean;
 };
 
 type LibraryFilterContext = State & {
@@ -67,6 +69,22 @@ type LibraryFilterContext = State & {
   setHideHiatus: (value: boolean) => void;
   /** The owned toggle. A boolean too, and positive where hiatus subtracts. */
   setOwnedOnly: (value: boolean) => void;
+  /**
+   * The adult-titles toggle, for a viewer who is allowed to see them at all.
+   *
+   * Unlike its siblings this one is also a setting — the same
+   * `library_prefs.hide_nsfw` the Settings switch writes — because "keep
+   * these off my shelf" is a standing preference, not a gesture. It is here
+   * as well so it can be reached while browsing rather than only two pages
+   * away, which is the whole point of a filter menu.
+   */
+  setHideNsfw: (value: boolean) => void;
+  /**
+   * False for an account under the age floor, which never receives adult rows
+   * in the first place. The menu hides the item entirely when this is false:
+   * a control that cannot change what is on screen is a dead control.
+   */
+  canSeeNsfw: boolean;
   setSort: (value: Sort) => void;
   pending: boolean;
   /**
@@ -99,11 +117,18 @@ export function useLibraryFilters(): LibraryFilterContext {
 export function LibraryFilters({
   initial,
   entries = [],
+  canSeeNsfw = false,
   children,
 }: {
   initial: InitialState;
   /** The shelf, shared with every consumer of the filters. */
   entries?: LibraryRow[];
+  /**
+   * Whether this account may see adult titles at all. Defaults to false, so
+   * a caller that predates the age gate shows no toggle rather than a
+   * control that does nothing.
+   */
+  canSeeNsfw?: boolean;
   children: React.ReactNode;
 }) {
   const [pending, startTransition] = useTransition();
@@ -116,6 +141,7 @@ export function LibraryFilters({
   const [state, setState] = useState<State>({
     hideHiatus: false,
     ownedOnly: false,
+    hideNsfw: false,
     ...initial,
   });
 
@@ -153,6 +179,8 @@ export function LibraryFilters({
         setSource: (source) => update({ source }),
         setHideHiatus: (hideHiatus) => update({ hideHiatus }),
         setOwnedOnly: (ownedOnly) => update({ ownedOnly }),
+        setHideNsfw: (hideNsfw) => update({ hideNsfw }),
+        canSeeNsfw,
         setSort: updateSort,
         pending,
         entries,
@@ -186,7 +214,8 @@ export function LibraryGrid({
   /** Chips hid everything. */
   emptyFiltered: React.ReactNode;
 }) {
-  const { status, source, hideHiatus, ownedOnly, sort } = useLibraryFilters();
+  const { status, source, hideHiatus, ownedOnly, hideNsfw, sort } =
+    useLibraryFilters();
 
   // The same function the dice draws from, so the shelf and the roll can never
   // disagree about which titles a chip selection covers.
@@ -195,11 +224,12 @@ export function LibraryGrid({
     source,
     hideHiatus,
     ownedOnly,
+    hideNsfw,
   });
   const ordered = sortEntries(visible, sort);
 
   if (visible.length === 0) {
-    const narrowed = status || source || hideHiatus || ownedOnly;
+    const narrowed = status || source || hideHiatus || ownedOnly || hideNsfw;
     return <>{narrowed ? emptyFiltered : emptyUnfiltered}</>;
   }
 

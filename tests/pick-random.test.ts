@@ -632,3 +632,56 @@ describe("selectByMode — neglected", () => {
     expect(selectByMode(shelf, "neglected", NO_CHIPS)).toEqual([]);
   });
 });
+
+describe("selectCandidates, hideNsfw", () => {
+  // Only ever true for a viewer who may see adult titles at all — an account
+  // under the age floor never receives these rows, so this is the viewer's
+  // own preference rather than the gate.
+
+  const rated = (id: number, nsfw: string | null): LibraryRow =>
+    ({
+      id,
+      list_status: "reading",
+      entry_sources: [],
+      media_titles: { nsfw },
+    }) as unknown as LibraryRow;
+
+  const MIXED = [
+    rated(1, "white"),
+    rated(2, "gray"),
+    rated(3, null),
+    rated(4, "black"),
+  ];
+
+  it("keeps everything when off", () => {
+    expect(ids(selectCandidates(MIXED, { status: "", source: "" }))).toEqual([1, 2, 3, 4]);
+  });
+
+  it("drops gray and black when on", () => {
+    expect(ids(selectCandidates(MIXED, { status: "", source: "", hideNsfw: true }))).toEqual([1, 3]);
+  });
+
+  it("keeps an unrated title, rather than guessing it is adult", () => {
+    // Null is "never fetched". Treating it as adult would empty a shelf the
+    // rating backfill had not reached yet.
+    expect(ids(selectCandidates([rated(9, null)], {
+        status: "",
+        source: "",
+        hideNsfw: true,
+      }))).toEqual(
+      [9],
+    );
+  });
+
+  it("combines with the other filters rather than replacing them", () => {
+    const rows = [
+      { ...rated(1, "white"), list_status: "reading" },
+      { ...rated(2, "gray"), list_status: "reading" },
+      { ...rated(3, "white"), list_status: "completed" },
+    ] as LibraryRow[];
+
+    expect(
+      ids(selectCandidates(rows, { status: "reading", source: "", hideNsfw: true })),
+    ).toEqual([1]);
+  });
+});

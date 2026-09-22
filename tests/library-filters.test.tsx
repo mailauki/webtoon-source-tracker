@@ -476,3 +476,57 @@ describe("owned only toggle", () => {
     expect(screen.getByText("No titles match")).toBeInTheDocument();
   });
 });
+
+describe("the hide-adult-titles toggle", () => {
+  // The toggle is for a viewer who may see adult titles at all. An account
+  // under the age floor never receives those rows (getLibrary removes them),
+  // so an item here would filter an empty set.
+
+  function setupNsfw(canSeeNsfw: boolean) {
+    return render(
+      <LibraryFilters
+        canSeeNsfw={canSeeNsfw}
+        initial={{ status: "", source: "", sort: DEFAULT_SORT }}
+      >
+        <LibraryFilterMenu statuses={STATUSES} sources={SOURCES} />
+        <LibraryGrid
+          entries={ROWS}
+          emptyFiltered={<p>No titles match</p>}
+          emptyUnfiltered={<p>Nothing synced yet</p>}
+        />
+      </LibraryFilters>,
+    );
+  }
+
+  it("is offered to a confirmed adult", async () => {
+    setupNsfw(true);
+    await userEvent.click(screen.getByRole("button", { name: /filter/i }));
+
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: "Hide adult titles" }),
+    ).toBeInTheDocument();
+  });
+
+  it("is absent for an account under the age floor", async () => {
+    setupNsfw(false);
+    await userEvent.click(screen.getByRole("button", { name: /filter/i }));
+
+    // Absent, not disabled: it cannot change what is on screen, and it would
+    // advertise a category the app is not offering this account.
+    expect(
+      screen.queryByRole("menuitemcheckbox", { name: "Hide adult titles" }),
+    ).toBeNull();
+  });
+
+  it("leaves the neighbouring toggles alone either way", async () => {
+    setupNsfw(false);
+    await userEvent.click(screen.getByRole("button", { name: /filter/i }));
+
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: "Hide hiatus" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: "Owned only" }),
+    ).toBeInTheDocument();
+  });
+});

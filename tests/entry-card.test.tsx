@@ -44,7 +44,11 @@ function source(overrides: Record<string, unknown> = {}): Attachment {
 
 function row(
   sources: Attachment[] = [],
-  title: { num_chapters?: number | null; mal_status?: string | null } = {},
+  title: {
+    num_chapters?: number | null;
+    mal_status?: string | null;
+    nsfw?: string | null;
+  } = {},
 ): LibraryRow {
   return {
     id: 7,
@@ -332,5 +336,36 @@ describe("card owned badge", () => {
   it("names paid alone on a source the user has not bought from", () => {
     render(<EntryCard entry={row([source({ is_paid: true })])} />);
     expect(screen.getByTitle("Tapas · paid")).toBeInTheDocument();
+  });
+});
+
+describe("the adult-content badge", () => {
+  // A label, not a gate: a card only reaches the grid if the viewer may see
+  // the title at all, so this says what a cover is, it does not hide it.
+
+  it("marks a title MyAnimeList rates as adult", () => {
+    render(<EntryCard entry={row([], { nsfw: "gray" })} />);
+
+    expect(screen.getByText("18+")).toBeInTheDocument();
+  });
+
+  it("marks an explicit title too", () => {
+    render(<EntryCard entry={row([], { nsfw: "black" })} />);
+
+    expect(screen.getByText("18+")).toBeInTheDocument();
+  });
+
+  it("leaves a safe title unmarked", () => {
+    render(<EntryCard entry={row([], { nsfw: "white" })} />);
+
+    expect(screen.queryByText("18+")).toBeNull();
+  });
+
+  it("leaves an unrated title unmarked rather than guessing", () => {
+    // Null is "never fetched", not "adult" — the same direction isMature
+    // takes everywhere else.
+    render(<EntryCard entry={row([], { nsfw: null })} />);
+
+    expect(screen.queryByText("18+")).toBeNull();
   });
 });

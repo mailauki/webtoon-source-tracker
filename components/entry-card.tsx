@@ -12,6 +12,7 @@ import {
 import { EntrySourceDialog } from "@/components/entry-source-dialog";
 import {
   HiatusBadge,
+  MatureBadge,
   NoSourceBadge,
   OwnedBadge,
   SourceBadge,
@@ -21,6 +22,7 @@ import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { ownsEveryChapter } from "@/lib/data/chapter-ranges";
 import { chapterTotal } from "@/lib/data/chapter-totals";
 import { displayTitle } from "@/lib/data/display-title";
+import { isMature } from "@/lib/data/nsfw";
 import type { LibraryRow } from "@/lib/data/entries";
 import { isOnHiatus } from "@/lib/data/pick-random";
 import type { RankedSource } from "@/lib/data/rank-sources";
@@ -84,6 +86,9 @@ export function EntryCard({
   // count the progress bar divides by.
   const malTotal = chapterTotal(title);
   const ownedOutright = ownsEveryChapter(sources, malTotal);
+  // A card only reaches here if the viewer may see the title at all, so this
+  // is a label rather than a gate — see MatureBadge.
+  const mature = isMature(title);
 
   // Where to read this, if anywhere is recorded. See readingLink.
   const readAt = readingLink(sources);
@@ -146,6 +151,8 @@ export function EntryCard({
                   nothing recorded, or nothing updating — stay leftmost.
                   Owning something is settled news. */}
               {ownedOutright ? <OwnedBadge overlay /> : null}
+              {/* Rightmost: a rating is the least actionable of the four. */}
+              {mature ? <MatureBadge overlay /> : null}
             </div>
 
             {/* The content stack, bottom-anchored over the art: status and

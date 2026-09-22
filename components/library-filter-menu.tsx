@@ -65,6 +65,9 @@ export function LibraryFilterMenu({
     setHideHiatus,
     ownedOnly,
     setOwnedOnly,
+    hideNsfw,
+    setHideNsfw,
+    canSeeNsfw,
     sort,
     setSort,
     pending,
@@ -85,9 +88,12 @@ export function LibraryFilterMenu({
 
   // The status is named on the trigger rather than counted, so it is not
   // counted again here — otherwise "Reading" would read as "Reading 1".
-  const extras = [source, hideHiatus, ownedOnly].filter(Boolean).length;
+  const extras = [source, hideHiatus, ownedOnly, hideNsfw].filter(Boolean)
+    .length;
 
-  const anyActive = Boolean(status || source || hideHiatus || ownedOnly);
+  const anyActive = Boolean(
+    status || source || hideHiatus || ownedOnly || hideNsfw,
+  );
 
   function clearAll() {
     // One patch per filter: `update` in the provider takes a partial and each
@@ -97,6 +103,7 @@ export function LibraryFilterMenu({
     if (source) setSource("");
     if (hideHiatus) setHideHiatus(false);
     if (ownedOnly) setOwnedOnly(false);
+    if (hideNsfw) setHideNsfw(false);
   }
 
   return (
@@ -195,6 +202,24 @@ export function LibraryFilterMenu({
         >
           Owned only
         </DropdownMenuCheckboxItem>
+        {/* Only for an account that may see adult titles at all. One under
+            the age floor never receives those rows, so the item would be a
+            control that cannot change what is on screen — and it would
+            advertise a category the app is not offering that account.
+
+            Unlike its two neighbours this is also a setting: it writes the
+            same library_prefs.hide_nsfw the Settings switch does, so turning
+            it on here is remembered rather than lasting one session. It is
+            here as well so it can be reached while browsing. */}
+        {canSeeNsfw ? (
+          <DropdownMenuCheckboxItem
+            checked={hideNsfw}
+            onCheckedChange={setHideNsfw}
+            onSelect={(e) => e.preventDefault()}
+          >
+            Hide adult titles
+          </DropdownMenuCheckboxItem>
+        ) : null}
 
         <DropdownMenuSeparator />
 
