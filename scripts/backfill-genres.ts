@@ -100,16 +100,21 @@ async function getAnyConnectedAccount(admin: SupabaseAdmin): Promise<{
   userId: string;
   tokens: StoredTokens;
 }> {
+  // Every active connection, most recently synced first — not `.limit(1)`.
+  // `status` is set when an account connects and is not cleared when its
+  // tokens are later dropped, so "active" does not imply "has tokens": a
+  // seeded demo account outlives its tokens and sorts ahead of a real one on
+  // an unordered read. Taking the first row and failing on it stopped this
+  // script dead while a perfectly good account sat in the next row.
   const { data: connections, error } = await admin
     .from("mal_connections")
-    .select("user_id")
+    .select("user_id, mal_username")
     .eq("status", "active")
-    .limit(1);
+    .order("last_synced_at", { ascending: false, nullsFirst: false });
 
   if (error) throw new Error(`Could not read mal_connections: ${error.message}`);
 
-  const connection = connections?.[0];
-  if (!connection) {
+  if (!connections || connections.length === 0) {
     throw new Error(
       "No active MyAnimeList connection found. Connect at least one account " +
         "(via /settings in the running app) before running this script — " +
@@ -118,17 +123,34 @@ async function getAnyConnectedAccount(admin: SupabaseAdmin): Promise<{
     );
   }
 
-  const { data: rows, error: tokenError } = await admin.rpc("mal_tokens_get", {
-    p_user_id: connection.user_id,
-  });
+  // Try each in turn; the endpoint is not list-scoped, so any account with
+  // usable tokens does. Only when none has any is this actually blocked.
+  const tried: string[] = [];
+  let connection: { user_id: string } | undefined;
+  let row: { access_token: string; refresh_token: string } | undefined;
 
-  if (tokenError) throw new Error(`Could not read MAL tokens: ${tokenError.message}`);
+  for (const candidate of connections) {
+    const { data: rows, error: tokenError } = await admin.rpc("mal_tokens_get", {
+      p_user_id: candidate.user_id,
+    });
 
-  const row = rows?.[0];
-  if (!row) {
+    if (tokenError) {
+      throw new Error(`Could not read MAL tokens: ${tokenError.message}`);
+    }
+
+    if (rows?.[0]) {
+      connection = candidate;
+      row = rows[0];
+      break;
+    }
+
+    tried.push(candidate.mal_username ?? candidate.user_id);
+  }
+
+  if (!connection || !row) {
     throw new Error(
-      `mal_connections marks ${connection.user_id} as active, but no tokens ` +
-        "are stored for it. Reconnect that account and try again.",
+      `Every active MyAnimeList connection is missing its tokens (tried: ` +
+        `${tried.join(", ")}). Reconnect one via /settings and try again.`,
     );
   }
 
