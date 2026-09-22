@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 };
 
 /** Change when the substance changes, not on copy edits. */
-const LAST_UPDATED = "August 21, 2026";
+const LAST_UPDATED = "September 21, 2026";
 
 export default function PrivacyPolicyPage() {
   return (
@@ -25,10 +25,10 @@ export default function PrivacyPolicyPage() {
 
       <h2>The short version</h2>
       <p>
-        The app stores your email address, the reading data it syncs from
-        MyAnimeList, and the source assignments you enter yourself. It does not
-        serve ads, does not use analytics or tracking cookies, and does not
-        sell or share your data with anyone.
+        The app stores your email address, the age range you tell it, the
+        reading data it syncs from MyAnimeList, and the source assignments you
+        enter yourself. It does not serve ads, does not use analytics or
+        tracking cookies, and does not sell or share your data with anyone.
       </p>
 
       <h2>What the app stores</h2>
@@ -62,10 +62,25 @@ export default function PrivacyPolicyPage() {
         entered by you and is not sent to MyAnimeList or anywhere else.
       </p>
 
+      <h3>Age range</h3>
+      <p>
+        If you tell the app your age, it stores the range you picked (under 13,
+        13 to 15, 16 to 17, or 18 or over), that you told it yourself rather
+        than it being verified, and when you told it. It stores a range and not
+        your date of birth, because a range is all it needs.
+      </p>
+      <p>
+        This is used for one thing: deciding whether titles MyAnimeList rates
+        as adult are shown to you. It is what you tell the app, not something
+        the app checks or can check, and it is never sent anywhere else. You
+        can change it at any time in Settings.
+      </p>
+
       <h3>Preferences</h3>
       <p>
-        Your saved library filters and sort order, and your light or dark theme
-        choice. The theme is kept in your browser, not on the server.
+        Your saved library filters and sort order, whether adult titles are
+        hidden, and your light or dark theme choice. The theme is kept in your
+        browser, not on the server.
       </p>
 
       <h2>What the app does not store</h2>
@@ -136,8 +151,16 @@ export default function PrivacyPolicyPage() {
 
       <h2>Children</h2>
       <p>
-        The app is not directed at children under 13 and does not knowingly
-        collect their data.
+        The app is not directed at children under 13. It does ask for an age
+        range, and one of the choices is under 13 — so if you pick it, that
+        choice is stored, and the app treats the account as a child&rsquo;s:
+        titles MyAnimeList rates as adult stay hidden and cannot be turned on.
+        Nothing else about the account changes, and the range is not used for
+        anything else.
+      </p>
+      <p>
+        If you are a parent or guardian and would rather that account did not
+        exist at all, use the contact address below and it will be deleted.
       </p>
 
       <h2>Changes</h2>
