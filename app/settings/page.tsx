@@ -1,6 +1,8 @@
 import Link from "next/link";
 
 import { AppShell } from "@/components/app-shell";
+import { AccountSync } from "@/components/settings/account-sync";
+import { AniListDisconnect } from "@/components/settings/anilist-disconnect";
 import { CustomSources } from "@/components/settings/custom-sources";
 import { AgeRangeForm } from "@/components/settings/age-range-form";
 import { LinkedLogins } from "@/components/settings/linked-logins";
@@ -8,6 +10,7 @@ import { MatureContent } from "@/components/settings/mature-content";
 import { SetPasswordForm } from "@/components/settings/set-password-form";
 import { Button } from "@/components/ui/button";
 import {
+  getAniListConnection,
   getMalConnection,
   getProfile,
   getUserIdentities,
@@ -16,8 +19,13 @@ import {
   verifySession,
 } from "@/lib/auth/dal";
 import { getSources } from "@/lib/data/sources";
+import { formatLastSynced } from "@/lib/sync/staleness";
 
 export const metadata = { title: "Settings" };
+
+// Applies to the server actions this page runs, the account sync among them —
+// see MAL_WRITE_BUDGET_MS in lib/sync/account-sync.ts, which is sized to fit.
+export const maxDuration = 60;
 
 export default async function SettingsPage({
   searchParams,
@@ -27,15 +35,22 @@ export default async function SettingsPage({
   const params = await searchParams;
   const error = typeof params.error === "string" ? params.error : undefined;
 
-  const [profile, identities, connection, catalog, hideMature, isAdult] =
+  const [profile, identities, connection, anilist, catalog, hideMature, isAdult] =
     await Promise.all([
       getProfile(),
       getUserIdentities(),
       getMalConnection(),
+      getAniListConnection(),
       getSources(),
       hidesMatureTitles(),
       isAgeConfirmedAdult(),
     ]);
+
+  const anilistLinked = anilist !== null && anilist.status !== "disconnected";
+  // The account sync needs both sides live. An expired connection on either
+  // side hides it, and that side's section asks for a reconnect instead.
+  const canSyncAccounts =
+    connection?.status === "active" && anilist?.status === "active";
 
   const customSources = catalog.filter((s) => s.owner_id !== null);
 
@@ -104,6 +119,55 @@ export default async function SettingsPage({
             </Button>
           </div>
         </section>
+
+        <section className="grid gap-3">
+          <div>
+            <h2 className="font-display text-lg font-semibold">AniList</h2>
+            <p className="text-sm text-muted-foreground">
+              {!anilistLinked
+                ? "Not connected. Connect it to keep AniList in step with MyAnimeList."
+                : anilist.status === "needs_reauth"
+                  ? `Connected as ${anilist.anilist_username}, but the connection expired. Reconnect to keep syncing.`
+                  : `Connected as ${anilist.anilist_username}. Progress you save here is copied to AniList too.`}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="rounded-pill"
+            >
+              <Link href="/api/anilist/connect">
+                {anilistLinked ? "Reconnect" : "Connect AniList"}
+              </Link>
+            </Button>
+            {anilistLinked ? <AniListDisconnect /> : null}
+          </div>
+        </section>
+
+        {canSyncAccounts ? (
+          <section className="grid gap-3">
+            <div>
+              <h2 className="font-display text-lg font-semibold">
+                Sync accounts
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Bring your MyAnimeList and AniList lists into agreement —
+                status, chapters, volumes and score. Titles are matched by
+                their MyAnimeList id, so one that only exists on AniList is
+                skipped. Nothing is ever deleted from either site.
+              </p>
+            </div>
+            <AccountSync
+              lastSyncedLabel={
+                anilist.last_synced_at
+                  ? formatLastSynced(anilist.last_synced_at)
+                  : "Never synced"
+              }
+            />
+          </section>
+        ) : null}
 
         <section className="grid gap-3">
           <div>

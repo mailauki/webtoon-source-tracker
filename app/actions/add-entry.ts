@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { describeMirror, mirrorToAniList } from "@/lib/anilist/mirror";
 import { verifySession } from "@/lib/auth/dal";
 import { MalClient } from "@/lib/mal/client";
 import { getManga, updateListStatus } from "@/lib/mal/endpoints";
@@ -108,7 +109,7 @@ export async function addEntry(
       },
       { onConflict: "media_type,mal_media_id" },
     )
-    .select("id")
+    .select("id, mal_media_id, anilist_media_id")
     .single();
 
   if (catalogError || !title) {
@@ -146,11 +147,16 @@ export async function addEntry(
     };
   }
 
+  // Best-effort, and only once MAL and the local copy both have it.
+  const mirrored = describeMirror(await mirrorToAniList(userId, title, echoed));
+
   revalidatePath("/library");
 
   return {
     ok: true,
     entryId: entry.id,
-    message: `Added ${node.title} to your list.`,
+    message: mirrored
+      ? `Added ${node.title} to your list. ${mirrored}`
+      : `Added ${node.title} to your list.`,
   };
 }

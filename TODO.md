@@ -106,6 +106,36 @@ Adding it means a second sync path (`/users/@me/animelist`, which uses
 `num_episodes_watched` rather than `num_chapters_read`), a media-type filter in
 the library, and making that outbound link type-aware.
 
+### `TODO(anilist-only)` — titles AniList has and MyAnimeList does not
+
+**Where:** `lib/sync/account-sync.ts`, `supabase/migrations/…_anilist_connections.sql`
+
+The account sync matches titles by MAL id (AniList's `idMal`). A title with no
+MAL counterpart is counted as "couldn't be matched" and skipped — and for a
+webtoon tracker that is not rare: plenty of Korean and Chinese webtoons are on
+AniList only. They also cannot appear in the library, which mirrors MAL.
+
+Supporting them means `media_titles.mal_media_id` becoming nullable (with
+`anilist_media_id` as the alternative key), every read that assumes a MAL id
+— the entry page's outbound link, search's owned filter, progress writes —
+learning to route by whichever id a row has, and the MAL sync's removal step
+learning to leave AniList-only rows alone. Roughly 18 files reference
+`mal_media_id` today.
+
+Also left out: an AniList-only account (no MAL connection). The library's
+connect CTA and its sync button are MAL-only for the same reason.
+
+### `TODO(anilist-scheduled-sync)` — the account sync only runs on a click
+
+**Where:** `app/actions/account-sync.ts`
+
+Per-edit mirroring keeps AniList current for changes made *in this app*.
+Changes made directly on either site only cross over when the user runs Sync
+accounts. `syncAccounts` takes a user id and no request context, so a cron
+route could call it — the open questions are which direction a scheduled run
+should use (two-way is the only safe default) and the per-run write cap
+(`MAX_WRITES_PER_SIDE`), which assumes an interactive run.
+
 ### `TODO(remove-entry)` — nothing can be taken off the shelf
 
 **Where:** `components/entry-card-menu.tsx` (`useEntryCardActions`),

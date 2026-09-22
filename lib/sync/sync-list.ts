@@ -201,6 +201,33 @@ export async function syncGenres(
   }
 }
 
+/**
+ * Pages through the user's whole MAL manga list.
+ *
+ * `complete` is false when the page bound was hit before MAL said there was
+ * no more — which the removal guard in syncMalList depends on knowing.
+ */
+export async function fetchMalList(
+  client: MalClient,
+): Promise<{ entries: MalListEntry[]; pages: number; complete: boolean }> {
+  const entries: MalListEntry[] = [];
+  let pages = 0;
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const result = await getMangaList(client, {
+      limit: PAGE_SIZE,
+      offset: page * PAGE_SIZE,
+    });
+
+    entries.push(...result.data);
+    pages++;
+
+    if (!result.paging.next) return { entries, pages, complete: true };
+  }
+
+  return { entries, pages, complete: false };
+}
+
 export async function syncMalList(
   userId: string,
   options: { force?: boolean } = {},
@@ -232,25 +259,9 @@ export async function syncMalList(
   }
 
   // --- 1. Page through the list -------------------------------------------
-  const client = new MalClient(userId);
-  const collected: MalListEntry[] = [];
-  let pages = 0;
-  let complete = false;
-
-  for (let page = 0; page < MAX_PAGES; page++) {
-    const result = await getMangaList(client, {
-      limit: PAGE_SIZE,
-      offset: page * PAGE_SIZE,
-    });
-
-    collected.push(...result.data);
-    pages++;
-
-    if (!result.paging.next) {
-      complete = true;
-      break;
-    }
-  }
+  const { entries: collected, pages, complete } = await fetchMalList(
+    new MalClient(userId),
+  );
 
   if (collected.length === 0) {
     // An empty list is legitimate, but so is a MAL hiccup. Do not run the
