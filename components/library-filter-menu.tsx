@@ -17,7 +17,11 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { SORT_OPTIONS, type SortKey } from "@/lib/data/library-prefs";
+import {
+  SORT_OPTIONS,
+  type Layout,
+  type SortKey,
+} from "@/lib/data/library-prefs";
 import { Button } from "./ui/button";
 
 export type FilterChip = { value: string; label: string; count?: number };
@@ -70,6 +74,8 @@ export function LibraryFilterMenu({
     canSeeNsfw,
     sort,
     setSort,
+    layout,
+    setLayout,
     pending,
   } = useLibraryFilters();
 
@@ -267,6 +273,34 @@ export function LibraryFilterMenu({
               <DropdownMenuRadioItem value="asc">
                 {sortOption.asc} first
               </DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+
+        {/* Deliberately below the filters and beside the sort: like sorting,
+            this changes how the same shelf is presented rather than which of
+            it is shown. It is not counted in the trigger's badge for that
+            reason — a badge saying "1" when nothing is hidden would be a lie
+            about the shelf.
+
+            Not a checkbox: "list" is not the negation of "grid" in a way a
+            single tick communicates, and a radio pair names both states. */}
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            View
+            <span className="ml-auto pl-4 text-muted-foreground">
+              {layout === "row" ? "List" : "Grid"}
+            </span>
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="min-w-44">
+            <DropdownMenuRadioGroup
+              value={layout}
+              onValueChange={(value) =>
+                value !== layout && setLayout(value as Layout)
+              }
+            >
+              <DropdownMenuRadioItem value="grid">Grid</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="row">List</DropdownMenuRadioItem>
             </DropdownMenuRadioGroup>
           </DropdownMenuSubContent>
         </DropdownMenuSub>

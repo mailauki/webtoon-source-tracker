@@ -46,6 +46,10 @@ const prefsSchema = z.object({
   // widens what the search page asks MyAnimeList for, this one narrows what
   // the app shows from its own catalog, and a user may sensibly want both.
   hideNsfw: z.boolean().optional(),
+  // Grid or list. Stored as written and resolved leniently on read, like
+  // `sort` — a value this version does not know falls back to the default
+  // instead of failing the write.
+  layout: prefSchema.optional(),
 });
 
 export type LibraryPrefsPatch = z.input<typeof prefsSchema>;
@@ -70,6 +74,7 @@ export async function saveLibraryPrefs(patch: LibraryPrefsPatch) {
     search_include_nsfw?: boolean;
     search_media_kind?: string | null;
     hide_nsfw?: boolean;
+    layout?: string | null;
   } = {
     user_id: userId,
   };
@@ -108,6 +113,12 @@ export async function saveLibraryPrefs(patch: LibraryPrefsPatch) {
   // ships in and the one nothing disappears under.
   if (parsed.data.hideNsfw !== undefined) {
     row.hide_nsfw = parsed.data.hideNsfw;
+  }
+
+  // No `all` sentinel, for the same reason sort has none: the shelf is always
+  // drawn some way, so an empty value is "no preference" — which is null.
+  if (parsed.data.layout !== undefined) {
+    row.layout = parsed.data.layout || null;
   }
 
   if (Object.keys(row).length === 1) return;

@@ -9,6 +9,7 @@ import {
   ALL,
   serializeSort,
   sortEntries,
+  type Layout,
   type Sort,
 } from "@/lib/data/library-prefs";
 import type { LibraryRow } from "@/lib/data/entries";
@@ -48,17 +49,22 @@ type Filters = {
   ownedOnly: boolean;
   hideNsfw: boolean;
 };
-type State = Filters & { sort: Sort };
+type State = Filters & { sort: Sort; layout: Layout };
 
 /**
  * What the provider is seeded with. Both toggles are optional because off is
  * the default everywhere: a caller that has no stored preference — and every
  * caller that predates either toggle — should show the whole shelf.
  */
-type InitialState = Omit<State, "hideHiatus" | "ownedOnly" | "hideNsfw"> & {
+type InitialState = Omit<
+  State,
+  "hideHiatus" | "ownedOnly" | "hideNsfw" | "layout"
+> & {
   hideHiatus?: boolean;
   ownedOnly?: boolean;
   hideNsfw?: boolean;
+  /** Optional too: a caller that predates the list view gets the grid. */
+  layout?: Layout;
 };
 
 type LibraryFilterContext = State & {
@@ -86,6 +92,14 @@ type LibraryFilterContext = State & {
    */
   canSeeNsfw: boolean;
   setSort: (value: Sort) => void;
+  /**
+   * Grid of covers, or list of rows. Not a filter — it changes how the same
+   * shelf is drawn, not which of it is shown — but it lives here for the same
+   * reason the sort does: it is a stored per-user choice made in the menu
+   * that the body has to act on, and the two sit in different parts of the
+   * tree.
+   */
+  setLayout: (value: Layout) => void;
   pending: boolean;
   /**
    * The shelf the page fetched. Held here rather than passed to each consumer
@@ -142,6 +156,7 @@ export function LibraryFilters({
     hideHiatus: false,
     ownedOnly: false,
     hideNsfw: false,
+    layout: "grid",
     ...initial,
   });
 
@@ -171,6 +186,15 @@ export function LibraryFilters({
     });
   }
 
+  // Separate for the same reason: layout is stored as written and has no All
+  // sentinel, since a shelf is always drawn some way.
+  function updateLayout(layout: Layout) {
+    setState((current) => ({ ...current, layout }));
+    startTransition(async () => {
+      await saveLibraryPrefs({ layout });
+    });
+  }
+
   return (
     <FilterContext
       value={{
@@ -182,6 +206,7 @@ export function LibraryFilters({
         setHideNsfw: (hideNsfw) => update({ hideNsfw }),
         canSeeNsfw,
         setSort: updateSort,
+        setLayout: updateLayout,
         pending,
         entries,
       }}
@@ -214,7 +239,7 @@ export function LibraryGrid({
   /** Chips hid everything. */
   emptyFiltered: React.ReactNode;
 }) {
-  const { status, source, hideHiatus, ownedOnly, hideNsfw, sort } =
+  const { status, source, hideHiatus, ownedOnly, hideNsfw, sort, layout } =
     useLibraryFilters();
 
   // The same function the dice draws from, so the shelf and the roll can never
@@ -234,14 +259,23 @@ export function LibraryGrid({
   }
 
   return (
-    // Fewer, wider columns than the old bare-cover grid: the card now carries
-    // a title, a chip row and a stat strip over the art, and at 8-across none
-    // of them had the width to be legible.
-    <div className="grid grid-cols-2 items-stretch gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+    <div
+      className={
+        layout === "row"
+          ? // One column. The row carries its own internal columns — cover,
+            // text, stat strip — so the list is a stack, not a grid.
+            "grid gap-2"
+          : // Fewer, wider columns than the old bare-cover grid: the card now
+            // carries a title, a chip row and a stat strip over the art, and
+            // at 8-across none of them had the width to be legible.
+            "grid grid-cols-2 items-stretch gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+      }
+    >
       {ordered.map((entry) => (
         <EntryCard
           key={entry.id}
           entry={entry}
+          layout={layout}
           topSources={topSources}
           catalog={catalog}
         />

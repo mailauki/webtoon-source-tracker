@@ -4,7 +4,7 @@ import { ArrowLeft } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
-import { CollectionCard } from "@/components/collection-card";
+import { CollectionFilters } from "@/components/collection-filters";
 import { verifySession } from "@/lib/auth/dal";
 import { getCuratedCollection } from "@/lib/data/collections";
 
@@ -67,13 +67,7 @@ export default async function CollectionPage({
           </p>
         </div>
 
-        <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-          {collection.items.map((item) => (
-            <li key={item.id}>
-              <CollectionCard item={item} />
-            </li>
-          ))}
-        </ul>
+        <CollectionFilters items={collection.items} />
       </div>
     </AppShell>
   );

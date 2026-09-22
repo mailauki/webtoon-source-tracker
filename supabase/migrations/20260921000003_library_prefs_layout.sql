@@ -1,0 +1,21 @@
+-- Sticky library layout: grid or list
+--
+-- The shelf has only ever been a grid of cover cards. That is the right
+-- default — the art is how someone recognises a title at a glance — but it is
+-- the wrong shape for a long library, where "what am I part-way through" is a
+-- scanning question and a grid answers it four titles per row.
+--
+-- The row layout the card already supports answers it as a list. This
+-- remembers which one the user chose, the same way the filters and the sort
+-- are remembered.
+--
+-- Nullable, meaning "never chose" — the same convention as sort. There is no
+-- 'all' equivalent for the same reason sort has none: a shelf is always drawn
+-- in some layout, so a null here resolves to the default rather than to "show
+-- everything".
+--
+-- Not CHECK'd against the known values, matching every other preference
+-- column here: a layout this app later stops supporting should quietly fall
+-- back to the grid, not fail the write or break the page.
+
+alter table public.library_prefs add column layout text;

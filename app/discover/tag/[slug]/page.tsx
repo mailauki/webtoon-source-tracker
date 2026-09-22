@@ -4,8 +4,9 @@ import { ArrowLeft } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
-import { CollectionCard } from "@/components/collection-card";
+import { CollectionFilters } from "@/components/collection-filters";
 import { verifySession } from "@/lib/auth/dal";
+import type { CollectionItem } from "@/lib/data/collection-items";
 import { getTrackedEntries } from "@/lib/data/collections";
 import { getTagBySlug, getTitlesForTag } from "@/lib/data/tags";
 
@@ -40,6 +41,19 @@ export default async function TagPage({
     getTrackedEntries(),
   ]);
 
+  // There is no collection_items row here — a tag link is not a shelf
+  // placement — so the catalog id doubles as the item id and the React key.
+  // `removable` is never passed for this page, so nothing reads it to build
+  // a remove form.
+  const items: CollectionItem[] = titles.map((title) => ({
+    id: title.id,
+    position: 0,
+    note: null,
+    media_titles: title,
+    entryId: tracked.get(title.id)?.entryId ?? null,
+    tracked: tracked.get(title.id) ?? null,
+  }));
+
   return (
     <AppShell
       secondaryRow={
@@ -66,25 +80,7 @@ export default async function TagPage({
           </p>
         </div>
 
-        <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-          {titles.map((title) => (
-            <li key={title.id}>
-              <CollectionCard
-                item={{
-                  // There is no collection_items row here — a tag link is not
-                  // a shelf placement — so the catalog id doubles as the React
-                  // key. `removable` is never passed for this page, so
-                  // CollectionCard never reads this id to build a remove form.
-                  id: title.id,
-                  position: 0,
-                  note: null,
-                  media_titles: title,
-                  entryId: tracked.get(title.id) ?? null,
-                }}
-              />
-            </li>
-          ))}
-        </ul>
+        <CollectionFilters items={items} />
       </div>
     </AppShell>
   );

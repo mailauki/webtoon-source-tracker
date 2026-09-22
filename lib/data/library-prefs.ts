@@ -25,6 +25,38 @@ export function resolveActiveChip(saved: string | null | undefined): string {
 }
 
 /* ------------------------------------------------------------------------ */
+/* Layout                                                                   */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * Whether the shelf is drawn as a grid of covers or as a list of rows.
+ *
+ * Like sort and unlike the filters, there is no "off": a shelf is always in
+ * some layout, so a missing preference resolves to the default rather than to
+ * a sentinel.
+ *
+ * The grid is the default because the art is how someone recognises a title
+ * at a glance. The list earns its place on a long library, where scanning for
+ * "what am I part-way through" is a question a four-across grid answers
+ * badly.
+ */
+export type Layout = "grid" | "row";
+
+export const DEFAULT_LAYOUT: Layout = "grid";
+
+/**
+ * Parse a stored layout.
+ *
+ * Anything unrecognised falls back to the grid, for the same reason
+ * resolveSort falls back to its default: a preference written by a version of
+ * this app that offered a layout this one dropped should quietly render the
+ * default, not throw on render.
+ */
+export function resolveLayout(saved: string | null | undefined): Layout {
+  return saved === "row" ? "row" : DEFAULT_LAYOUT;
+}
+
+/* ------------------------------------------------------------------------ */
 /* Sort                                                                     */
 /* ------------------------------------------------------------------------ */
 

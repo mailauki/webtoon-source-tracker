@@ -13,7 +13,11 @@ import {
   verifySession,
 } from "@/lib/auth/dal";
 import { getLibrary, getStatusCounts } from "@/lib/data/entries";
-import { resolveActiveChip, resolveSort } from "@/lib/data/library-prefs";
+import {
+  resolveActiveChip,
+  resolveLayout,
+  resolveSort,
+} from "@/lib/data/library-prefs";
 import { getSources, getTopSources } from "@/lib/data/sources";
 import { formatLastSynced, isStale } from "@/lib/sync/staleness";
 
@@ -70,6 +74,9 @@ export default async function LibraryPage() {
   const activeStatus = resolveActiveChip(prefs?.status);
   const activeSource = resolveActiveChip(prefs?.source);
   const activeSort = resolveSort(prefs?.sort);
+  // Grid unless the user asked for the list. See resolveLayout for why an
+  // unrecognised stored value falls back rather than throwing.
+  const activeLayout = resolveLayout(prefs?.layout);
   // Both default to off: a title should never disappear from the shelf on a
   // visit where the user did not ask for it. That matters more for owned-only,
   // which would otherwise empty the shelf of anyone who has marked nothing.
@@ -111,6 +118,7 @@ export default async function LibraryPage() {
         ownedOnly,
         hideNsfw,
         sort: activeSort,
+        layout: activeLayout,
       }}
       entries={entries}
     >
