@@ -1,5 +1,7 @@
 import "server-only";
 
+import { hidesMatureTitles } from "@/lib/auth/dal";
+import { MATURE_RATINGS, screenMature } from "@/lib/data/nsfw";
 import { readAllRows } from "@/lib/data/pagination";
 import { MAL_LIST_STATUSES } from "@/lib/mal/types";
 import { createClient } from "@/lib/supabase/server";
@@ -32,11 +34,20 @@ import { createClient } from "@/lib/supabase/server";
  * and everything downstream — the chips, the dice, the search page — narrows
  * what it is handed and would report a title as absent rather than as hidden.
  * A library inside the cap still costs one query; see lib/data/pagination.ts.
+ *
+ * The one thing that IS filtered here is the adult-content switch, and it is
+ * filtered here precisely because everything downstream reads these rows: the
+ * chips, the dice, the search page's library half and the status counts would
+ * each need their own copy of the rule otherwise. Filtered in JS rather than
+ * in the query because `nsfw` is null for every row the backfill has not
+ * reached, and PostgREST's `not.in` drops nulls along with the matches — which
+ * would hide most of a shelf rather than the adult part of it.
  */
 export async function getLibrary() {
   const supabase = await createClient();
+  const hideMature = await hidesMatureTitles();
 
-  return readAllRows(
+  const rows = await readAllRows(
     (from, to) =>
       supabase
         .from("user_entries")
@@ -52,7 +63,7 @@ export async function getLibrary() {
       created_at,
       media_titles!inner (
         id, mal_media_id, title, title_en, main_picture_url,
-        mal_media_kind, num_chapters, num_volumes, mal_status
+        mal_media_kind, num_chapters, num_volumes, mal_status, nsfw
       ),
       entry_sources (
         id, url, chapters_read, chapters_owned,
@@ -72,6 +83,8 @@ export async function getLibrary() {
         .range(from, to),
     "library",
   );
+
+  return screenMature(rows, hideMature, (row) => row.media_titles);
 }
 
 export type LibraryRow = Awaited<ReturnType<typeof getLibrary>>[number];
@@ -88,16 +101,42 @@ export type LibraryRow = Awaited<ReturnType<typeof getLibrary>>[number];
  * A failed count reads as 0, which drops that chip (the page only offers chips
  * with a count above zero). Losing one chip is the right degradation here: the
  * grid it filters is already on screen.
+ *
+ * The adult-content switch has to reach these too, or a chip would promise
+ * twelve titles and the grid below it would show ten. It is applied in the
+ * query rather than by counting rows in JS, so the counts keep the property
+ * this shape exists for: PostgREST's exact count is not subject to `max_rows`,
+ * and tallying rows would put the cap back.
+ *
+ * The filter is an explicit `is null OR not in (...)` rather than a bare
+ * `not.in`, because SQL's `NULL NOT IN (...)` is NULL and not true — a plain
+ * negation would drop every title the rating backfill has not reached yet,
+ * which is most of the catalog on the day this ships.
  */
 export async function getStatusCounts(): Promise<Record<string, number>> {
   const supabase = await createClient();
+  const hideMature = await hidesMatureTitles();
 
   const counts = await Promise.all(
     MAL_LIST_STATUSES.map(async (status) => {
-      const { count, error } = await supabase
-        .from("user_entries")
-        .select("id", { count: "exact", head: true })
-        .eq("list_status", status);
+      // `!inner` is what lets the embedded filter narrow the parent rows; the
+      // unfiltered path keeps the plain select, so the common case still
+      // counts one table.
+      const query = hideMature
+        ? supabase
+            .from("user_entries")
+            .select("id, media_titles!inner(nsfw)", {
+              count: "exact",
+              head: true,
+            })
+            .or(`nsfw.is.null,nsfw.not.in.(${[...MATURE_RATINGS].join(",")})`, {
+              referencedTable: "media_titles",
+            })
+        : supabase
+            .from("user_entries")
+            .select("id", { count: "exact", head: true });
+
+      const { count, error } = await query.eq("list_status", status);
 
       return [status, error ? 0 : (count ?? 0)] as const;
     }),
@@ -112,6 +151,12 @@ export async function getStatusCounts(): Promise<Record<string, number>> {
  * Returns null when the entry does not exist OR belongs to someone else — RLS
  * makes those indistinguishable, which is the desired behaviour: a wrong id
  * and someone else's id both 404 rather than confirming existence.
+ *
+ * Deliberately NOT narrowed by the adult-content switch, unlike getLibrary
+ * above. That switch decides what turns up while browsing; this is a title the
+ * user tracks, reached by its own id, usually from a bookmark or the back
+ * button. Hiding it here would 404 something they own — which is the "the app
+ * lost my data" reading the whole setting is shaped to avoid.
  */
 export async function getEntry(entryId: number) {
   const supabase = await createClient();

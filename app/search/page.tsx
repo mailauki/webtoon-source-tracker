@@ -10,6 +10,7 @@ import { SearchSwitches } from "@/components/search/search-switches";
 import {
   getLibraryPrefs,
   getMalConnection,
+  isAgeConfirmedAdult,
   verifySession,
 } from "@/lib/auth/dal";
 import { getLibrary } from "@/lib/data/entries";
@@ -53,10 +54,11 @@ export default async function SearchPage() {
   // title against rows already in the browser is what lets a keystroke narrow
   // the results in the same render, with no round-trip to interrupt typing.
   // The two source lists are what an EntryCard needs to offer its menu.
-  const [entries, sources, topSources] = await Promise.all([
+  const [entries, sources, topSources, isAdult] = await Promise.all([
     getLibrary(),
     getSources(),
     getTopSources(),
+    isAgeConfirmedAdult(),
   ]);
 
   // A disconnected account has no token to search MAL with. Everything else on
@@ -73,6 +75,8 @@ export default async function SearchPage() {
         mediaKind: resolveMediaKind(prefs?.search_media_kind),
       }}
       entries={entries}
+      // Presentation only; the route enforces the same floor on every request.
+      matureLocked={!isAdult}
     >
       <AppShell
         secondaryRow={<SearchField />}

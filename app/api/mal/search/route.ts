@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getOptionalSession } from "@/lib/auth/dal";
+import { getOptionalSession, isAgeConfirmedAdult } from "@/lib/auth/dal";
 import {
   MIN_QUERY_LENGTH,
   matchesMediaKind,
@@ -64,7 +64,19 @@ export async function GET(request: Request) {
   const query = params.get("q")?.trim() ?? "";
   // Anything but an explicit "1" is off: this is the direction where a
   // misread param should fail safe.
-  const includeMature = params.get("nsfw") === "1";
+  const askedForMature = params.get("nsfw") === "1";
+
+  // The age floor, enforced here rather than only on the switch that sets the
+  // param. This handler is reachable directly — `nsfw=1` is one curl away —
+  // so a disabled control in the UI is not a check, and the same reasoning
+  // that put the floor in hidesMatureTitles() rather than in the settings
+  // form applies to the one surface that reaches past our own catalog.
+  //
+  // Without this, the gate leaked in the one direction that matters most: the
+  // catalog reads hide adult titles the app already stores, while this asks
+  // MyAnimeList for new ones and would hand them to an account that has never
+  // said it is old enough to see them.
+  const includeMature = askedForMature && (await isAgeConfirmedAdult());
   // Unrecognised values resolve to the default side rather than 400ing — a
   // stale client asking for a side this version dropped should still search.
   const kind = resolveMediaKind(params.get("kind"));

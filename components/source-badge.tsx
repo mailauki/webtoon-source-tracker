@@ -1,4 +1,4 @@
-import { BookmarkCheck, Crown, Lock, PauseCircle } from "lucide-react";
+import { BookmarkCheck, Crown, EyeOff, Lock, PauseCircle } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -111,6 +111,35 @@ export function OwnedBadge({ overlay = false }: { overlay?: boolean }) {
     >
       <BookmarkCheck className="size-2.5" aria-hidden />
       Owned
+    </Badge>
+  );
+}
+
+/**
+ * MyAnimeList rates this title as adult.
+ *
+ * Only ever rendered for a viewer who is allowed to see the title at all —
+ * an account under the age floor never receives the row, so this badge is
+ * not what keeps anything hidden. It is a label on something already on
+ * screen, so somebody scrolling their own shelf can tell at a glance which
+ * covers they might not want open in public.
+ *
+ * `hiatus`'s solid ground rather than `alert`: red is reserved for the
+ * missing-source gap, the one badge here that asks to be acted on. A rating
+ * is a fact about the title, not a problem with it.
+ *
+ * The label reads "18+" rather than "NSFW" — it is shorter on a 130px card,
+ * and it says what the rating means rather than naming a category.
+ */
+export function MatureBadge({ overlay = false }: { overlay?: boolean }) {
+  return (
+    <Badge
+      variant={overlay ? "hiatus" : "source"}
+      className="gap-1"
+      title="MyAnimeList rates this title as adult"
+    >
+      <EyeOff className="size-2.5" aria-hidden />
+      18+
     </Badge>
   );
 }

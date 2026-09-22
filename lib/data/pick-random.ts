@@ -1,4 +1,5 @@
 import type { LibraryRow } from "@/lib/data/entries";
+import { isMature } from "@/lib/data/nsfw";
 
 /**
  * Picking a title at random from the shelf.
@@ -17,6 +18,14 @@ export type CandidateFilters = {
   hideHiatus?: boolean;
   /** The owned toggle. Off by default, for the same reason. */
   ownedOnly?: boolean;
+  /**
+   * Hide adult-rated titles.
+   *
+   * Only ever true for a viewer who may see them at all — an account under
+   * the age floor never receives these rows, so this is the viewer's own
+   * preference rather than the gate. See lib/auth/dal.ts.
+   */
+  hideNsfw?: boolean;
 };
 
 /**
@@ -71,7 +80,13 @@ export function isOwned(entry: LibraryRow): boolean {
  */
 export function selectCandidates(
   entries: LibraryRow[],
-  { status, source, hideHiatus = false, ownedOnly = false }: CandidateFilters,
+  {
+    status,
+    source,
+    hideHiatus = false,
+    ownedOnly = false,
+    hideNsfw = false,
+  }: CandidateFilters,
 ): LibraryRow[] {
   return entries.filter((entry) => {
     if (status && entry.list_status !== status) return false;
@@ -85,6 +100,7 @@ export function selectCandidates(
     // A title with no sources is never owned, so this also drops the
     // "No source" cards — correctly, since nowhere recorded is nowhere bought.
     if (ownedOnly && !isOwned(entry)) return false;
+    if (hideNsfw && isMature(entry.media_titles)) return false;
 
     if (source === "none") return entry.entry_sources.length === 0;
     if (source) {

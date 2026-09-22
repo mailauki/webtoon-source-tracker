@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import {
   getLibraryPrefs,
   getMalConnection,
+  isAgeConfirmedAdult,
   verifySession,
 } from "@/lib/auth/dal";
 import { getLibrary, getStatusCounts } from "@/lib/data/entries";
@@ -74,6 +75,11 @@ export default async function LibraryPage() {
   // which would otherwise empty the shelf of anyone who has marked nothing.
   const hideHiatus = prefs?.hide_hiatus ?? false;
   const ownedOnly = prefs?.owned_only ?? false;
+  // The stored preference matters only for a viewer who may see adult titles
+  // at all; getLibrary() has already removed them for everyone else, so the
+  // toggle would filter an empty set and the menu hides it.
+  const canSeeNsfw = await isAgeConfirmedAdult();
+  const hideNsfw = canSeeNsfw && (prefs?.hide_nsfw ?? false);
 
   const [entries, statusCounts, sources, topSources] = await Promise.all([
     getLibrary(),
@@ -97,11 +103,13 @@ export default async function LibraryPage() {
     // Wraps the whole shell: the filter menu renders into the header slot and
     // the grid into the body, and a choice in the menu has to move the grid.
     <LibraryFilters
+      canSeeNsfw={canSeeNsfw}
       initial={{
         status: activeStatus,
         source: activeSource,
         hideHiatus,
         ownedOnly,
+        hideNsfw,
         sort: activeSort,
       }}
       entries={entries}

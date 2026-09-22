@@ -2,13 +2,17 @@ import Link from "next/link";
 
 import { AppShell } from "@/components/app-shell";
 import { CustomSources } from "@/components/settings/custom-sources";
+import { AgeRangeForm } from "@/components/settings/age-range-form";
 import { LinkedLogins } from "@/components/settings/linked-logins";
+import { MatureContent } from "@/components/settings/mature-content";
 import { SetPasswordForm } from "@/components/settings/set-password-form";
 import { Button } from "@/components/ui/button";
 import {
   getMalConnection,
   getProfile,
   getUserIdentities,
+  hidesMatureTitles,
+  isAgeConfirmedAdult,
   verifySession,
 } from "@/lib/auth/dal";
 import { getSources } from "@/lib/data/sources";
@@ -23,12 +27,15 @@ export default async function SettingsPage({
   const params = await searchParams;
   const error = typeof params.error === "string" ? params.error : undefined;
 
-  const [profile, identities, connection, catalog] = await Promise.all([
-    getProfile(),
-    getUserIdentities(),
-    getMalConnection(),
-    getSources(),
-  ]);
+  const [profile, identities, connection, catalog, hideMature, isAdult] =
+    await Promise.all([
+      getProfile(),
+      getUserIdentities(),
+      getMalConnection(),
+      getSources(),
+      hidesMatureTitles(),
+      isAgeConfirmedAdult(),
+    ]);
 
   const customSources = catalog.filter((s) => s.owner_id !== null);
 
@@ -96,6 +103,35 @@ export default async function SettingsPage({
               </Link>
             </Button>
           </div>
+        </section>
+
+        <section className="grid gap-3">
+          <div>
+            <h2 className="font-display text-lg font-semibold">Your age</h2>
+            <p className="text-sm text-muted-foreground">
+              A range, not a birthday — it is all this app needs, and it is the
+              shape a phone or store account would report if this were ever a
+              native app. Until you confirm you are 18 or over, adult titles
+              stay hidden wherever they would otherwise appear.
+            </p>
+          </div>
+          <AgeRangeForm current={profile?.age_range ?? null} />
+        </section>
+
+        <section className="grid gap-3">
+          <div>
+            <h2 className="font-display text-lg font-semibold">
+              Adult content
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              MyAnimeList rates some titles as explicit or borderline. This
+              decides whether they show up as you browse. It does not change
+              what you track — an entry you already have stays on your list
+              either way, and the search page keeps its own switch for asking
+              MyAnimeList to return adult titles at all.
+            </p>
+          </div>
+          <MatureContent initialHidden={hideMature} locked={!isAdult} />
         </section>
 
         <section className="grid gap-3">

@@ -89,13 +89,19 @@ function setup({
   entries = ROWS,
   connected = true,
   initial = {},
+  matureLocked = false,
 }: {
   entries?: LibraryRow[];
   connected?: boolean;
   initial?: { includeNsfw?: boolean; mediaKind?: MediaKind };
+  matureLocked?: boolean;
 } = {}) {
   return render(
-    <SearchFilters initial={initial} entries={entries}>
+    <SearchFilters
+      initial={initial}
+      entries={entries}
+      matureLocked={matureLocked}
+    >
       <SearchField />
       <SearchSwitches />
       <SearchPrompt />
@@ -109,6 +115,8 @@ const field = () => screen.getByRole("searchbox", { name: "Search titles" });
 const visibleIds = () =>
   screen.queryAllByTestId("entry").map((n) => Number(n.textContent));
 const nsfwToggle = () => screen.getByRole("button", { name: /include nsfw/i });
+const queryNsfwToggle = () =>
+  screen.queryByRole("button", { name: /include nsfw/i });
 const kindChip = (name: RegExp) =>
   screen.getByRole("button", { name });
 
@@ -272,6 +280,49 @@ describe("the novels/webtoons switch", () => {
     await waitFor(() =>
       expect(lastRequest(fetchMock).get("kind")).toBe("novels"),
     );
+  });
+});
+
+describe("the NSFW switch, under the age floor", () => {
+  // The switch is one half of the gate. The other half is the route, which
+  // ignores `nsfw=1` from an unconfirmed account however the request was
+  // made — a hidden control is not a permission check.
+
+  it("is gone entirely for an account that has not confirmed 18 or over", () => {
+    setup({ matureLocked: true });
+
+    // Absent, not disabled: a greyed-out control still advertises what it
+    // withholds and invites "how do I turn this on".
+    expect(queryNsfwToggle()).toBeNull();
+  });
+
+  it("leaves the other switch alone", () => {
+    setup({ matureLocked: true });
+
+    expect(kindChip(/webtoons/i)).toBeInTheDocument();
+  });
+
+  it("stays hidden even when the stored preference says include", () => {
+    // A user who set this while confirmed, then had the floor apply again.
+    setup({ matureLocked: true, initial: { includeNsfw: true } });
+
+    expect(queryNsfwToggle()).toBeNull();
+  });
+
+  it("never sends nsfw=1 while hidden, whatever the stored preference", async () => {
+    const fetchMock = mockSearch();
+    setup({ matureLocked: true, initial: { includeNsfw: true } });
+
+    await userEvent.type(field(), "solo");
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+
+    expect(lastRequest(fetchMock).has("nsfw")).toBe(false);
+  });
+
+  it("is present again once the account is confirmed", () => {
+    setup({ matureLocked: false });
+
+    expect(nsfwToggle()).toBeInTheDocument();
   });
 });
 

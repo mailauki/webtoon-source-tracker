@@ -240,6 +240,7 @@ export type Database = {
       library_prefs: {
         Row: {
           hide_hiatus: boolean
+          hide_nsfw: boolean
           owned_only: boolean
           search_include_nsfw: boolean
           search_media_kind: string | null
@@ -251,6 +252,7 @@ export type Database = {
         }
         Insert: {
           hide_hiatus?: boolean
+          hide_nsfw?: boolean
           owned_only?: boolean
           search_include_nsfw?: boolean
           search_media_kind?: string | null
@@ -262,6 +264,7 @@ export type Database = {
         }
         Update: {
           hide_hiatus?: boolean
+          hide_nsfw?: boolean
           owned_only?: boolean
           search_include_nsfw?: boolean
           search_media_kind?: string | null
@@ -331,6 +334,7 @@ export type Database = {
           mal_media_kind: string | null
           mal_status: string | null
           media_type: string
+          nsfw: string | null
           num_chapters: number | null
           num_volumes: number | null
           synced_at: string
@@ -346,6 +350,7 @@ export type Database = {
           mal_media_kind?: string | null
           mal_status?: string | null
           media_type?: string
+          nsfw?: string | null
           num_chapters?: number | null
           num_volumes?: number | null
           synced_at?: string
@@ -361,6 +366,7 @@ export type Database = {
           mal_media_kind?: string | null
           mal_status?: string | null
           media_type?: string
+          nsfw?: string | null
           num_chapters?: number | null
           num_volumes?: number | null
           synced_at?: string
@@ -372,6 +378,9 @@ export type Database = {
       }
       profiles: {
         Row: {
+          age_assurance_method: string | null
+          age_assured_at: string | null
+          age_range: string | null
           avatar_url: string | null
           created_at: string
           display_name: string | null
@@ -379,6 +388,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          age_assurance_method?: string | null
+          age_assured_at?: string | null
+          age_range?: string | null
           avatar_url?: string | null
           created_at?: string
           display_name?: string | null
@@ -386,6 +398,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          age_assurance_method?: string | null
+          age_assured_at?: string | null
+          age_range?: string | null
           avatar_url?: string | null
           created_at?: string
           display_name?: string | null

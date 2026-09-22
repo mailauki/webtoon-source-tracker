@@ -2,6 +2,8 @@ import "server-only";
 
 import { z } from "zod";
 
+import { isMature } from "@/lib/data/nsfw";
+
 import type { MalClient } from "./client";
 import {
   malListEntrySchema,
@@ -80,17 +82,13 @@ export async function getManga(client: MalClient, mangaId: number) {
 /**
  * MAL's rating for an entry it considers explicit or borderline.
  *
- * A missing value is *not* mature. MAL omits the field on some entries, and
- * `nsfw` is only ever requested alongside the query parameter that already
- * asks MAL to leave adult titles out — so anything arriving without a rating
- * has passed that filter, and treating unknown as explicit would empty the
- * results rather than clean them.
+ * The set and the rule for reading it live in lib/data/nsfw.ts, because
+ * `media_titles.nsfw` now stores these same strings: a search result and a
+ * shelf row have to be judged by one predicate, or the two surfaces disagree
+ * about the same title. Re-exported here, where callers already look for it —
+ * and imported above as well, since `searchManga` below applies it.
  */
-const MATURE_RATINGS = new Set(["gray", "black"]);
-
-export function isMature(node: { nsfw?: string | null }): boolean {
-  return MATURE_RATINGS.has(node.nsfw ?? "");
-}
+export { isMature };
 
 /**
  * Searches the MAL catalog for titles to add.

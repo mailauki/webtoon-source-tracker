@@ -18,6 +18,11 @@ export type CollectionTitle = {
   mal_media_kind: string | null;
   num_chapters: number | null;
   mal_status: string | null;
+  /**
+   * MyAnimeList's content rating, or null when it has never been fetched.
+   * Read only by the adult-content switch (lib/data/nsfw.ts); no card shows it.
+   */
+  nsfw?: string | null;
 };
 
 /** One row of `collection_items`, joined to its catalog row. */

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { kindForMalGenre } from "@/lib/data/mal-taxonomy";
 import { slugify } from "@/lib/data/tag-items";
 import { MalClient } from "@/lib/mal/client";
 import { getMangaList } from "@/lib/mal/endpoints";
@@ -80,7 +81,11 @@ export async function syncGenres(
       mal_genre_id: id,
       slug: slugify(name),
       name,
-      kind: "genre" as const,
+      // MAL sends a flat list with no group, so the kind comes from the
+      // taxonomy map rather than defaulting everything to "genre". This is
+      // what puts Ecchi/Erotica/Hentai under the explicit kind the age gate
+      // reads. Existing rows are untouched: the upsert below is `do nothing`.
+      kind: kindForMalGenre(name),
     })),
     { onConflict: "mal_genre_id", ignoreDuplicates: true },
   );
@@ -271,6 +276,12 @@ export async function syncMalList(
     num_chapters: number | null;
     num_volumes: number | null;
     mal_status: string | null;
+    // MAL's content rating. Already on the node — `nsfw` has been in
+    // LIST_FIELDS since the search page needed it — and now kept, so the
+    // library and the collections can leave adult titles out for a user who
+    // asked them to. Null when MAL sends nothing, which reads as safe; see
+    // lib/data/nsfw.ts.
+    nsfw: string | null;
     synced_at: string;
   }>();
 
@@ -287,6 +298,7 @@ export async function syncMalList(
       num_chapters: node.num_chapters ?? null,
       num_volumes: node.num_volumes ?? null,
       mal_status: node.status ?? null,
+      nsfw: node.nsfw ?? null,
       synced_at: now,
     });
   }

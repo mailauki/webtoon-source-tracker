@@ -1,11 +1,19 @@
 /**
- * Imports MAL genres for catalog rows that predate the genre sync.
+ * Imports MAL genres — and content ratings — for catalog rows that predate
+ * those syncs.
  *
  * Run: yarn backfill:genres
  *
  * Adding `genres` to LIST_FIELDS only tags a title the next time some user who
  * has it syncs, so rows already in media_titles stay untagged indefinitely.
  * This walks them and fetches each one directly.
+ *
+ * The rating (`media_titles.nsfw`) rides along on the same walk rather than
+ * getting a script of its own. It has exactly the same problem — the column
+ * arrived after most rows did, and only a fresh sync would fill it — and the
+ * expensive part here is the paced per-title fetch, not the write. A second
+ * script would mean walking the whole catalog twice at one request a second
+ * for one extra field that /manga/{id} was already going to return.
  *
  * Needs a MAL token, so it runs against one connected account — any account
  * will do, since /manga/{id} is not list-scoped. One-off, not a scheduled job.
@@ -92,16 +100,21 @@ async function getAnyConnectedAccount(admin: SupabaseAdmin): Promise<{
   userId: string;
   tokens: StoredTokens;
 }> {
+  // Every active connection, most recently synced first — not `.limit(1)`.
+  // `status` is set when an account connects and is not cleared when its
+  // tokens are later dropped, so "active" does not imply "has tokens": a
+  // seeded demo account outlives its tokens and sorts ahead of a real one on
+  // an unordered read. Taking the first row and failing on it stopped this
+  // script dead while a perfectly good account sat in the next row.
   const { data: connections, error } = await admin
     .from("mal_connections")
-    .select("user_id")
+    .select("user_id, mal_username")
     .eq("status", "active")
-    .limit(1);
+    .order("last_synced_at", { ascending: false, nullsFirst: false });
 
   if (error) throw new Error(`Could not read mal_connections: ${error.message}`);
 
-  const connection = connections?.[0];
-  if (!connection) {
+  if (!connections || connections.length === 0) {
     throw new Error(
       "No active MyAnimeList connection found. Connect at least one account " +
         "(via /settings in the running app) before running this script — " +
@@ -110,17 +123,34 @@ async function getAnyConnectedAccount(admin: SupabaseAdmin): Promise<{
     );
   }
 
-  const { data: rows, error: tokenError } = await admin.rpc("mal_tokens_get", {
-    p_user_id: connection.user_id,
-  });
+  // Try each in turn; the endpoint is not list-scoped, so any account with
+  // usable tokens does. Only when none has any is this actually blocked.
+  const tried: string[] = [];
+  let connection: { user_id: string } | undefined;
+  let row: { access_token: string; refresh_token: string } | undefined;
 
-  if (tokenError) throw new Error(`Could not read MAL tokens: ${tokenError.message}`);
+  for (const candidate of connections) {
+    const { data: rows, error: tokenError } = await admin.rpc("mal_tokens_get", {
+      p_user_id: candidate.user_id,
+    });
 
-  const row = rows?.[0];
-  if (!row) {
+    if (tokenError) {
+      throw new Error(`Could not read MAL tokens: ${tokenError.message}`);
+    }
+
+    if (rows?.[0]) {
+      connection = candidate;
+      row = rows[0];
+      break;
+    }
+
+    tried.push(candidate.mal_username ?? candidate.user_id);
+  }
+
+  if (!connection || !row) {
     throw new Error(
-      `mal_connections marks ${connection.user_id} as active, but no tokens ` +
-        "are stored for it. Reconnect that account and try again.",
+      `Every active MyAnimeList connection is missing its tokens (tried: ` +
+        `${tried.join(", ")}). Reconnect one via /settings and try again.`,
     );
   }
 
@@ -166,16 +196,19 @@ async function refreshAccessToken(
 type MangaNode = {
   id: number;
   genres?: { id: number; name: string }[];
+  /** MAL's content rating: white | gray | black. Absent on some entries. */
+  nsfw?: string;
 };
 
 /**
  * Fetches one title directly from MAL. Mirrors lib/mal/endpoints.ts's
  * getManga + lib/mal/client.ts's 401-refresh handling, scoped to just what
- * this script needs (genres). Refreshes the token at most once per call — the
+ * this script needs (genres and the content rating). Refreshes the token at
+ * most once per call — the
  * same bound lib/mal/client.ts uses — and persists the rotated refresh token,
  * since MAL invalidates the old one on every refresh.
  */
-async function fetchGenres(
+async function fetchTitle(
   admin: SupabaseAdmin,
   malClientId: string,
   malClientSecret: string,
@@ -188,7 +221,7 @@ async function fetchGenres(
 
   for (;;) {
     const url = new URL(`${API_BASE}/manga/${malMediaId}`);
-    url.searchParams.set("fields", "genres");
+    url.searchParams.set("fields", "genres,nsfw");
 
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${current.access_token}` },
@@ -220,9 +253,10 @@ async function fetchGenres(
       throw new Error(
         `MyAnimeList rate limit reached (403), stopped at mal_media_id ${malMediaId}. ` +
           "Re-run the script later: the genre upsert on tags.mal_genre_id is " +
-          "`do nothing` and the title_tags link insert is deduped against " +
-          "what's already there, so titles already processed cost nothing " +
-          "extra on a re-run — only the fetch itself repeats.",
+          "`do nothing`, the title_tags link insert is deduped against what's " +
+          "already there, and the rating write is an idempotent update of one " +
+          "column, so titles already processed cost nothing extra on a re-run " +
+          "— only the fetch itself repeats.",
       );
     }
 
@@ -258,8 +292,35 @@ export async function syncGenresBatch(
   }
   if (genres.size === 0) return;
 
+  // Inlined copy of lib/data/mal-taxonomy.ts, which this script cannot
+  // import (server-only + "@/*" path mapping; see the header). Pinned by
+  // tests/backfill-nsfw.test.ts, which asserts both copies agree.
+  const EXPLICIT = ["ecchi", "erotica", "hentai"];
+  const DEMOGRAPHIC = ["josei", "kids", "seinen", "shoujo", "shounen"];
+  const THEME = [
+    "adult-cast", "anthropomorphic", "cgdct", "childcare", "combat-sports",
+    "crossdressing", "delinquents", "detective", "educational", "gag-humor",
+    "gore", "harem", "high-stakes-game", "historical", "idols-female",
+    "idols-male", "isekai", "iyashikei", "love-polygon", "love-status-quo",
+    "magical-sex-shift", "mahou-shoujo", "martial-arts", "mecha", "medical",
+    "memoir", "military", "music", "mythology", "organized-crime",
+    "otaku-culture", "parody", "performing-arts", "pets", "psychological",
+    "racing", "reincarnation", "reverse-harem", "samurai", "school",
+    "showbiz", "space", "strategy-game", "super-power", "survival",
+    "team-sports", "time-travel", "urban-fantasy", "vampire", "video-game",
+    "villainess", "visual-arts", "workplace",
+  ];
+
   const slugify = (name: string) =>
     name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
+  const kindForMalGenre = (name: string) => {
+    const slug = slugify(name);
+    if (EXPLICIT.includes(slug)) return "explicit" as const;
+    if (DEMOGRAPHIC.includes(slug)) return "demographic" as const;
+    if (THEME.includes(slug)) return "theme" as const;
+    return "genre" as const;
+  };
 
   // Ownership contract: `ignoreDuplicates: true` is `on conflict do nothing`,
   // never `do update`. MAL may create a tag; it may never modify one that
@@ -273,7 +334,11 @@ export async function syncGenresBatch(
       mal_genre_id: id,
       slug: slugify(name),
       name,
-      kind: "genre" as const,
+      // Mirrors lib/sync/sync-list.ts's syncGenres — see the header comment
+      // for why this file duplicates it rather than importing. The table is
+      // inlined below for the same reason: this script cannot import from
+      // lib/ at all under `node --experimental-strip-types`.
+      kind: kindForMalGenre(name),
     })),
     { onConflict: "mal_genre_id", ignoreDuplicates: true },
   );
@@ -332,6 +397,50 @@ export async function syncGenresBatch(
   }
 }
 
+/**
+ * Writes MAL's content rating onto the catalog rows for one batch of nodes.
+ *
+ * An `update` per distinct rating rather than an upsert, because an upsert
+ * would need every not-null column of media_titles just to set one field —
+ * and this script deliberately does not know the rest of a catalog row.
+ * Grouping by value means three statements a page at most (white, gray,
+ * black), not one per title.
+ *
+ * A node MAL sent no rating for is skipped rather than written as null: the
+ * column is already null for those rows, and writing null over null would only
+ * make `updated_at` move for nothing.
+ *
+ * Exported and taking `admin` as a parameter, for the same reason
+ * syncGenresBatch is: tests/backfill-genres.test.ts drives it with a stub
+ * client without executing the rest of this script.
+ */
+export async function syncRatingsBatch(
+  admin: SupabaseAdmin,
+  nodes: MangaNode[],
+): Promise<void> {
+  const byRating = new Map<string, number[]>();
+
+  for (const node of nodes) {
+    if (!node.nsfw) continue;
+    const ids = byRating.get(node.nsfw);
+    if (ids) ids.push(node.id);
+    else byRating.set(node.nsfw, [node.id]);
+  }
+
+  for (const [rating, malIds] of byRating) {
+    const { error } = await admin
+      .from("media_titles")
+      .update({ nsfw: rating })
+      .eq("media_type", "manga")
+      .in("mal_media_id", malIds);
+
+    // Not fatal. The rating is what one optional setting reads; failing the
+    // whole backfill over it would also cost the genres this run just
+    // fetched, and a re-run picks the rating up again.
+    if (error) console.error(`- rating "${rating}" write failed: ${error.message}`);
+  }
+}
+
 async function main(admin: SupabaseAdmin, malClientId: string, malClientSecret: string) {
   const { userId, tokens: initialTokens } = await getAnyConnectedAccount(admin);
   let tokens = initialTokens;
@@ -339,6 +448,7 @@ async function main(admin: SupabaseAdmin, malClientId: string, malClientSecret: 
   let page = 0;
   let totalTitles = 0;
   let totalTagged = 0;
+  let totalRated = 0;
 
   for (;;) {
     const { data: rows, error } = await admin
@@ -356,7 +466,7 @@ async function main(admin: SupabaseAdmin, malClientId: string, malClientSecret: 
 
     for (const row of rows) {
       try {
-        const result = await fetchGenres(
+        const result = await fetchTitle(
           admin,
           malClientId,
           malClientSecret,
@@ -378,9 +488,11 @@ async function main(admin: SupabaseAdmin, malClientId: string, malClientSecret: 
     }
 
     await syncGenresBatch(admin, nodes, idMap);
+    await syncRatingsBatch(admin, nodes);
 
     totalTitles += rows.length;
     totalTagged += nodes.filter((n) => (n.genres?.length ?? 0) > 0).length;
+    totalRated += nodes.filter((n) => Boolean(n.nsfw)).length;
     console.log(`Page ${page + 1}: ${rows.length} titles fetched, ${nodes.length} succeeded.`);
 
     if (rows.length < CATALOG_PAGE_SIZE) break;
@@ -388,7 +500,8 @@ async function main(admin: SupabaseAdmin, malClientId: string, malClientSecret: 
   }
 
   console.log(
-    `Done. ${totalTitles} catalog rows walked, ${totalTagged} carried at least one genre.`,
+    `Done. ${totalTitles} catalog rows walked, ${totalTagged} carried at least ` +
+      `one genre, ${totalRated} carried a content rating.`,
   );
 }
 
