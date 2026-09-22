@@ -23,6 +23,8 @@ const TOKEN_URL = "https://myanimelist.net/v1/oauth2/token";
 
 export const PKCE_COOKIE = "mal_pkce_verifier";
 export const STATE_COOKIE = "mal_oauth_state";
+/** Scopes both cookies to the OAuth routes, which live under /api/mal. */
+export const MAL_COOKIE_PATH = "/api/mal";
 
 export type MalTokenResponse = {
   token_type: string;

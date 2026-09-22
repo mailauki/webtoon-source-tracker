@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 
 import { verifySession } from "@/lib/auth/dal";
 import {
+  MAL_COOKIE_PATH,
   PKCE_COOKIE,
   STATE_COOKIE,
   exchangeCodeForTokens,
@@ -112,7 +113,9 @@ export async function GET(request: NextRequest) {
   }
 
   const response = NextResponse.redirect(`${origin}/library?connected=1`);
-  response.cookies.delete(PKCE_COOKIE);
-  response.cookies.delete(STATE_COOKIE);
+  // Deleted with the path they were set on — a delete without it targets a
+  // different cookie ("/") and leaves these in place until they expire.
+  response.cookies.delete({ name: PKCE_COOKIE, path: MAL_COOKIE_PATH });
+  response.cookies.delete({ name: STATE_COOKIE, path: MAL_COOKIE_PATH });
   return response;
 }
