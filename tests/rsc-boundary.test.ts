@@ -6,10 +6,16 @@ import { describe, expect, it } from "vitest";
 /**
  * Guards the server/client boundary, which types do not model.
  *
- * Passing a function from a Server Component to a Client Component throws at
- * runtime ("Functions cannot be passed directly to Client Components") but
- * compiles and lints cleanly, so it reaches the browser. This walks the source
- * for that shape instead.
+ * Two shapes, both of which compile and lint cleanly and then throw in the
+ * browser, so the source is walked for them instead:
+ *
+ *   - Passing a function from a Server Component to a Client Component
+ *     ("Functions cannot be passed directly to Client Components").
+ *   - Calling a plain function that a "use client" module exports from a
+ *     Server Component ("Attempted to call progressLabel() from the server
+ *     but progressLabel is on the client"). A client module's non-component
+ *     exports are not callable across the boundary — only rendered as
+ *     components or passed as props — so shared helpers belong in `lib/`.
  */
 
 const ROOTS = ["app", "components"];
@@ -38,6 +44,32 @@ function importedComponents(src: string, from: string) {
       const name = raw.trim().split(/\s+as\s+/).pop()?.trim();
       // Components are the PascalCase imports; hooks and helpers are not.
       if (name && /^[A-Z]/.test(name)) found.set(name, path);
+    }
+  }
+  found.delete(from);
+  return found;
+}
+
+/**
+ * The non-component values a file imports, mapped to where they came from.
+ *
+ * The inverse of importedComponents: camelCase and SCREAMING_CASE imports are
+ * the helpers and constants, where PascalCase ones are components. A type-only
+ * import is erased at build time and crosses the boundary harmlessly, so
+ * `import type` and inline `type` specifiers are skipped.
+ */
+function importedValues(src: string, from: string) {
+  const found = new Map<string, string>();
+  const importRe = /import\s+(type\s+)?\{([^}]+)\}\s+from\s+["'](@\/[^"']+)["']/g;
+
+  for (const [, typeOnly, names, spec] of src.matchAll(importRe)) {
+    if (typeOnly) continue;
+    const path = spec.replace(/^@\//, "");
+    for (const raw of names.split(",")) {
+      const specifier = raw.trim();
+      if (/^type\s/.test(specifier)) continue;
+      const name = specifier.split(/\s+as\s+/).pop()?.trim();
+      if (name && !/^[A-Z][a-z]/.test(name)) found.set(name, path);
     }
   }
   found.delete(from);
@@ -85,6 +117,38 @@ describe("server/client boundary", () => {
         for (const prop of functionProps(src, name)) {
           violations.push(`${file}: <${name} ${prop}={...}> -> ${target}`);
         }
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
+
+  /**
+   * The bug this caught: `progressLabel` and `STATUS_LABELS` lived on
+   * components/entry-card.tsx, which is "use client". The entry page's header
+   * is server-rendered and imported them, which crashed at render. They moved
+   * to lib/data/entry-labels.ts, which has no boundary.
+   */
+  it("calls no client-module helper from a Server Component", async () => {
+    const files = (await Promise.all(ROOTS.map(sourceFiles))).flat();
+
+    const clientModules = new Set(
+      files.filter((f) => isClient(readFileSync(f, "utf8"))),
+    );
+
+    const violations: string[] = [];
+
+    for (const file of files) {
+      const src = readFileSync(file, "utf8");
+      if (isClient(src)) continue; // client -> client is fine
+
+      for (const [name, path] of importedValues(src, file)) {
+        const target = files.find(
+          (f) => f === `${path}.tsx` || f === `${path}/index.tsx`,
+        );
+        if (!target || !clientModules.has(target)) continue;
+
+        violations.push(`${file}: imports ${name} from client ${target}`);
       }
     }
 

@@ -8,6 +8,8 @@ import {
   type Collection,
   type CollectionSummary,
   type RawCollection,
+  type RawTrackedRow,
+  type TrackedEntry,
 } from "@/lib/data/collection-items";
 import { screenMature } from "@/lib/data/nsfw";
 import { readAllRows } from "@/lib/data/pagination";
@@ -87,7 +89,7 @@ function screenCollection(row: RawCollection, hideMature: boolean): RawCollectio
 }
 
 /**
- * Catalog title id -> the viewer's own user_entries id for it.
+ * Catalog title id -> what the viewer already knows about that title.
  *
  * A separate query rather than an embed under media_titles. Nesting
  * `user_entries` inside the select above would work — RLS would narrow it to
@@ -96,20 +98,28 @@ function screenCollection(row: RawCollection, hideMature: boolean): RawCollectio
  * flat indexed read of a table the user can only ever see their own rows of.
  * Collections hold a dozen titles, so the extra round trip is not the cost
  * worth optimising away.
+ *
+ * It carries the status and source slugs as well as the entry id, because the
+ * category pages filter on them (see CollectionFilters). That is one embedded
+ * join more than "do I have this" strictly needs, and it is still one query:
+ * the alternative was a second round trip per page for data this one is
+ * already visiting the right rows to collect.
  */
-export async function getTrackedEntries(): Promise<Map<number, number>> {
+export async function getTrackedEntries(): Promise<Map<number, TrackedEntry>> {
   const supabase = await createClient();
 
   // Paged: this answers "do I already have this" for every card on the page,
-  // and a row lost to `max_rows` reads as a confident no. Two narrow columns
-  // per row, so even the largest library is one or two queries.
+  // and a row lost to `max_rows` reads as a confident no.
   let rows;
   try {
     rows = await readAllRows(
       (from, to) =>
         supabase
           .from("user_entries")
-          .select("id, title_id", { count: "exact" })
+          .select(
+            "id, title_id, list_status, entry_sources ( sources ( slug ) )",
+            { count: "exact" },
+          )
           .order("id", { ascending: true })
           .range(from, to),
       "tracked titles",
@@ -121,7 +131,21 @@ export async function getTrackedEntries(): Promise<Map<number, number>> {
     return new Map();
   }
 
-  return new Map(rows.map((row) => [row.title_id, row.id]));
+  return new Map(
+    (rows as unknown as RawTrackedRow[]).map((row) => [
+      row.title_id,
+      {
+        entryId: row.id,
+        listStatus: row.list_status,
+        // A source with no slug is a user's own custom one. It cannot be
+        // filtered by — the chips are built from the slug list — so it is
+        // dropped here rather than carried as a null nobody can match.
+        sourceSlugs: (row.entry_sources ?? [])
+          .map((es) => es.sources?.slug)
+          .filter((slug): slug is string => Boolean(slug)),
+      },
+    ]),
+  );
 }
 
 /**

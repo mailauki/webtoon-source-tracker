@@ -21,8 +21,7 @@ vi.mock("@/app/actions/entry-sources", () => ({
 }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
-import { EntryCard } from "@/components/entry-card";
-import { EntryRow } from "@/components/entry-row";
+import { EntryCard, type EntryLayout } from "@/components/entry-card";
 import type { LibraryRow } from "@/lib/data/entries";
 
 const ROMAJI = "Na Honjaman Level Up";
@@ -58,10 +57,16 @@ function row(titleEn: string | null): LibraryRow {
 
 afterEach(cleanup);
 
-describe.each([
-  ["EntryCard", EntryCard],
-  ["EntryRow", EntryRow],
-])("%s", (_name, Component) => {
+// Both layouts of the one card. They used to be two components; the suite
+// stayed parameterised when they merged, because "the grid says one name and
+// the list says another" is exactly the drift the merge was meant to end.
+describe.each<[string, EntryLayout]>([
+  ["grid", "grid"],
+  ["row", "row"],
+])("EntryCard (%s layout)", (_name, layout) => {
+  const Component = (props: { entry: LibraryRow }) => (
+    <EntryCard {...props} layout={layout} />
+  );
   it("shows the English title when MAL has one", () => {
     render(<Component entry={row(ENGLISH)} />);
 

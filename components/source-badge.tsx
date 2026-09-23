@@ -1,4 +1,11 @@
-import { BookmarkCheck, Crown, EyeOff, Lock, PauseCircle } from "lucide-react";
+import {
+  BookmarkCheck,
+  Check,
+  Crown,
+  EyeOff,
+  Lock,
+  PauseCircle,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -152,6 +159,27 @@ export function NoSourceBadge({ overlay = false }: { overlay?: boolean }) {
       className={overlay ? "backdrop-blur-sm" : undefined}
     >
       No source
+    </Badge>
+  );
+}
+
+/**
+ * This title is already on the viewer's shelf.
+ *
+ * Only ever shown on a discover or collection surface, where "do I have this
+ * already" is the question the card is answering and the alternative is an
+ * Add button. A library card never needs it: everything on that page is
+ * tracked, so a badge saying so on every card would say nothing.
+ */
+export function TrackedBadge({ overlay = false }: { overlay?: boolean }) {
+  return (
+    <Badge
+      variant={overlay ? "frosted" : "source"}
+      className="gap-1"
+      title="Already in your library"
+    >
+      <Check className="size-2.5" aria-hidden />
+      In library
     </Badge>
   );
 }
