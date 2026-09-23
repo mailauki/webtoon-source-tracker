@@ -87,12 +87,10 @@ const ROWS = [
 
 function setup({
   entries = ROWS,
-  connected = true,
   initial = {},
   matureLocked = false,
 }: {
   entries?: LibraryRow[];
-  connected?: boolean;
   initial?: { includeNsfw?: boolean; mediaKind?: MediaKind };
   matureLocked?: boolean;
 } = {}) {
@@ -106,7 +104,7 @@ function setup({
       <SearchSwitches />
       <SearchPrompt />
       <LibraryResults />
-      <CatalogResults connected={connected} />
+      <CatalogResults />
     </SearchFilters>,
   );
 }
@@ -120,14 +118,25 @@ const queryNsfwToggle = () =>
 const kindChip = (name: RegExp) =>
   screen.getByRole("button", { name });
 
-/** The catalog result the stubbed route answers with. */
+/**
+ * The catalog result the stubbed route answers with.
+ *
+ * The merged shape from lib/data/cross-search.ts: the route now answers for
+ * both sites at once, so a row carries which catalogs had it and where they
+ * disagree.
+ */
 const RESULT = {
+  key: "mal:99",
+  source: "both" as const,
   mal_media_id: 99,
+  anilist_media_id: 4321,
   title: "Solo Leveling: Ragnarok",
   title_en: null,
   main_picture_url: null,
   media_kind: "manhwa",
   num_chapters: 12,
+  num_volumes: null,
+  mismatches: [],
 };
 
 function mockSearch(results: unknown[] = [RESULT], ok = true, status = 200) {
@@ -138,7 +147,8 @@ function mockSearch(results: unknown[] = [RESULT], ok = true, status = 200) {
     ok,
     status,
     url: String(url),
-    json: async () => (ok ? { results } : { error: "boom" }),
+    json: async () =>
+      ok ? { results, unavailable: [], needsReauth: false } : { error: "boom" },
   }));
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
@@ -412,15 +422,54 @@ describe("the catalog half", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("offers the connection instead of a failed search when there is none", async () => {
+  // Searching used to be gated on a live MyAnimeList connection, because it
+  // spent the user's own token. Both catalogs now answer without one — AniList
+  // serves reads anonymously, MAL falls back to the app's client id — so the
+  // absence of that gate is the feature, and this pins it.
+  it("searches without any connection", async () => {
     const fetchMock = mockSearch();
-    setup({ connected: false });
+    setup();
+    await userEvent.type(field(), "solo");
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(
+      screen.queryByRole("link", { name: /connect myanimelist/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("names the catalog that failed rather than showing a short list silently", async () => {
+    const fetchMock = vi.fn(async (url: RequestInfo | URL) => ({
+      ok: true,
+      status: 200,
+      url: String(url),
+      json: async () => ({
+        results: [RESULT],
+        unavailable: ["anilist"],
+        needsReauth: false,
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    setup();
     await userEvent.type(field(), "solo");
 
     expect(
-      await screen.findByRole("link", { name: /connect myanimelist/i }),
+      await screen.findByText(/anilist could not be reached/i),
     ).toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("shows where the two catalogs disagree about the same title", async () => {
+    mockSearch([
+      {
+        ...RESULT,
+        mismatches: [{ field: "chapters", mal: 551, anilist: 552 }],
+      },
+    ]);
+    setup();
+    await userEvent.type(field(), "solo");
+
+    // Both values, not just a warning icon: the numbers are the content.
+    expect(await screen.findByText(/MAL 551, AniList 552/)).toBeInTheDocument();
   });
 
   it("surfaces the route's own error rather than blaming the network", async () => {

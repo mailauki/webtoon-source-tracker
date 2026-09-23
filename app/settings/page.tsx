@@ -3,6 +3,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { AccountSync } from "@/components/settings/account-sync";
 import { AniListDisconnect } from "@/components/settings/anilist-disconnect";
+import { MalDisconnect } from "@/components/settings/mal-disconnect";
 import { CustomSources } from "@/components/settings/custom-sources";
 import { AgeRangeForm } from "@/components/settings/age-range-form";
 import { LinkedLogins } from "@/components/settings/linked-logins";
@@ -46,6 +47,7 @@ export default async function SettingsPage({
       isAgeConfirmedAdult(),
     ]);
 
+  const malLinked = connection !== null && connection.status !== "disconnected";
   const anilistLinked = anilist !== null && anilist.status !== "disconnected";
   // The account sync needs both sides live. An expired connection on either
   // side hides it, and that side's section asks for a reconnect instead.
@@ -99,12 +101,12 @@ export default async function SettingsPage({
           <div>
             <h2 className="font-display text-lg font-semibold">MyAnimeList</h2>
             <p className="text-sm text-muted-foreground">
-              {connection && connection.status !== "disconnected"
+              {malLinked
                 ? `Connected as ${connection.mal_username}.`
-                : "Not connected."}
+                : "Not connected. Searching works either way — connect it to add titles and sync your list."}
             </p>
           </div>
-          <div>
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               asChild
               variant="outline"
@@ -112,11 +114,10 @@ export default async function SettingsPage({
               className="rounded-pill"
             >
               <Link href="/api/mal/connect">
-                {connection && connection.status !== "disconnected"
-                  ? "Reconnect"
-                  : "Connect MyAnimeList"}
+                {malLinked ? "Reconnect" : "Connect MyAnimeList"}
               </Link>
             </Button>
+            {malLinked ? <MalDisconnect /> : null}
           </div>
         </section>
 

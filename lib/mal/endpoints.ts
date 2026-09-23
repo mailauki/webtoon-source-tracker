@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import { isMature } from "@/lib/data/nsfw";
 
-import type { MalClient } from "./client";
+import { malPublicRequest, type MalClient } from "./client";
 import {
   malListEntrySchema,
   malListStatusSchema,
@@ -103,16 +103,24 @@ export { isMature };
  * themselves; a discovery search is the opposite case, where the default
  * should be the safe one. The flag is a parameter so an opt-in setting can
  * turn it off later without touching the call site's shape.
+ *
+ * `client` may be null, which searches with the app's client id instead of a
+ * user token — see malPublicRequest. The NSFW layers above apply either way.
  */
 export async function searchManga(
-  client: MalClient,
+  client: MalClient | null,
   query: string,
   limit = 20,
   { includeMature = false }: { includeMature?: boolean } = {},
 ) {
-  const raw = await client.request<unknown>("/manga", {
-    query: { q: query, limit, fields: LIST_FIELDS, nsfw: includeMature },
-  });
+  const params = { q: query, limit, fields: LIST_FIELDS, nsfw: includeMature };
+
+  // A null client means nobody is connected: fall back to the app's own client
+  // id, which MAL accepts for public catalog reads. Searching is discovery, so
+  // it should not require handing over an account first.
+  const raw = client
+    ? await client.request<unknown>("/manga", { query: params })
+    : await malPublicRequest<unknown>("/manga", params);
   const page = malPagedSchema(searchResultSchema).parse(raw);
 
   if (includeMature) return page;

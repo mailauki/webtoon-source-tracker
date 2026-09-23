@@ -1,13 +1,15 @@
 import "server-only";
 
-import type { AniListClient } from "./client";
+import { anilistRequest, type AniListClient } from "./client";
 import { AniListApiError } from "./errors";
 import {
   anilistListCollectionSchema,
   anilistMediaIdPageSchema,
+  anilistSearchPageSchema,
   anilistViewerSchema,
   type AniListListEntry,
   type AniListListStatus,
+  type AniListSearchMedia,
   type AniListViewer,
 } from "./types";
 
@@ -230,4 +232,74 @@ export async function saveListEntries(
   }
 
   return { saved, failed };
+}
+
+/**
+ * AniList's manga formats that are prose rather than panels.
+ *
+ * The counterpart to NOVEL_KINDS in lib/data/search.ts, which holds MAL's
+ * spelling of the same split. AniList uses one value where MAL uses two —
+ * there is no separate "light novel" format — so both of MAL's map here.
+ */
+const NOVEL_FORMATS = new Set(["NOVEL"]);
+
+/** Whether an AniList `format` is a novel. Unknown formats are not. */
+export function isAniListNovel(format: string | null | undefined): boolean {
+  return NOVEL_FORMATS.has(format ?? "");
+}
+
+const SEARCH_QUERY = /* GraphQL */ `
+  query ($search: String, $perPage: Int, $isAdult: Boolean) {
+    Page(page: 1, perPage: $perPage) {
+      media(search: $search, type: MANGA, isAdult: $isAdult, sort: SEARCH_MATCH) {
+        id
+        idMal
+        title {
+          romaji
+          english
+        }
+        format
+        chapters
+        volumes
+        status
+        isAdult
+        coverImage {
+          large
+          medium
+        }
+      }
+    }
+  }
+`;
+
+/**
+ * Searches the AniList catalog.
+ *
+ * Takes no client, by design. AniList serves catalog reads anonymously, so
+ * this works for an account that has never connected AniList — the token is
+ * only needed for Viewer and for writing list entries. That is what lets the
+ * merged search answer in full regardless of what the user has linked.
+ *
+ * Adult titles are excluded by passing `isAdult: false`, which AniList filters
+ * server-side. Unlike MAL there is no second local pass: `isAdult` is a
+ * boolean AniList sets itself, not a rating string open to interpretation, and
+ * it is returned on every hit so a caller can still check it.
+ *
+ * `sort: SEARCH_MATCH` orders by relevance to the term rather than by
+ * popularity, which is what makes the first rows comparable to MAL's.
+ */
+export async function searchManga(
+  query: string,
+  perPage = 50,
+  { includeMature = false }: { includeMature?: boolean } = {},
+): Promise<AniListSearchMedia[]> {
+  const raw = await anilistRequest<unknown>(null, SEARCH_QUERY, {
+    search: query,
+    perPage,
+    // Undefined rather than true: passing `isAdult: true` would return ONLY
+    // adult titles, where the intent is "do not filter them out".
+    isAdult: includeMature ? undefined : false,
+  });
+
+  return anilistSearchPageSchema.parse(raw).Page.media;
 }

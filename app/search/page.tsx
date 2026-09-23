@@ -34,6 +34,10 @@ export const metadata = { title: "Search" };
  * on one page is also what lets the catalog drop titles you already have — it
  * can only do that honestly when the ones it dropped are visible above it.
  *
+ * Both catalogs are searched without needing either account connected — see
+ * app/api/catalog/search/route.ts. The MyAnimeList connection still matters
+ * for *adding* a title, which is a write.
+ *
  * This page takes no search params. The term is client state and never reaches
  * the URL: writing `?q=` per settled keystroke re-rendered the page under a
  * focused input, which on a phone closes the keyboard mid-word. See
@@ -61,11 +65,6 @@ export default async function SearchPage() {
     isAgeConfirmedAdult(),
   ]);
 
-  // A disconnected account has no token to search MAL with. Everything else on
-  // the page still works, so this only turns the catalog half into an
-  // explanation rather than gating the route.
-  const connected = !!connection && connection.status !== "disconnected";
-
   return (
     // Wraps the shell: the field renders into the header's sticky row and the
     // results into the body, and both run off the same term.
@@ -86,19 +85,24 @@ export default async function SearchPage() {
         tertiaryRow={<SearchSwitches />}
       >
         <div className="grid gap-6">
+          {/* Searching no longer depends on this — the catalog half falls back
+              to the app's own client id — so the banner says what an expired
+              connection actually costs now: adding a title still writes to
+              MyAnimeList, and that needs a live token. */}
           {connection?.status === "needs_reauth" ? (
             <p className="rounded-md bg-alert/10 px-3 py-2 text-sm text-alert">
-              Your MyAnimeList connection expired, so catalog results may be
-              missing.{" "}
+              Your MyAnimeList connection expired. Search still works, but you
+              cannot add titles until you{" "}
               <Link href="/api/mal/connect" className="font-medium underline">
-                Reconnect
+                reconnect
               </Link>
+              .
             </p>
           ) : null}
 
           <SearchPrompt />
           <LibraryResults topSources={topSources} catalog={sources} />
-          <CatalogResults connected={connected} />
+          <CatalogResults />
         </div>
       </AppShell>
     </SearchFilters>

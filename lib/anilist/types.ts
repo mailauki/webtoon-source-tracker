@@ -65,3 +65,39 @@ export const anilistMediaIdPageSchema = z.object({
     media: z.array(z.object({ id: z.number(), idMal: z.number().nullable() })),
   }),
 });
+
+/**
+ * A catalog search hit.
+ *
+ * `idMal` is what lets a hit be lined up against a MyAnimeList result — see
+ * lib/data/cross-search.ts. AniList leaves it null for titles MAL has no entry
+ * for, which is exactly the "AniList only" case the merged search reports.
+ *
+ * `chapters` is null for anything still running: AniList records the final
+ * count, not the latest released chapter, so a disagreement with MAL's
+ * `num_chapters` on an ongoing title is expected and must not be flagged.
+ */
+export const anilistSearchMediaSchema = z.object({
+  id: z.number(),
+  idMal: z.number().nullable(),
+  title: z.object({
+    romaji: z.string().nullable(),
+    english: z.string().nullable(),
+  }),
+  format: z.string().nullable(),
+  chapters: z.number().nullable(),
+  volumes: z.number().nullable(),
+  status: z.string().nullable(),
+  isAdult: z.boolean().nullable(),
+  coverImage: z
+    .object({ large: z.string().nullable(), medium: z.string().nullable() })
+    .nullable(),
+});
+
+export type AniListSearchMedia = z.infer<typeof anilistSearchMediaSchema>;
+
+export const anilistSearchPageSchema = z.object({
+  Page: z.object({
+    media: z.array(anilistSearchMediaSchema),
+  }),
+});
