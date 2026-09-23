@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { CoverImage } from "@/components/cover-image";
 import { Button } from "@/components/ui/button";
 import { EntryCollections } from "@/components/entry-collections";
 import { EntryRemove } from "@/components/entry-remove";
+import { EntrySyncStatus } from "@/components/entry-sync-status";
 import { EntrySourceEditor } from "@/components/entry-source-editor";
 import { EntryTags } from "@/components/entry-tags";
 import { ProgressEditor } from "@/components/progress-editor";
@@ -174,35 +175,13 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
               ) : null}
             </div>
 
-            {/* Links to whichever catalogs actually hold this title. A row
-                added from AniList has no MyAnimeList page to point at, and a
-                link built from a null id would 404 — so each is rendered only
-                when its id is there. Most rows have both. */}
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-              {title.mal_media_id !== null ? (
-                <a
-                  href={`https://myanimelist.net/manga/${title.mal_media_id}`}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="inline-flex w-fit items-center gap-1 text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-                >
-                  View on MyAnimeList
-                  <ExternalLink className="size-3" />
-                </a>
-              ) : null}
-
-              {title.anilist_media_id !== null ? (
-                <a
-                  href={`https://anilist.co/manga/${title.anilist_media_id}`}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="inline-flex w-fit items-center gap-1 text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-                >
-                  View on AniList
-                  <ExternalLink className="size-3" />
-                </a>
-              ) : null}
-            </div>
+            <EntrySyncStatus
+              malMediaId={title.mal_media_id}
+              anilistMediaId={title.anilist_media_id}
+              syncToMal={entry.sync_to_mal}
+              syncToAniList={entry.sync_to_anilist}
+              archived={entry.archived_at !== null}
+            />
           </div>
         </div>
 
