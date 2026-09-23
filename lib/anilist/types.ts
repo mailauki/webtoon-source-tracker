@@ -40,9 +40,35 @@ export const anilistListEntrySchema = z.object({
   progressVolumes: z.number().nullable(),
   /** Unix seconds, not milliseconds. 0 when AniList has never recorded one. */
   updatedAt: z.number().nullable(),
+  /**
+   * Enough of the title to build a catalog row from.
+   *
+   * The list pull needs this: a title that exists only on AniList has no MAL
+   * node to read metadata from, so whatever the catalog stores for it has to
+   * come from here. All optional — the fields ride the same query either way,
+   * and an older cached response should still parse.
+   */
   media: z.object({
     id: z.number(),
     idMal: z.number().nullable(),
+    title: z
+      .object({
+        romaji: z.string().nullable(),
+        english: z.string().nullable(),
+      })
+      .optional(),
+    format: z.string().nullable().optional(),
+    chapters: z.number().nullable().optional(),
+    volumes: z.number().nullable().optional(),
+    status: z.string().nullable().optional(),
+    isAdult: z.boolean().nullable().optional(),
+    coverImage: z
+      .object({
+        large: z.string().nullable(),
+        medium: z.string().nullable(),
+      })
+      .nullable()
+      .optional(),
   }),
 });
 

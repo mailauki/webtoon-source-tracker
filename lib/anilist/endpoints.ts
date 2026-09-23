@@ -51,6 +51,19 @@ const LIST_QUERY = /* GraphQL */ `
           media {
             id
             idMal
+            title {
+              romaji
+              english
+            }
+            format
+            chapters
+            volumes
+            status
+            isAdult
+            coverImage {
+              large
+              medium
+            }
           }
         }
       }

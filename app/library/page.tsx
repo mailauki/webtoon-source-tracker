@@ -8,6 +8,7 @@ import { SyncButton } from "@/components/sync-button";
 import { Button } from "@/components/ui/button";
 import {
   getLibraryPrefs,
+  getAniListConnection,
   getMalConnection,
   isAgeConfirmedAdult,
   verifySession,
@@ -29,28 +30,43 @@ export const metadata = { title: "Library" };
 
 export default async function LibraryPage() {
   await verifySession();
-  const connection = await getMalConnection();
+  const [connection, anilist] = await Promise.all([
+    getMalConnection(),
+    getAniListConnection(),
+  ]);
 
-  // Not connected (or disconnected): the whole page becomes the CTA, since
-  // there is nothing to show until a list is linked.
-  if (!connection || connection.status === "disconnected") {
+  const malLinked = !!connection && connection.status !== "disconnected";
+  const anilistLinked = !!anilist && anilist.status !== "disconnected";
+
+  // The CTA is for an account linked to NEITHER site. Either one on its own is
+  // a complete way to use the app: AniList can hold titles MyAnimeList does
+  // not have, and gating the shelf on MAL would hide a library the user can
+  // see perfectly well on anilist.co.
+  if (!malLinked && !anilistLinked) {
     return (
       <AppShell>
         <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 text-center">
           <h1 className="font-display text-2xl font-bold">
-            Connect MyAnimeList
+            Connect a reading list
           </h1>
           <p className="max-w-sm text-sm text-muted-foreground">
-            Your reading list lives on MyAnimeList. Connect it to bring your
-            titles in, then record where you actually read each one.
+            Your reading list lives on MyAnimeList or AniList. Connect either
+            one to bring your titles in, then record where you actually read
+            each one.
           </p>
-          <Button
-            asChild
-            className="rounded-pill bg-brand font-bold text-brand-foreground hover:bg-brand/90"
-          >
-            <Link href="/api/mal/connect">Connect MyAnimeList</Link>
-          </Button>
-          {connection?.status === "disconnected" ? (
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <Button
+              asChild
+              className="rounded-pill bg-brand font-bold text-brand-foreground hover:bg-brand/90"
+            >
+              <Link href="/api/mal/connect">Connect MyAnimeList</Link>
+            </Button>
+            <Button asChild variant="outline" className="rounded-pill">
+              <Link href="/api/anilist/connect">Connect AniList</Link>
+            </Button>
+          </div>
+          {connection?.status === "disconnected" ||
+          anilist?.status === "disconnected" ? (
             <p className="text-xs text-muted-foreground">
               Your saved sources are still here — reconnecting restores
               everything.
@@ -87,7 +103,27 @@ export default async function LibraryPage() {
     getSources(),
     getTopSources(),
   ]);
-  const stale = isStale(connection.last_synced_at);
+  // Whichever sites are linked, the shelf is stale when ANY of them is due —
+  // one button syncs them all, so it should light up if there is anything for
+  // it to do. The label follows the oldest of the two for the same reason.
+  const syncedAts = [
+    ...(malLinked ? [connection!.last_synced_at] : []),
+    ...(anilistLinked ? [anilist!.last_synced_at] : []),
+  ];
+  const stale = syncedAts.some((at) => isStale(at));
+  // Nulls first: a site that has never synced is the oldest thing there is.
+  const oldestSyncedAt = syncedAts.includes(null)
+    ? null
+    : syncedAts.sort()[0] ?? null;
+
+  // Named in the order they are authoritative: MyAnimeList owns any title it
+  // has, AniList covers the rest.
+  const linkedLabel = [
+    malLinked ? `MyAnimeList as ${connection!.mal_username}` : null,
+    anilistLinked ? `AniList as ${anilist!.anilist_username}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   const statusChips = STATUS_CHIPS.map((chip) => ({
     ...chip,
@@ -132,13 +168,13 @@ export default async function LibraryPage() {
                   about the library, not a running count of what the filters
                   have left. The grid below shows that. */}
               <p className="text-sm text-muted-foreground">
-                {entries.length} {entries.length === 1 ? "title" : "titles"} ·
-                MyAnimeList as {connection.mal_username}
+                {entries.length} {entries.length === 1 ? "title" : "titles"} ·{" "}
+                {linkedLabel}
               </p>
             </div>
 
             <SyncButton
-              lastSyncedLabel={formatLastSynced(connection.last_synced_at)}
+              lastSyncedLabel={formatLastSynced(oldestSyncedAt)}
               stale={stale}
             />
           </div>
@@ -148,10 +184,19 @@ export default async function LibraryPage() {
               and sitting beside the menu would suggest it was. */}
           <RandomPick />
 
-          {connection.status === "needs_reauth" ? (
+          {connection?.status === "needs_reauth" ? (
             <p className="rounded-md bg-alert/10 px-3 py-2 text-sm text-alert">
               Your MyAnimeList connection expired.{" "}
               <Link href="/api/mal/connect" className="font-medium underline">
+                Reconnect
+              </Link>
+            </p>
+          ) : null}
+
+          {anilist?.status === "needs_reauth" ? (
+            <p className="rounded-md bg-alert/10 px-3 py-2 text-sm text-alert">
+              Your AniList connection expired.{" "}
+              <Link href="/api/anilist/connect" className="font-medium underline">
                 Reconnect
               </Link>
             </p>
