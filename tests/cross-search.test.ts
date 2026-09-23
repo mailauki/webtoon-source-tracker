@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   anilistIdPatch,
+  countUnmatchedToAniList,
   findMismatches,
   mergeResults,
   type AniListHit,
@@ -176,5 +177,26 @@ describe("anilistIdPatch", () => {
     expect(anilistIdPatch(undefined)).toEqual({});
     expect(anilistIdPatch(null)).toEqual({});
     expect("anilist_media_id" in anilistIdPatch(null)).toBe(false);
+  });
+});
+
+describe("countUnmatchedToAniList", () => {
+  const row = (anilist_media_id: number | null) => ({
+    media_titles: { anilist_media_id },
+  });
+
+  it("counts rows that have never been matched to AniList", () => {
+    expect(countUnmatchedToAniList([row(null), row(105398), row(null)])).toBe(2);
+  });
+
+  // Reaches zero exactly when there is nothing left to push, which is what
+  // makes the notice disappear on its own rather than nagging forever.
+  it("is zero once every row carries an AniList id", () => {
+    expect(countUnmatchedToAniList([row(1), row(2)])).toBe(0);
+    expect(countUnmatchedToAniList([])).toBe(0);
+  });
+
+  it("treats a missing join as unmatched rather than throwing", () => {
+    expect(countUnmatchedToAniList([{}, { media_titles: null }])).toBe(2);
   });
 });

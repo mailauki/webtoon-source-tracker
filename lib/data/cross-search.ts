@@ -231,3 +231,28 @@ export function anilistIdPatch(
     ? {}
     : { anilist_media_id: anilistMediaId };
 }
+
+/**
+ * How many library rows have never been matched to an AniList title.
+ *
+ * Drives the notice on /library. The Sync button there only ever pulls —
+ * MyAnimeList into the app, AniList into the app — while copying the library
+ * *out* to AniList is a bulk write that lives behind the confirmation dialog
+ * on /settings. Without this count the button quietly does half of what
+ * "sync" sounds like, and someone who expected their MyAnimeList list to show
+ * up on AniList has no way to find out why it did not.
+ *
+ * A row counts as unmatched when it has no `anilist_media_id`, which is the
+ * same handle mirrorToAniList and the account sync fill in — so this shrinks
+ * on its own as titles get copied, and reaches zero exactly when there is
+ * nothing left to push.
+ *
+ * Takes the rows the page already has rather than running its own query, and
+ * is deliberately null-tolerant: `media_titles` is an inner join in practice,
+ * but a caller passing a partial row should get a count, not a crash.
+ */
+export function countUnmatchedToAniList(
+  rows: { media_titles?: { anilist_media_id?: number | null } | null }[],
+): number {
+  return rows.filter((row) => row.media_titles?.anilist_media_id == null).length;
+}

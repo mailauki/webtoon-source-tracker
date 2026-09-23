@@ -154,10 +154,17 @@ export default async function SettingsPage({
                 Sync accounts
               </h2>
               <p className="text-sm text-muted-foreground">
-                Bring your MyAnimeList and AniList lists into agreement —
-                status, chapters, volumes and score. Titles are matched by
-                their MyAnimeList id, so one that only exists on AniList is
-                skipped. Nothing is ever deleted from either site.
+                This is the only thing that writes your library <em>out</em> to
+                the two sites — the Sync button on Library only brings titles
+                in. It brings both lists into agreement on status, chapters,
+                volumes and score. Titles are matched by their MyAnimeList id,
+                so one that only exists on AniList is skipped, and nothing is
+                ever deleted from either site.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                A large library is copied a few hundred titles at a time, so
+                the first runs will report how many are left. Run it again
+                until none remain.
               </p>
             </div>
             <AccountSync

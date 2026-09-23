@@ -13,6 +13,7 @@ import {
   isAgeConfirmedAdult,
   verifySession,
 } from "@/lib/auth/dal";
+import { countUnmatchedToAniList } from "@/lib/data/cross-search";
 import { getLibrary, getStatusCounts } from "@/lib/data/entries";
 import { resolveActiveChip, resolveSort } from "@/lib/data/library-prefs";
 import { getSources, getTopSources } from "@/lib/data/sources";
@@ -116,6 +117,24 @@ export default async function LibraryPage() {
     ? null
     : syncedAts.sort()[0] ?? null;
 
+  /**
+   * Titles that exist here but have never been matched to AniList.
+   *
+   * The Sync button only ever PULLS — MyAnimeList into the app, AniList into
+   * the app. Copying the library the other way is a bulk write to an account
+   * this app does not own, so it stays behind the confirmation dialog on
+   * /settings. What this count fixes is the button quietly doing half of what
+   * "sync" sounds like: without a word here, a user who expected their MAL
+   * list to appear on AniList has no way to find out why it did not.
+   *
+   * Counted from rows already on the page rather than with another query.
+   * `anilist_media_id` is filled in as titles get matched, so this shrinks on
+   * its own as the account sync is run.
+   */
+  const unpushedToAniList = anilistLinked
+    ? countUnmatchedToAniList(entries)
+    : 0;
+
   // Named in the order they are authoritative: MyAnimeList owns any title it
   // has, AniList covers the rest.
   const linkedLabel = [
@@ -190,6 +209,21 @@ export default async function LibraryPage() {
               <Link href="/api/mal/connect" className="font-medium underline">
                 Reconnect
               </Link>
+            </p>
+          ) : null}
+
+          {/* Only when there is something to do about it, and only when
+              AniList is actually connected — otherwise the AniList section on
+              /settings is the thing to point at, not the sync. */}
+          {unpushedToAniList > 0 && anilist?.status === "active" ? (
+            <p className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+              {unpushedToAniList}{" "}
+              {unpushedToAniList === 1 ? "title isn't" : "titles aren't"} on
+              AniList yet. Syncing here only brings titles in —{" "}
+              <Link href="/settings" className="font-medium underline">
+                copy them to AniList
+              </Link>{" "}
+              from Settings.
             </p>
           ) : null}
 
