@@ -3,30 +3,21 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
-import { CoverImage } from "@/components/cover-image";
 import { Button } from "@/components/ui/button";
 import { EntryCollections } from "@/components/entry-collections";
+import { EntryHeader } from "@/components/entry-header";
 import { EntryRemove } from "@/components/entry-remove";
 import { EntrySyncStatus } from "@/components/entry-sync-status";
 import { EntrySourceEditor } from "@/components/entry-source-editor";
 import { EntryTags } from "@/components/entry-tags";
 import { ProgressEditor } from "@/components/progress-editor";
-import { Badge } from "@/components/ui/badge";
 import { isAdmin, verifySession } from "@/lib/auth/dal";
 import { chapterTotal } from "@/lib/data/chapter-totals";
-import { displayTitle, secondaryTitle } from "@/lib/data/display-title";
+import { displayTitle } from "@/lib/data/display-title";
 import { getCollectionTargets } from "@/lib/data/collections";
 import { getEntry } from "@/lib/data/entries";
 import { getSources } from "@/lib/data/sources";
 import { getActiveTags, getTagsForTitle } from "@/lib/data/tags";
-
-const STATUS_LABELS: Record<string, string> = {
-  reading: "Reading",
-  completed: "Completed",
-  on_hold: "On hold",
-  dropped: "Dropped",
-  plan_to_read: "Plan to read",
-};
 
 export async function generateMetadata({ params }: PageProps<"/entry/[id]">) {
   const { id } = await params;
@@ -59,17 +50,10 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
   // here, which is what we want: both 404 rather than confirming existence.
   if (!entry) notFound();
 
+  // The header owns every derived display value now — both names, the
+  // progress percentage, the badges. This page keeps only what the sections
+  // below it need.
   const title = entry.media_titles;
-  // The heading takes the English name where MAL has one; `alsoKnownAs` is the
-  // canonical one, and is null when it would only repeat the heading. This
-  // page is the one surface with room for both — see lib/data/display-title.ts.
-  const name = displayTitle(title);
-  const alsoKnownAs = secondaryTitle(title);
-  const total = title.num_chapters;
-  const pct =
-    total && total > 0
-      ? Math.min(100, Math.round((entry.num_chapters_read / total) * 100))
-      : null;
 
   // allTags is only fetched for an admin — a reader never sees the picker, so
   // there is nothing for the full tag vocabulary to do on their render.
@@ -97,93 +81,27 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
       }
     >
       <div className="grid gap-8">
-        <div className="grid gap-6 sm:grid-cols-[160px_1fr]">
-          <div className="relative aspect-[1/2] w-full max-w-[160px] overflow-hidden rounded-md bg-muted">
-            <CoverImage
-              src={title.main_picture_url}
-              title={name}
-              sizes="160px"
-              className="object-cover"
-              preload
-            />
-          </div>
+        <EntryHeader entry={entry}>
+          <EntryTags
+            titleId={title.id}
+            tags={tags}
+            allTags={allTags}
+            isAdmin={admin}
+          />
+        </EntryHeader>
 
-          <div className="grid content-start gap-3">
-            <div>
-              <h1 className="font-display text-2xl font-bold">{name}</h1>
-              {alsoKnownAs ? (
-                <p className="text-sm text-muted-foreground">{alsoKnownAs}</p>
-              ) : null}
-            </div>
-
-            {/* TODO(authors): the title's author is not shown, because it is
-                not synced — so "more from this author" has nowhere to hang.
-                See TODO.md for why the storage shape is the decision, and why
-                the local catalog alone cannot answer the question honestly. */}
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary" className="rounded-pill">
-                {STATUS_LABELS[entry.list_status] ?? entry.list_status}
-              </Badge>
-              {title.mal_media_kind ? (
-                <Badge variant="outline" className="rounded-pill capitalize">
-                  {title.mal_media_kind.replace("_", " ")}
-                </Badge>
-              ) : null}
-              {entry.score > 0 ? (
-                <Badge variant="outline" className="rounded-pill">
-                  Scored {entry.score}/10
-                </Badge>
-              ) : null}
-              {entry.is_rereading ? (
-                <Badge variant="outline" className="rounded-pill">
-                  Rereading
-                </Badge>
-              ) : null}
-            </div>
-
-            <EntryTags
-              titleId={title.id}
-              tags={tags}
-              allTags={allTags}
-              isAdmin={admin}
-            />
-
-            <div className="grid gap-1">
-              <p className="text-sm">
-                <span className="font-medium tabular-nums">
-                  {entry.num_chapters_read}
-                </span>
-                <span className="text-muted-foreground">
-                  {" / "}
-                  {total && total > 0 ? total : "—"} chapters
-                </span>
-              </p>
-              {pct !== null ? (
-                <div
-                  className="h-1 w-full max-w-xs overflow-hidden rounded-full bg-muted"
-                  role="progressbar"
-                  aria-valuenow={pct}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-label={`${pct}% read`}
-                >
-                  <div
-                    className="h-full bg-brand"
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
-              ) : null}
-            </div>
-
-            <EntrySyncStatus
-              malMediaId={title.mal_media_id}
-              anilistMediaId={title.anilist_media_id}
-              syncToMal={entry.sync_to_mal}
-              syncToAniList={entry.sync_to_anilist}
-              archived={entry.archived_at !== null}
-            />
-          </div>
-        </div>
+        {/* Below the header rather than inside it: EntryHeader is the shelf
+            row at detail scale, and this is not something a row has. It also
+            replaces the header's own "View on MyAnimeList" link, which builds
+            a URL from `mal_media_id` unconditionally — that is null for a
+            title only AniList has, so the link would point at /manga/null. */}
+        <EntrySyncStatus
+          malMediaId={title.mal_media_id}
+          anilistMediaId={title.anilist_media_id}
+          syncToMal={entry.sync_to_mal}
+          syncToAniList={entry.sync_to_anilist}
+          archived={entry.archived_at !== null}
+        />
 
         <ProgressEditor entry={entry} />
 

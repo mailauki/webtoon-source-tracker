@@ -82,13 +82,35 @@ describe("hydrateCollection", () => {
   it("stitches in the viewer's entry id, not the catalog id", () => {
     // /entry/[id] is keyed on user_entries. Handing it a title id would route
     // to another user's entry or to a 404.
-    const tracked = new Map([[200, 55]]);
+    const tracked = new Map([
+      [200, { entryId: 55, listStatus: "reading", sourceSlugs: ["tapas"] }],
+    ]);
     const result = hydrateCollection(
       collection([item(1, 10, 100), item(2, 20, 200)]),
       tracked,
     );
 
     expect(result.items.map((i) => i.entryId)).toEqual([null, 55]);
+  });
+
+  // The filters read `tracked`; every card reads `entryId`. They come from the
+  // same lookup, so a title that is one but not the other would be a card
+  // linking to an entry the filters think does not exist.
+  it("carries the status and sources beside the entry id", () => {
+    const tracked = new Map([
+      [200, { entryId: 55, listStatus: "reading", sourceSlugs: ["tapas"] }],
+    ]);
+    const result = hydrateCollection(
+      collection([item(1, 10, 100), item(2, 20, 200)]),
+      tracked,
+    );
+
+    expect(result.items[0].tracked).toBeNull();
+    expect(result.items[1].tracked).toEqual({
+      entryId: 55,
+      listStatus: "reading",
+      sourceSlugs: ["tapas"],
+    });
   });
 
   it("leaves every entryId null when the viewer tracks nothing", () => {

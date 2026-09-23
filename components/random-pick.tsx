@@ -20,15 +20,8 @@ import { pickNext, selectByMode, type PickMode } from "@/lib/data/pick-random";
 import { readingLink } from "@/lib/data/source-links";
 import type { LibraryRow } from "@/lib/data/entries";
 import { displayTitle } from "@/lib/data/display-title";
+import { statusLabel } from "@/lib/data/entry-labels";
 import { cn } from "@/lib/utils";
-
-const STATUS_LABELS: Record<string, string> = {
-  reading: "Reading",
-  completed: "Completed",
-  on_hold: "On hold",
-  dropped: "Dropped",
-  plan_to_read: "Plan to read",
-};
 
 /** What each button offers, and what the reveal calls the draw it came from. */
 const MODES: { mode: PickMode; label: string; drawnFrom: string }[] = [
@@ -255,7 +248,7 @@ function PickedTitle({
             {displayTitle(title)}
           </p>
           <p className="text-sm text-muted-foreground">
-            {STATUS_LABELS[entry.list_status] ?? entry.list_status} ·{" "}
+            {statusLabel(entry.list_status)} ·{" "}
             <span className="tabular-nums">
               {entry.num_chapters_read} / {total && total > 0 ? total : "—"}
             </span>

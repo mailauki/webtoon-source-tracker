@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 
-import { CollectionCard } from "@/components/collection-card";
+import { EntryCard } from "@/components/entry-card";
+import { collectionView } from "@/lib/data/entry-view";
 import type { Collection } from "@/lib/data/collection-items";
 
 /**
@@ -63,7 +64,7 @@ export function CollectionShelf({ collection }: { collection: Collection }) {
       <ul className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2">
         {collection.items.map((item) => (
           <li key={item.id} className="w-[130px] shrink-0 snap-start">
-            <CollectionCard item={item} />
+            <EntryCard view={collectionView(item)} />
           </li>
         ))}
       </ul>

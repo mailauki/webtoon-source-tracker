@@ -25,6 +25,27 @@ export type CollectionTitle = {
   nsfw?: string | null;
 };
 
+/**
+ * What the viewer already knows about one catalog title.
+ *
+ * Present only for a title they track. The status and the source slugs are
+ * what the category pages filter on; the entry id is what a card links to.
+ */
+export type TrackedEntry = {
+  entryId: number;
+  listStatus: string;
+  /** Slugs of every attached source. Custom sources carry none — see below. */
+  sourceSlugs: string[];
+};
+
+/** The shape getTrackedEntries' select returns, before it is reduced. */
+export type RawTrackedRow = {
+  id: number;
+  title_id: number;
+  list_status: string;
+  entry_sources: { sources: { slug: string | null } | null }[] | null;
+};
+
 /** One row of `collection_items`, joined to its catalog row. */
 export type RawCollectionItem = {
   id: number;
@@ -50,6 +71,13 @@ export type CollectionItem = RawCollectionItem & {
    * does not have, which is the reason the shelf exists.
    */
   entryId: number | null;
+  /**
+   * The rest of what the viewer knows about it, for the filters. Null on the
+   * same rows `entryId` is null on — kept as a separate field rather than
+   * folded in because every card reads `entryId` and only the filters read
+   * this.
+   */
+  tracked: TrackedEntry | null;
 };
 
 export type Collection = Omit<RawCollection, "collection_items"> & {
@@ -72,16 +100,16 @@ export type Collection = Omit<RawCollection, "collection_items"> & {
  */
 export function hydrateCollection(
   collection: RawCollection,
-  tracked: Map<number, number>,
+  tracked: Map<number, TrackedEntry>,
   limit?: number,
 ): Collection {
   const items = [...collection.collection_items]
     .sort((a, b) => a.position - b.position || a.id - b.id)
     .slice(0, limit)
-    .map((item) => ({
-      ...item,
-      entryId: tracked.get(item.media_titles.id) ?? null,
-    }));
+    .map((item) => {
+      const entry = tracked.get(item.media_titles.id) ?? null;
+      return { ...item, entryId: entry?.entryId ?? null, tracked: entry };
+    });
 
   return {
     id: collection.id,
