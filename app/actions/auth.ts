@@ -115,7 +115,10 @@ export async function signInWithProvider(formData: FormData) {
   });
 
   if (error || !data.url) {
-    redirect(`/login?error=${encodeURIComponent(error?.message ?? "OAuth failed")}`);
+    // /auth/login, not /login — a bare /login 404s.
+    redirect(
+      `/auth/login?error=${encodeURIComponent(error?.message ?? "OAuth failed")}`,
+    );
   }
 
   redirect(data.url);

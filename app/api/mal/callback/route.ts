@@ -13,9 +13,15 @@ import { saveTokens } from "@/lib/mal/token-store";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 function fail(origin: string, reason: string) {
-  return NextResponse.redirect(
+  const response = NextResponse.redirect(
     `${origin}/settings?error=${encodeURIComponent(reason)}`,
   );
+  // Clear the one-shot cookies on the way out, as the success path does.
+  // A verifier left behind is spent — the next attempt sets fresh ones, but
+  // until then a stale pair sits in the browser for its full 10 minutes.
+  response.cookies.delete({ name: PKCE_COOKIE, path: MAL_COOKIE_PATH });
+  response.cookies.delete({ name: STATE_COOKIE, path: MAL_COOKIE_PATH });
+  return response;
 }
 
 export async function GET(request: NextRequest) {

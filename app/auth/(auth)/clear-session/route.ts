@@ -20,7 +20,11 @@ export async function GET(request: NextRequest) {
   await supabase.auth.signOut();
 
   const response = NextResponse.redirect(
-    new URL("/login?signedout=1", request.nextUrl.origin),
+    // /auth/login, not /login: the sign-in page lives under /auth, and a
+    // bare /login 404s — stranding exactly the person whose session just
+    // got cleared. The ?signedout=1 marker is what stops proxy.ts bouncing
+    // them straight back to /library on the stale cookie.
+    new URL("/auth/login?signedout=1", request.nextUrl.origin),
   );
 
   // signOut() is a no-op when the cookie is malformed rather than merely
