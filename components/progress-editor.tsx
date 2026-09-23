@@ -20,14 +20,41 @@ const STATUS_OPTIONS = [
 export function ProgressEditor({ entry }: { entry: EntryDetail }) {
   const total = entry.media_titles.num_chapters;
   /**
-   * Where a save actually goes.
+   * The services this edit will actually reach.
    *
-   * A title MyAnimeList does not have is written to AniList instead — see the
-   * branch at the top of app/actions/progress.ts. The copy has to follow that,
-   * or the page promises a write to a site this title does not exist on.
+   * Two things decide it, and reading only the first was wrong: whether the
+   * site has the title at all, and whether the user still syncs it there. A
+   * title excluded from MyAnimeList but not AniList is written only to
+   * AniList, and the button used to promise MyAnimeList — see the branches in
+   * app/actions/progress.ts, which this mirrors exactly.
    */
+  const targets = [
+    entry.media_titles.mal_media_id !== null && entry.sync_to_mal
+      ? "MyAnimeList"
+      : null,
+    entry.media_titles.anilist_media_id !== null && entry.sync_to_anilist
+      ? "AniList"
+      : null,
+  ].filter((name): name is string => name !== null);
+
+  /**
+   * Whether the edit can be recorded anywhere at all.
+   *
+   * An AniList-only title with AniList switched off has no home for it: the
+   * action refuses such an edit rather than saving a local-only change that no
+   * sync would ever carry. The form says so rather than letting the user type
+   * a number and be told no on submit.
+   */
+  const nowhereToSave =
+    entry.media_titles.mal_media_id === null && !entry.sync_to_anilist;
+
+  // "MyAnimeList and AniList", or the one that applies. With neither, the edit
+  // is kept locally — which is a real outcome for a title paused on both, not
+  // an error.
   const remote =
-    entry.media_titles.mal_media_id === null ? "AniList" : "MyAnimeList";
+    targets.length === 2
+      ? "MyAnimeList and AniList"
+      : (targets[0] ?? "your library only");
   const formRef = useRef<HTMLFormElement>(null);
 
   const [state, action] = useActionState<ProgressState, FormData>(
@@ -64,7 +91,9 @@ export function ProgressEditor({ entry }: { entry: EntryDetail }) {
       <div>
         <h2 className="font-display text-lg font-semibold">Progress</h2>
         <p className="text-sm text-muted-foreground">
-          Changes are saved to {remote}.
+          {nowhereToSave
+            ? "This title is only on AniList, and you've turned AniList syncing off for it — so there's nowhere to record progress."
+            : `Changes are saved to ${remote}.`}
         </p>
       </div>
 
@@ -77,7 +106,7 @@ export function ProgressEditor({ entry }: { entry: EntryDetail }) {
               variant="outline"
               size="icon"
               className="rounded-pill"
-              disabled={isPending || optimisticChapters <= 0}
+              disabled={isPending || nowhereToSave || optimisticChapters <= 0}
               onClick={() => submitChapters(optimisticChapters - 1)}
               aria-label="One chapter back"
             >
@@ -100,6 +129,7 @@ export function ProgressEditor({ entry }: { entry: EntryDetail }) {
               className="rounded-pill"
               disabled={
                 isPending ||
+                nowhereToSave ||
                 (total !== null && total > 0 && optimisticChapters >= total)
               }
               onClick={() => submitChapters(optimisticChapters + 1)}
@@ -114,7 +144,8 @@ export function ProgressEditor({ entry }: { entry: EntryDetail }) {
           </div>
           {total && total > 0 && optimisticChapters >= total ? (
             <p className="text-xs text-muted-foreground">
-              Finishing the last chapter marks this completed on {remote}.
+              Finishing the last chapter marks this completed
+              {targets.length > 0 ? ` on ${remote}` : ""}.
             </p>
           ) : null}
         </div>
@@ -172,11 +203,14 @@ export function ProgressEditor({ entry }: { entry: EntryDetail }) {
           <div className="sm:col-span-3">
             <Button
               type="submit"
-              disabled={isPending}
+              // Disabled rather than left to fail on submit: the action
+              // refuses this case, and letting someone type a chapter number
+              // before telling them is the worse of the two.
+              disabled={isPending || nowhereToSave}
               className="rounded-pill bg-brand px-6 font-bold text-brand-foreground hover:bg-brand/90"
             >
               {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-              Save to {remote}
+              {targets.length > 0 ? `Save to ${remote}` : "Save"}
             </Button>
           </div>
         </form>
