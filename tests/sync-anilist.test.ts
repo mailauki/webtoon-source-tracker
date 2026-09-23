@@ -67,3 +67,26 @@ describe("AniList catalog writes", () => {
     }
   });
 });
+
+/**
+ * Every AniList write path must stamp `mal_updated_at`.
+ *
+ * It drives the library's default sort, the collections ordering and
+ * pick-random's "most neglected" pick. A null is not a missing nicety: the
+ * sort pushes it to the bottom in both directions, and pick-random reads the
+ * same null as "never touched" and over-recommends the row. Both symptoms
+ * come from one omission, and nothing type-checks it.
+ */
+describe("AniList writes set the sort timestamp", () => {
+  it("is stamped by the pull, the add action and the progress edit", async () => {
+    const [sync, add, progress] = await Promise.all([
+      readFile("lib/sync/sync-anilist.ts", "utf8"),
+      readFile("app/actions/add-anilist-entry.ts", "utf8"),
+      readFile("app/actions/progress.ts", "utf8"),
+    ]);
+
+    for (const source of [sync, add, progress]) {
+      expect(source).toContain("mal_updated_at");
+    }
+  });
+});

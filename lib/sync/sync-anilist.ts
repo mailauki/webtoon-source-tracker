@@ -234,6 +234,17 @@ export async function syncAniListList(
         num_volumes_read: e.progressVolumes ?? 0,
         score: toMalScore(e.score),
         is_rereading: mapped?.is_rereading ?? false,
+        // Despite the name, this column is "when the user last touched this
+        // entry on the service that owns it" — it is what the library's
+        // default sort, the collections list and pick-random all read. Leaving
+        // it null for an AniList-only row does not merely lose precision: rows
+        // with no value sort LAST in both directions, so a title added
+        // moments ago would sit at the bottom of the grid, and pick-random
+        // would read the same null as "never touched" and over-recommend it.
+        // AniList sends seconds, not milliseconds.
+        mal_updated_at: e.updatedAt
+          ? new Date(e.updatedAt * 1000).toISOString()
+          : now,
         synced_at: now,
       },
     ];

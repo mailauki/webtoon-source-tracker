@@ -195,6 +195,10 @@ export async function addAniListEntry(
         num_volumes_read: 0,
         score: 0,
         is_rereading: false,
+        // See the note in lib/sync/sync-anilist.ts: this drives the library's
+        // default sort, and a null would bury a title the user just added at
+        // the bottom of the grid. Just-added is exactly `now`.
+        mal_updated_at: now,
         synced_at: now,
       },
       { onConflict: "user_id,title_id" },

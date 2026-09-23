@@ -139,6 +139,11 @@ export async function updateProgress(
           ? { num_chapters_read: patch.num_chapters_read }
           : {}),
         ...(patch.score !== undefined ? { score: patch.score } : {}),
+        // The MAL path below stores what MyAnimeList echoed back; AniList's
+        // mutation returns no timestamp, so the edit's own time is the honest
+        // value. Without it the row would keep its old position under the
+        // library's "recently updated" sort despite having just changed.
+        mal_updated_at: new Date().toISOString(),
         synced_at: new Date().toISOString(),
       })
       .eq("id", entryId);
