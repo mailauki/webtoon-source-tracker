@@ -373,7 +373,23 @@ export async function syncMalList(
     });
   }
 
-  for (const batch of chunk(entryRows, BATCH_SIZE)) {
+  // Titles the user has removed. The upsert below would otherwise write their
+  // progress straight back from MyAnimeList, which reads as the removal having
+  // silently failed — the title reappears on the shelf at the next sync.
+  const { data: archivedRows, error: archivedError } = await admin
+    .from("user_entries")
+    .select("title_id")
+    .eq("user_id", userId)
+    .not("archived_at", "is", null);
+
+  if (archivedError) {
+    throw new Error(`Archived lookup failed: ${archivedError.message}`);
+  }
+
+  const archived = new Set((archivedRows ?? []).map((r) => r.title_id));
+  const liveRows = entryRows.filter((r) => !archived.has(r.title_id));
+
+  for (const batch of chunk(liveRows, BATCH_SIZE)) {
     const { error } = await admin
       .from("user_entries")
       .upsert(batch, { onConflict: "user_id,title_id" });
@@ -390,10 +406,14 @@ export async function syncMalList(
   //   b) the fetched count is more than half of what we already have.
   let removed = 0;
 
+  // Live rows only: an archived title is not something MAL was expected to
+  // return, so counting it would make the "did MAL send at least half of what
+  // we hold" guard stricter than it should be and suppress real removals.
   const { count: existingCount } = await admin
     .from("user_entries")
     .select("id", { count: "exact", head: true })
-    .eq("user_id", userId);
+    .eq("user_id", userId)
+    .is("archived_at", null);
 
   // TODO(soft-delete): this is a hard delete, and it cascades to entry_sources
   // — the hand-entered data no sync can rebuild. The 50% guard below makes a
@@ -405,7 +425,7 @@ export async function syncMalList(
     entryRows.length > (existingCount ?? 0) * 0.5;
 
   if (looksComplete && entryRows.length > 0) {
-    const keepTitleIds = entryRows.map((r) => r.title_id);
+    const keepTitleIds = liveRows.map((r) => r.title_id);
     // Guarded above: an empty list would render `not in ()`, which is invalid
     // SQL and would otherwise delete the user's whole library.
 
@@ -448,6 +468,10 @@ export async function syncMalList(
     const exempt = [
       ...(anilistOnly ?? []).map((r) => r.id),
       ...(excluded ?? []).map((r) => r.title_id),
+      // Already removed by the user. MAL not returning them is expected, and
+      // deleting the row would destroy the entry_sources that archiving was
+      // chosen to preserve.
+      ...archived,
     ];
     const keep = [...new Set([...keepTitleIds, ...exempt])];
 

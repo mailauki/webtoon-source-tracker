@@ -370,3 +370,65 @@ export async function getMediaById(
 
   return raw.Media === null ? null : anilistSearchMediaSchema.parse(raw.Media);
 }
+
+const DELETE_ENTRY_QUERY = /* GraphQL */ `
+  mutation ($id: Int) {
+    DeleteMediaListEntry(id: $id) {
+      deleted
+    }
+  }
+`;
+
+const LIST_ENTRY_ID_QUERY = /* GraphQL */ `
+  query ($userId: Int, $mediaId: Int) {
+    MediaList(userId: $userId, mediaId: $mediaId, type: MANGA) {
+      id
+    }
+  }
+`;
+
+/**
+ * Takes a title off the user's AniList list.
+ *
+ * Two round trips, because AniList's delete is keyed on the *list entry* id
+ * rather than the media id every other call here uses — the app never stores
+ * that id, so it has to be looked up. A title that is not on the list has no
+ * entry to find, which AniList reports as an error; that is treated as success
+ * for the same reason the MyAnimeList side treats 404 as success. The caller's
+ * intent is already satisfied.
+ *
+ * Returns whether anything was actually removed, so the caller can tell "taken
+ * off your list" from "was not on it".
+ */
+export async function deleteListEntry(
+  client: AniListClient,
+  anilistUserId: number,
+  mediaId: number,
+): Promise<boolean> {
+  let entryId: number | null = null;
+
+  try {
+    const found = await client.request<{ MediaList: { id: number } | null }>(
+      LIST_ENTRY_ID_QUERY,
+      { userId: anilistUserId, mediaId },
+    );
+    entryId = found.MediaList?.id ?? null;
+  } catch (cause) {
+    // "Not Found" for a title the user does not track. Auth and rate-limit
+    // errors must still reach the caller.
+    if (cause instanceof AniListApiError) return false;
+    throw cause;
+  }
+
+  if (entryId === null) return false;
+
+  try {
+    const result = await client.request<{
+      DeleteMediaListEntry: { deleted: boolean | null } | null;
+    }>(DELETE_ENTRY_QUERY, { id: entryId });
+    return result.DeleteMediaListEntry?.deleted === true;
+  } catch (cause) {
+    if (cause instanceof AniListApiError) return false;
+    throw cause;
+  }
+}

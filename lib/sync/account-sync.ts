@@ -153,9 +153,11 @@ export async function syncAccounts(
   // service has. Only the write is withheld.
   const { data: exclusions, error: exclusionsError } = await admin
     .from("user_entries")
-    .select("sync_to_mal, sync_to_anilist, media_titles!inner (mal_media_id)")
+    .select(
+      "sync_to_mal, sync_to_anilist, archived_at, media_titles!inner (mal_media_id)",
+    )
     .eq("user_id", userId)
-    .or("sync_to_mal.eq.false,sync_to_anilist.eq.false");
+    .or("sync_to_mal.eq.false,sync_to_anilist.eq.false,archived_at.not.is.null");
 
   if (exclusionsError) {
     throw new Error(`Could not read sync exclusions: ${exclusionsError.message}`);
@@ -166,8 +168,12 @@ export async function syncAccounts(
   for (const row of exclusions ?? []) {
     const title = row.media_titles as unknown as { mal_media_id: number | null };
     if (title?.mal_media_id == null) continue;
-    if (!row.sync_to_mal) noMal.add(title.mal_media_id);
-    if (!row.sync_to_anilist) noAniList.add(title.mal_media_id);
+
+    // A removed title is excluded from both sides regardless of its flags:
+    // copying it between services is exactly what the user asked to stop.
+    const removed = row.archived_at !== null;
+    if (removed || !row.sync_to_mal) noMal.add(title.mal_media_id);
+    if (removed || !row.sync_to_anilist) noAniList.add(title.mal_media_id);
   }
 
   const toMal: PlannedWrite[] = [];

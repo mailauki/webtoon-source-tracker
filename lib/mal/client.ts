@@ -199,7 +199,12 @@ export class MalClient {
       });
 
       if (response.ok) {
-        return (await response.json()) as T;
+        // DELETE /manga/{id}/my_list_status answers 200 with an empty body,
+        // and response.json() throws on empty input. Anything with no content
+        // resolves to undefined, which is what deleteListStatus expects; every
+        // other endpoint here returns a JSON object and is unaffected.
+        const text = await response.text();
+        return (text ? JSON.parse(text) : undefined) as T;
       }
 
       // 401 -> refresh once, then retry the original request.

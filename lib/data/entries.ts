@@ -75,6 +75,9 @@ export async function getLibrary() {
           // tells the loop whether a second page exists.
           { count: "exact" },
         )
+        // A removed title is gone from the user's point of view; the row
+        // survives only so the removal can be undone.
+        .is("archived_at", null)
         .order("mal_updated_at", { ascending: false, nullsFirst: false })
         // Ties on `mal_updated_at` are common (a bulk edit stamps a whole
         // batch), and paging an unstable order drops and repeats rows across
@@ -129,12 +132,14 @@ export async function getStatusCounts(): Promise<Record<string, number>> {
               count: "exact",
               head: true,
             })
+            .is("archived_at", null)
             .or(`nsfw.is.null,nsfw.not.in.(${[...MATURE_RATINGS].join(",")})`, {
               referencedTable: "media_titles",
             })
         : supabase
             .from("user_entries")
-            .select("id", { count: "exact", head: true });
+            .select("id", { count: "exact", head: true })
+            .is("archived_at", null);
 
       const { count, error } = await query.eq("list_status", status);
 
@@ -157,6 +162,11 @@ export async function getStatusCounts(): Promise<Record<string, number>> {
  * user tracks, reached by its own id, usually from a bookmark or the back
  * button. Hiding it here would 404 something they own — which is the "the app
  * lost my data" reading the whole setting is shaped to avoid.
+ *
+ * Deliberately NOT filtered on `archived_at`: this is the page a removed title
+ * is restored from, so hiding it here would strand the row with no way back.
+ * Every surface that lists a *library* filters archived rows out; this one
+ * reads a single entry the user asked for by id.
  */
 export async function getEntry(entryId: number) {
   const supabase = await createClient();
@@ -173,6 +183,7 @@ export async function getEntry(entryId: number) {
       is_rereading,
       mal_updated_at,
       synced_at,
+      archived_at,
       media_titles!inner (
         id, mal_media_id, anilist_media_id, title, title_en, main_picture_url,
         mal_media_kind, num_chapters, num_volumes, mal_status

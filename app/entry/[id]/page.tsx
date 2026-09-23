@@ -6,6 +6,7 @@ import { AppShell } from "@/components/app-shell";
 import { CoverImage } from "@/components/cover-image";
 import { Button } from "@/components/ui/button";
 import { EntryCollections } from "@/components/entry-collections";
+import { EntryRemove } from "@/components/entry-remove";
 import { EntrySourceEditor } from "@/components/entry-source-editor";
 import { EntryTags } from "@/components/entry-tags";
 import { ProgressEditor } from "@/components/progress-editor";
@@ -217,6 +218,16 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
         {/* Below the sources: where you read a title is the point of the app,
             and which lists you filed it under is the lighter question. */}
         <EntryCollections titleId={title.id} collections={collections} />
+
+        {/* Last on the page, and visually quiet: this is the one action here
+            that can reach past the app and change a list on another site. */}
+        <EntryRemove
+          entryId={entry.id}
+          title={displayTitle(title)}
+          onMal={title.mal_media_id !== null}
+          onAniList={title.anilist_media_id !== null}
+          archived={entry.archived_at !== null}
+        />
       </div>
     </AppShell>
   );

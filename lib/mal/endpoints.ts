@@ -5,6 +5,7 @@ import { z } from "zod";
 import { isMature } from "@/lib/data/nsfw";
 
 import { malPublicRequest, type MalClient } from "./client";
+import { MalApiError } from "./errors";
 import {
   malListEntrySchema,
   malListStatusSchema,
@@ -133,10 +134,6 @@ export async function searchManga(
  * The body is form-encoded, NOT JSON — MAL rejects JSON here, and this is a
  * common source of silent 400s.
  *
- * TODO(remove-entry): the delete side of this is missing. MAL exposes
- * `DELETE /manga/{id}/my_list_status` and MalClient already accepts the
- * method, so a `deleteListStatus` belongs right here — what needs care is
- * everything downstream of it. See TODO.md.
  */
 export async function updateListStatus(
   client: MalClient,
@@ -157,4 +154,30 @@ export async function updateListStatus(
   // MAL echoes the stored values, which may be clamped (e.g. chapters capped
   // at num_chapters). Callers should persist THIS, not their optimistic guess.
   return malListStatusSchema.parse(raw);
+}
+
+/**
+ * Takes a title off the user's MyAnimeList list.
+ *
+ * A 404 is treated as success, not as an error. MAL answers 404 when the title
+ * was not on the list, and by then the caller's intent — "this should not be
+ * on my list" — is already satisfied. Surfacing it would turn a double click,
+ * or a title already removed from another device, into a failure the user
+ * cannot act on.
+ *
+ * Returns nothing: MAL sends an empty body on success, and there is no stored
+ * state left to echo back.
+ */
+export async function deleteListStatus(
+  client: MalClient,
+  mangaId: number,
+): Promise<void> {
+  try {
+    await client.request<unknown>(`/manga/${mangaId}/my_list_status`, {
+      method: "DELETE",
+    });
+  } catch (cause) {
+    if (cause instanceof MalApiError && cause.status === 404) return;
+    throw cause;
+  }
 }

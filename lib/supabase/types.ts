@@ -594,6 +594,7 @@ export type Database = {
       }
       user_entries: {
         Row: {
+          archived_at: string | null
           created_at: string
           id: number
           is_rereading: boolean
@@ -610,6 +611,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          archived_at?: string | null
           created_at?: string
           id?: never
           is_rereading?: boolean
@@ -626,6 +628,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          archived_at?: string | null
           created_at?: string
           id?: never
           is_rereading?: boolean

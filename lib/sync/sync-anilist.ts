@@ -252,6 +252,9 @@ export async function syncAniListList(
 
   let entriesAdded = 0;
 
+  // ignoreDuplicates already protects an archived row from being overwritten —
+  // it has a (user_id, title_id) row, so the insert is skipped — which means a
+  // title the user removed does not come back through this path.
   for (const batch of chunk(entryRows, BATCH_SIZE)) {
     const { data, error } = await admin
       .from("user_entries")
