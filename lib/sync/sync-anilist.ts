@@ -2,11 +2,8 @@ import "server-only";
 
 import { AniListClient } from "@/lib/anilist/client";
 import { getMangaList } from "@/lib/anilist/endpoints";
-import {
-  toMalPublicationStatus,
-  toMalScore,
-  toMalStatus,
-} from "@/lib/anilist/mapping";
+import { upsertAniListTitle } from "@/lib/anilist/catalog";
+import { toMalScore, toMalStatus } from "@/lib/anilist/mapping";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isStale } from "./staleness";
 
@@ -186,38 +183,28 @@ export async function syncAniListList(
 
   let titlesAdded = 0;
 
-  for (const batch of chunk(newTitles, BATCH_SIZE)) {
-    const rows = batch.map((e) => ({
-      media_type: "manga" as const,
-      mal_media_id: null,
-      anilist_media_id: e.mediaId,
-      title: e.media.title?.romaji ?? e.media.title?.english ?? "Untitled",
-      title_en: e.media.title?.english ?? null,
-      main_picture_url:
-        e.media.coverImage?.large ?? e.media.coverImage?.medium ?? null,
-      mal_media_kind: e.media.format?.toLowerCase() ?? null,
-      num_chapters: e.media.chapters ?? null,
-      num_volumes: e.media.volumes ?? null,
-      // AniList's vocabulary translated into MAL's, which is what the column
-      // stores and what chapterTotal() matches on.
-      mal_status: toMalPublicationStatus(e.media.status),
-      nsfw: e.media.isAdult ? "black" : "white",
-      synced_at: now,
-    }));
+  // One row at a time rather than a batch: these go through the
+  // media_titles_upsert_anilist RPC, which restates the partial index's
+  // predicate so ON CONFLICT can use it — see lib/anilist/catalog.ts. A
+  // per-row call is the cost of that, and it is paid only for titles nothing
+  // in the app has seen before, which is a small set after the first sync.
+  for (const entry of newTitles) {
+    const id = await upsertAniListTitle(admin, {
+      anilistMediaId: entry.mediaId,
+      title:
+        entry.media.title?.romaji ?? entry.media.title?.english ?? "Untitled",
+      titleEn: entry.media.title?.english ?? null,
+      coverUrl:
+        entry.media.coverImage?.large ?? entry.media.coverImage?.medium ?? null,
+      format: entry.media.format ?? null,
+      chapters: entry.media.chapters ?? null,
+      volumes: entry.media.volumes ?? null,
+      status: entry.media.status ?? null,
+      isAdult: entry.media.isAdult ?? null,
+    });
 
-    const { data, error } = await admin
-      .from("media_titles")
-      .upsert(rows, { onConflict: "media_type,anilist_media_id" })
-      .select("id, anilist_media_id");
-
-    if (error) throw new Error(`Catalog upsert failed: ${error.message}`);
-
-    for (const row of data ?? []) {
-      if (row.anilist_media_id !== null) {
-        known.set(row.anilist_media_id, { id: row.id, malBacked: false });
-      }
-    }
-    titlesAdded += data?.length ?? 0;
+    known.set(entry.mediaId, { id, malBacked: false });
+    titlesAdded++;
   }
 
   // --- 3. Create the user's entries ----------------------------------------

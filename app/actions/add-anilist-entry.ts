@@ -6,10 +6,8 @@ import { z } from "zod";
 import { AniListClient } from "@/lib/anilist/client";
 import { getMediaById, saveListEntry } from "@/lib/anilist/endpoints";
 import { AniListAuthError, AniListRateLimitError } from "@/lib/anilist/errors";
-import {
-  toAniListStatus,
-  toMalPublicationStatus,
-} from "@/lib/anilist/mapping";
+import { upsertAniListTitle } from "@/lib/anilist/catalog";
+import { toAniListStatus } from "@/lib/anilist/mapping";
 import { verifySession } from "@/lib/auth/dal";
 import { MAL_LIST_STATUSES } from "@/lib/mal/types";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -161,38 +159,24 @@ export async function addAniListEntry(
   // --- then mirror it ------------------------------------------------------
   const now = new Date().toISOString();
 
-  const { data: title, error: catalogError } = await admin
-    .from("media_titles")
-    .upsert(
-      {
-        media_type: "manga",
-        // The column that this whole path exists for. Null is what marks the
-        // row as AniList-only, and what the sync's removal guard keys on.
-        mal_media_id: null,
-        anilist_media_id: anilistMediaId,
-        title: media.title.romaji ?? media.title.english ?? "Untitled",
-        title_en: media.title.english,
-        main_picture_url:
-          media.coverImage?.large ?? media.coverImage?.medium ?? null,
-        mal_media_kind: media.format?.toLowerCase() ?? null,
-        num_chapters: media.chapters,
-        num_volumes: media.volumes,
-        // AniList's publication status, in MAL's vocabulary — the column
-        // stores MAL's spelling and chapterTotal() matches against it, so
-        // "FINISHED" stored raw would read as a series still running.
-        mal_status: toMalPublicationStatus(media.status),
-        // AniList states this as a boolean rather than MAL's rating strings.
-        // Mapped onto the vocabulary lib/data/nsfw.ts reads, so the hide-adult
-        // switch treats this row exactly like every other.
-        nsfw: media.isAdult ? "black" : "white",
-        synced_at: now,
-      },
-      { onConflict: "media_type,anilist_media_id" },
-    )
-    .select("id")
-    .single();
-
-  if (catalogError || !title) {
+  // Through the RPC, not .upsert(): the uniqueness that keeps AniList-only
+  // rows from duplicating is a partial index, and PostgREST cannot restate its
+  // predicate for ON CONFLICT. See lib/anilist/catalog.ts.
+  let titleId: number;
+  try {
+    titleId = await upsertAniListTitle(admin, {
+      anilistMediaId,
+      title: media.title.romaji ?? media.title.english ?? "Untitled",
+      titleEn: media.title.english,
+      coverUrl: media.coverImage?.large ?? media.coverImage?.medium ?? null,
+      format: media.format,
+      chapters: media.chapters,
+      volumes: media.volumes,
+      status: media.status,
+      isAdult: media.isAdult,
+    });
+  } catch (cause) {
+    console.error("[add-anilist-entry] catalog upsert failed:", cause);
     return {
       ok: false,
       error: "Added to AniList, but the local copy didn't save. Sync to catch up.",
@@ -205,7 +189,7 @@ export async function addAniListEntry(
     .upsert(
       {
         user_id: userId,
-        title_id: title.id,
+        title_id: titleId,
         list_status: listStatus,
         num_chapters_read: 0,
         num_volumes_read: 0,

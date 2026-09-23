@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+
 import { describe, expect, it } from "vitest";
 
 import { pullActionFor } from "@/lib/sync/sync-anilist";
@@ -34,5 +36,34 @@ describe("pullActionFor", () => {
   // AniList's approximation of it.
   it("defers to MyAnimeList even when the catalog has not seen the title", () => {
     expect(pullActionFor({ idMal: 999999 }, false)).toBe("skip_mal_backed");
+  });
+});
+
+/**
+ * The catalog write must not go through PostgREST's `onConflict`.
+ *
+ * Uniqueness for AniList-only rows is a PARTIAL index, and Postgres only
+ * accepts one as an ON CONFLICT arbiter when the statement restates its
+ * predicate — which `on_conflict=` cannot do. Sync failed at runtime with
+ * 42P10 ("no unique or exclusion constraint matching the ON CONFLICT
+ * specification"); nothing in the type system or the test suite caught it,
+ * because the call is well-typed and only Postgres knows the index is partial.
+ *
+ * Asserted against the source so a future edit cannot quietly reintroduce the
+ * shape that failed.
+ */
+describe("AniList catalog writes", () => {
+  it("upsert AniList-only titles through the RPC, never onConflict", async () => {
+    // Resolved from the project root: vitest runs with cwd there, and
+    // import.meta.url is not a file URL under this config.
+    const [sync, action] = await Promise.all([
+      readFile("lib/sync/sync-anilist.ts", "utf8"),
+      readFile("app/actions/add-anilist-entry.ts", "utf8"),
+    ]);
+
+    for (const source of [sync, action]) {
+      expect(source).toContain("upsertAniListTitle");
+      expect(source).not.toContain("media_type,anilist_media_id");
+    }
   });
 });

@@ -692,6 +692,20 @@ export type Database = {
         }
         Returns: undefined
       }
+      media_titles_upsert_anilist: {
+        Args: {
+          p_anilist_media_id: number
+          p_main_picture_url?: string
+          p_mal_status?: string
+          p_media_kind?: string
+          p_nsfw?: string
+          p_num_chapters?: number
+          p_num_volumes?: number
+          p_title: string
+          p_title_en?: string
+        }
+        Returns: number
+      }
     }
     Enums: {
       [_ in never]: never
