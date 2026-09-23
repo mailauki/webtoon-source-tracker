@@ -3,11 +3,15 @@
 -- Both default true, so every existing row keeps behaving exactly as it does
 -- now: this is opt-out, and a user who never touches it never notices it.
 --
--- These govern WRITES only. The local library still mirrors whatever each site
--- reports, so an excluded title stays in step on the way in and simply stops
--- being pushed on the way out. That is the narrower of the two meanings and
--- the one that cannot cause a silent divergence: a row that ignored a site's
--- reads as well would drift from both services with nothing to reconcile it.
+-- These detach a title from a service in both directions, and the reason is
+-- the read half rather than the write half. Stopping the writes alone would
+-- leave the next sync free to overwrite the row from a list the title is no
+-- longer on -- which is precisely the state removal leaves it in, since
+-- removing from a site while keeping the title locally sets the matching flag.
+-- The user's local copy becomes the only one that moves, so the sync must
+-- leave it alone: app/actions/progress.ts writes such a row from the request
+-- rather than from the service's echo, and lib/sync/sync-list.ts holds it out
+-- of the upsert.
 --
 -- sync_to_mal carries a second meaning that sync_to_anilist does not, and it
 -- is the reason this is not a symmetric pair of flags. lib/sync/sync-list.ts

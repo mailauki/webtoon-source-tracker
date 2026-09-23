@@ -373,21 +373,38 @@ export async function syncMalList(
     });
   }
 
-  // Titles the user has removed. The upsert below would otherwise write their
-  // progress straight back from MyAnimeList, which reads as the removal having
-  // silently failed — the title reappears on the shelf at the next sync.
-  const { data: archivedRows, error: archivedError } = await admin
+  // Rows this sync must not write over, for two different reasons.
+  //
+  // Archived: the user removed the title. Writing its progress back from
+  // MyAnimeList would make the removal look like it had silently failed, with
+  // the title reappearing on the shelf at the next sync.
+  //
+  // sync_to_mal = false: the user detached this title from MyAnimeList, either
+  // by excluding it or by removing it there while keeping it here. Their local
+  // progress is now the only copy that moves — app/actions/progress.ts writes
+  // such a row from the request rather than from MAL's echo — so overwriting
+  // it here would silently undo every edit they make, and MAL's copy is stale
+  // or absent in exactly the case that matters.
+  const { data: protectedRows, error: protectedError } = await admin
     .from("user_entries")
-    .select("title_id")
+    .select("title_id, archived_at, sync_to_mal")
     .eq("user_id", userId)
-    .not("archived_at", "is", null);
+    .or("archived_at.not.is.null,sync_to_mal.eq.false");
 
-  if (archivedError) {
-    throw new Error(`Archived lookup failed: ${archivedError.message}`);
+  if (protectedError) {
+    throw new Error(`Protected-row lookup failed: ${protectedError.message}`);
   }
 
-  const archived = new Set((archivedRows ?? []).map((r) => r.title_id));
-  const liveRows = entryRows.filter((r) => !archived.has(r.title_id));
+  // Archived is tracked separately: it is the only one of the two that also
+  // needs exempting from the removal step below, where sync_to_mal is read
+  // from its own query for the same purpose.
+  const archived = new Set(
+    (protectedRows ?? [])
+      .filter((r) => r.archived_at !== null)
+      .map((r) => r.title_id),
+  );
+  const protectedIds = new Set((protectedRows ?? []).map((r) => r.title_id));
+  const liveRows = entryRows.filter((r) => !protectedIds.has(r.title_id));
 
   for (const batch of chunk(liveRows, BATCH_SIZE)) {
     const { error } = await admin

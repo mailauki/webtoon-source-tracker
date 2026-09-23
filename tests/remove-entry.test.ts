@@ -86,3 +86,36 @@ describe("archived titles stay out of the way", () => {
     expect(getEntry).not.toContain('.is("archived_at", null)');
   });
 });
+
+/**
+ * Where exclusion and removal converge, and where they must not.
+ *
+ * Removing a title from a site while keeping it locally sets that side's
+ * exclusion, so removal is a superset of exclusion. Both then mean the same
+ * thing to the sync: this pairing is detached, and MyAnimeList's copy is no
+ * longer authoritative for it.
+ */
+describe("sync exclusion and remote removal converge on the pull", () => {
+  it("keeps MyAnimeList from overwriting a detached title's progress", async () => {
+    const source = await readFile("lib/sync/sync-list.ts", "utf8");
+
+    // The pull once filtered archived rows only. A row excluded from MAL —
+    // which is also every row removed from MAL but kept locally — would have
+    // had its local progress overwritten from a list it is no longer on,
+    // silently undoing every edit made through the progress editor's own
+    // excluded-title branch.
+    const pull = source.slice(0, source.indexOf("--- 4. Removals"));
+    expect(pull).toContain("sync_to_mal.eq.false");
+    expect(pull).toContain("archived_at.not.is.null");
+  });
+
+  it("still exempts both kinds of row from the removal step", async () => {
+    const source = await readFile("lib/sync/sync-list.ts", "utf8");
+
+    // Holding them out of the upsert must not leave them out of the keep-list:
+    // that would turn "not written" into "deleted", cascading to entry_sources.
+    const exempt = source.slice(source.indexOf("const exempt = ["));
+    expect(exempt.slice(0, 400)).toContain("...archived");
+    expect(source).toContain('.eq("sync_to_mal", false)');
+  });
+});
