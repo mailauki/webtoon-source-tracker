@@ -19,6 +19,15 @@ const STATUS_OPTIONS = [
 
 export function ProgressEditor({ entry }: { entry: EntryDetail }) {
   const total = entry.media_titles.num_chapters;
+  /**
+   * Where a save actually goes.
+   *
+   * A title MyAnimeList does not have is written to AniList instead — see the
+   * branch at the top of app/actions/progress.ts. The copy has to follow that,
+   * or the page promises a write to a site this title does not exist on.
+   */
+  const remote =
+    entry.media_titles.mal_media_id === null ? "AniList" : "MyAnimeList";
   const formRef = useRef<HTMLFormElement>(null);
 
   const [state, action] = useActionState<ProgressState, FormData>(
@@ -55,7 +64,7 @@ export function ProgressEditor({ entry }: { entry: EntryDetail }) {
       <div>
         <h2 className="font-display text-lg font-semibold">Progress</h2>
         <p className="text-sm text-muted-foreground">
-          Changes are saved to MyAnimeList.
+          Changes are saved to {remote}.
         </p>
       </div>
 
@@ -105,7 +114,7 @@ export function ProgressEditor({ entry }: { entry: EntryDetail }) {
           </div>
           {total && total > 0 && optimisticChapters >= total ? (
             <p className="text-xs text-muted-foreground">
-              Finishing the last chapter marks this completed on MyAnimeList.
+              Finishing the last chapter marks this completed on {remote}.
             </p>
           ) : null}
         </div>
@@ -167,7 +176,7 @@ export function ProgressEditor({ entry }: { entry: EntryDetail }) {
               className="rounded-pill bg-brand px-6 font-bold text-brand-foreground hover:bg-brand/90"
             >
               {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-              Save to MyAnimeList
+              Save to {remote}
             </Button>
           </div>
         </form>

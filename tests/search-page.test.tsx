@@ -21,14 +21,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  *    dropped query param looks exactly like "MyAnimeList had nothing".
  */
 
-const { saveLibraryPrefs, addEntry, refresh } = vi.hoisted(() => ({
-  saveLibraryPrefs: vi.fn(async () => {}),
-  addEntry: vi.fn(),
-  refresh: vi.fn(),
-}));
+const { saveLibraryPrefs, addEntry, addAniListEntry, refresh } = vi.hoisted(
+  () => ({
+    saveLibraryPrefs: vi.fn(async () => {}),
+    addEntry: vi.fn(),
+    addAniListEntry: vi.fn(),
+    refresh: vi.fn(),
+  }),
+);
 
 vi.mock("@/app/actions/library-prefs", () => ({ saveLibraryPrefs }));
 vi.mock("@/app/actions/add-entry", () => ({ addEntry }));
+vi.mock("@/app/actions/add-anilist-entry", () => ({ addAniListEntry }));
 
 // The page never navigates — the term is state, not a location — so `replace`
 // is a spy that must stay unused. `refresh` is the one real call, made after
@@ -89,10 +93,12 @@ function setup({
   entries = ROWS,
   initial = {},
   matureLocked = false,
+  anilistConnected = true,
 }: {
   entries?: LibraryRow[];
   initial?: { includeNsfw?: boolean; mediaKind?: MediaKind };
   matureLocked?: boolean;
+  anilistConnected?: boolean;
 } = {}) {
   return render(
     <SearchFilters
@@ -104,7 +110,7 @@ function setup({
       <SearchSwitches />
       <SearchPrompt />
       <LibraryResults />
-      <CatalogResults />
+      <CatalogResults anilistConnected={anilistConnected} />
     </SearchFilters>,
   );
 }
@@ -456,6 +462,53 @@ describe("the catalog half", () => {
     expect(
       await screen.findByText(/anilist could not be reached/i),
     ).toBeInTheDocument();
+  });
+
+  // A title only AniList has is added through AniList, not MyAnimeList. The
+  // two write to different sources of truth, so submitting the wrong one would
+  // fail against a MAL id that does not exist.
+  it("adds an AniList-only title through the AniList action", async () => {
+    mockSearch([
+      {
+        ...RESULT,
+        key: "anilist:4321",
+        source: "anilist",
+        mal_media_id: null,
+        anilist_media_id: 4321,
+      },
+    ]);
+    setup();
+    await userEvent.type(field(), "solo");
+
+    await userEvent.click(await screen.findByRole("button", { name: /add/i }));
+
+    await waitFor(() => expect(addAniListEntry).toHaveBeenCalled());
+    expect(addEntry).not.toHaveBeenCalled();
+
+    const submitted = addAniListEntry.mock.calls.at(-1)?.[1] as FormData;
+    expect(submitted.get("anilist_media_id")).toBe("4321");
+    // No MAL id may ride along: there is none, and an empty one would parse
+    // as a real value on the other action.
+    expect(submitted.get("mal_media_id")).toBeNull();
+  });
+
+  it("asks for an AniList connection before offering to add an AniList-only title", async () => {
+    mockSearch([
+      {
+        ...RESULT,
+        key: "anilist:4321",
+        source: "anilist",
+        mal_media_id: null,
+        anilist_media_id: 4321,
+      },
+    ]);
+    setup({ anilistConnected: false });
+    await userEvent.type(field(), "solo");
+
+    expect(
+      await screen.findByRole("link", { name: /connect anilist to add/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /add/i })).not.toBeInTheDocument();
   });
 
   it("shows where the two catalogs disagree about the same title", async () => {

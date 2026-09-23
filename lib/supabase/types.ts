@@ -372,7 +372,7 @@ export type Database = {
           created_at: string
           id: number
           main_picture_url: string | null
-          mal_media_id: number
+          mal_media_id: number | null
           mal_media_kind: string | null
           mal_status: string | null
           media_type: string
@@ -389,7 +389,7 @@ export type Database = {
           created_at?: string
           id?: never
           main_picture_url?: string | null
-          mal_media_id: number
+          mal_media_id?: number | null
           mal_media_kind?: string | null
           mal_status?: string | null
           media_type?: string
@@ -406,7 +406,7 @@ export type Database = {
           created_at?: string
           id?: never
           main_picture_url?: string | null
-          mal_media_id?: number
+          mal_media_id?: number | null
           mal_media_kind?: string | null
           mal_status?: string | null
           media_type?: string

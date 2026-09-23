@@ -5,6 +5,7 @@ import {
   toAniListStatus,
   toMalScore,
   toMalStatus,
+  toMalPublicationStatus,
 } from "@/lib/anilist/mapping";
 import { ANILIST_LIST_STATUSES } from "@/lib/anilist/types";
 import { MAL_LIST_STATUSES } from "@/lib/mal/types";
@@ -52,5 +53,24 @@ describe("score mapping", () => {
     expect(toAniListScoreRaw(7)).toBe(70);
     expect(toAniListScoreRaw(0)).toBe(0);
     expect(toAniListScoreRaw(10)).toBe(100);
+  });
+});
+
+describe("toMalPublicationStatus", () => {
+  // media_titles.mal_status stores MAL's spelling, and chapterTotal() decides
+  // whether a chapter count is final by matching against it. An AniList status
+  // stored verbatim would never match, so a finished series would read as
+  // ongoing and its count as provisional.
+  it("translates into the vocabulary chapterTotal matches on", () => {
+    expect(toMalPublicationStatus("FINISHED")).toBe("finished");
+    expect(toMalPublicationStatus("CANCELLED")).toBe("discontinued");
+    expect(toMalPublicationStatus("RELEASING")).toBe("currently_publishing");
+    expect(toMalPublicationStatus("HIATUS")).toBe("on_hiatus");
+  });
+
+  it("treats a status with no MAL counterpart as unknown", () => {
+    expect(toMalPublicationStatus("NOT_YET_RELEASED")).toBeNull();
+    expect(toMalPublicationStatus(null)).toBeNull();
+    expect(toMalPublicationStatus("SOMETHING_NEW")).toBeNull();
   });
 });

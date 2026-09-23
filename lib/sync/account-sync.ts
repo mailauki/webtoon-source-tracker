@@ -285,12 +285,18 @@ async function cacheAniListIds(
     if (!data || data.length === 0) continue;
 
     const { error: upsertError } = await admin.from("media_titles").upsert(
-      data.map((row) => ({
-        media_type: "manga",
-        mal_media_id: row.mal_media_id,
-        title: row.title,
-        anilist_media_id: anilistIds.get(row.mal_media_id) ?? null,
-      })),
+      // Filtered rather than asserted: the query above selects by
+      // `mal_media_id`, so a null cannot occur, but the column is nullable now
+      // that AniList-only titles share this table and an upsert keyed on a
+      // null id would not match the partial unique index.
+      data
+        .filter((row) => row.mal_media_id !== null)
+        .map((row) => ({
+          media_type: "manga",
+          mal_media_id: row.mal_media_id,
+          title: row.title,
+          anilist_media_id: anilistIds.get(row.mal_media_id!) ?? null,
+        })),
       { onConflict: "media_type,mal_media_id" },
     );
 

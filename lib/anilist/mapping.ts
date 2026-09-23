@@ -67,3 +67,30 @@ export function toMalScore(point10: number | null | undefined): number {
 export function toAniListScoreRaw(malScore: number): number {
   return Math.min(100, Math.max(0, Math.round(malScore * 10)));
 }
+
+/**
+ * AniList's publication status in MyAnimeList's vocabulary.
+ *
+ * The app stores MAL's spelling in `media_titles.mal_status`, and
+ * lib/data/chapter-totals.ts decides whether a chapter count is final by
+ * matching against it. An AniList-only row that stored "FINISHED" verbatim
+ * would never match `finished`, so a completed series would read as still
+ * running and its chapter count as provisional.
+ *
+ * NOT_YET_RELEASED has no MAL counterpart and maps to null: "no status" is
+ * already how the rest of the app spells "unknown", and it reads as
+ * not-settled, which is correct for something that has not started.
+ */
+const ANILIST_STATUS_TO_MAL: Record<string, string | null> = {
+  FINISHED: "finished",
+  RELEASING: "currently_publishing",
+  CANCELLED: "discontinued",
+  HIATUS: "on_hiatus",
+  NOT_YET_RELEASED: null,
+};
+
+export function toMalPublicationStatus(
+  status: string | null | undefined,
+): string | null {
+  return status ? (ANILIST_STATUS_TO_MAL[status] ?? null) : null;
+}

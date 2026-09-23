@@ -333,7 +333,12 @@ export async function syncMalList(
       .in("mal_media_id", batch);
 
     if (error) throw new Error(`Catalog lookup failed: ${error.message}`);
-    for (const row of data ?? []) idMap.set(row.mal_media_id, row.id);
+    // The query filtered on `mal_media_id`, so every row here has one; the
+    // narrowing is for the compiler's benefit, since the column is nullable
+    // now that the catalog can also hold AniList-only titles.
+    for (const row of data ?? []) {
+      if (row.mal_media_id !== null) idMap.set(row.mal_media_id, row.id);
+    }
   }
 
   // Genres are catalog-level facts, so they are written with the catalog
@@ -404,11 +409,33 @@ export async function syncMalList(
     // Guarded above: an empty list would render `not in ()`, which is invalid
     // SQL and would otherwise delete the user's whole library.
 
+    // Titles that do not exist on MyAnimeList are exempt from removal, and
+    // this is load-bearing rather than a refinement. The rule above is "MAL
+    // did not return it, so the user removed it there" — which is only sound
+    // for titles MAL could have returned. An AniList-only entry is absent from
+    // every MAL response by definition, so without this it would be deleted on
+    // the first sync after it was added, cascading to the hand-entered
+    // entry_sources that no sync can rebuild.
+    const { data: anilistOnly, error: anilistOnlyError } = await admin
+      .from("media_titles")
+      .select("id")
+      .is("mal_media_id", null);
+
+    if (anilistOnlyError) {
+      throw new Error(`Removal guard failed: ${anilistOnlyError.message}`);
+    }
+
+    // Fail closed: if the exempt set could not be read, skipping the delete
+    // leaves stale rows, while running it destroys irreplaceable data. The
+    // next sync retries either way.
+    const exempt = (anilistOnly ?? []).map((r) => r.id);
+    const keep = [...new Set([...keepTitleIds, ...exempt])];
+
     const { data: deleted, error } = await admin
       .from("user_entries")
       .delete()
       .eq("user_id", userId)
-      .not("title_id", "in", `(${keepTitleIds.join(",")})`)
+      .not("title_id", "in", `(${keep.join(",")})`)
       .select("id");
 
     if (error) throw new Error(`Removal failed: ${error.message}`);

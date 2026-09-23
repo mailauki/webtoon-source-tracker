@@ -104,6 +104,57 @@ export async function updateProgress(
     return { ok: false, error: "Nothing to update." };
   }
 
+  // --- AniList-only titles never touch MyAnimeList --------------------------
+  //
+  // A title MAL does not have cannot be written there, so the MAL-first rule
+  // below has nothing to apply to. These entries mirror AniList instead, and
+  // the mirror is the ONLY remote write — so unlike the MAL path it is not
+  // best-effort: if it fails, the local copy must not move either, or the app
+  // would show progress that exists nowhere else.
+  if (malMediaId === null) {
+    const outcome = await mirrorToAniList(userId, entry.media_titles, {
+      status: patch.status ?? "reading",
+      num_chapters_read: patch.num_chapters_read ?? entry.num_chapters_read,
+      num_volumes_read: 0,
+      score: patch.score ?? 0,
+      is_rereading: false,
+    });
+
+    if (outcome !== "saved") {
+      return {
+        ok: false,
+        needsReauth: outcome === "needs_reauth",
+        error:
+          outcome === "needs_reauth"
+            ? "Your AniList connection expired. Please reconnect."
+            : "AniList wouldn't accept that change. Try again.",
+      };
+    }
+
+    const { error: anilistWriteError } = await supabase
+      .from("user_entries")
+      .update({
+        ...(patch.status ? { list_status: patch.status } : {}),
+        ...(patch.num_chapters_read !== undefined
+          ? { num_chapters_read: patch.num_chapters_read }
+          : {}),
+        ...(patch.score !== undefined ? { score: patch.score } : {}),
+        synced_at: new Date().toISOString(),
+      })
+      .eq("id", entryId);
+
+    if (anilistWriteError) {
+      return {
+        ok: false,
+        error: "Saved to AniList, but the local copy didn't refresh. Sync to catch up.",
+      };
+    }
+
+    revalidatePath(`/entry/${entryId}`);
+    revalidatePath("/library");
+    return { ok: true, message: "Saved to AniList." };
+  }
+
   // --- MAL first -----------------------------------------------------------
   let echoed;
   try {

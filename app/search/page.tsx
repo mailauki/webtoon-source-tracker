@@ -8,6 +8,7 @@ import { SearchFilters } from "@/components/search/search-filters";
 import { SearchPrompt } from "@/components/search/search-prompt";
 import { SearchSwitches } from "@/components/search/search-switches";
 import {
+  getAniListConnection,
   getLibraryPrefs,
   getMalConnection,
   isAgeConfirmedAdult,
@@ -49,10 +50,17 @@ export default async function SearchPage() {
   // The switches are per-user preferences, so they seed from the same row the
   // library chips use. Missing values resolve to their defaults: webtoons, and
   // no adult titles.
-  const [prefs, connection] = await Promise.all([
+  const [prefs, connection, anilist] = await Promise.all([
     getLibraryPrefs(),
     getMalConnection(),
+    getAniListConnection(),
   ]);
+
+  // Searching needs no connection, but adding a title MyAnimeList does not
+  // have writes to AniList — so the catalog cards need to know whether that
+  // is possible before offering the button.
+  const anilistConnected =
+    anilist !== null && anilist.status === "active";
 
   // The shelf is fetched whole, exactly as /library fetches it: matching a
   // title against rows already in the browser is what lets a keystroke narrow
@@ -102,7 +110,7 @@ export default async function SearchPage() {
 
           <SearchPrompt />
           <LibraryResults topSources={topSources} catalog={sources} />
-          <CatalogResults />
+          <CatalogResults anilistConnected={anilistConnected} />
         </div>
       </AppShell>
     </SearchFilters>

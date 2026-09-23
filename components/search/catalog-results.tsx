@@ -1,9 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { Check, Loader2, Plus } from "lucide-react";
 
+import {
+  addAniListEntry,
+  type AddAniListEntryState,
+} from "@/app/actions/add-anilist-entry";
 import { addEntry, type AddEntryState } from "@/app/actions/add-entry";
 import { CoverImage } from "@/components/cover-image";
 import { useSearchFilters } from "@/components/search/search-filters";
@@ -61,7 +66,11 @@ function useDebounced<T>(value: T, ms: number): T {
   return settled;
 }
 
-export function CatalogResults() {
+export function CatalogResults({
+  anilistConnected,
+}: {
+  anilistConnected: boolean;
+}) {
   const { deferredQuery, includeNsfw, mediaKind } = useSearchFilters();
   const query = deferredQuery.trim();
   const settled = useDebounced(query, DEBOUNCE_MS);
@@ -89,6 +98,7 @@ export function CatalogResults() {
           query={settled}
           includeNsfw={includeNsfw}
           mediaKind={mediaKind}
+          anilistConnected={anilistConnected}
           // Shown while the typed term is ahead of the one that was searched,
           // so the panel never looks settled on a stale answer.
           catchingUp={settled !== query}
@@ -103,11 +113,13 @@ function CatalogPanel({
   includeNsfw,
   mediaKind,
   catchingUp,
+  anilistConnected,
 }: {
   query: string;
   includeNsfw: boolean;
   mediaKind: MediaKind;
   catchingUp: boolean;
+  anilistConnected: boolean;
 }) {
   const [results, setResults] = useState<MergedResult[]>([]);
   const [loading, setLoading] = useState(true);
@@ -218,6 +230,7 @@ function CatalogPanel({
             <CatalogResultCard
               key={result.key}
               result={result}
+              anilistConnected={anilistConnected}
               added={
                 result.mal_media_id !== null && added.has(result.mal_media_id)
               }
@@ -252,16 +265,32 @@ function CatalogResultCard({
   result,
   added,
   onAdded,
+  anilistConnected,
 }: {
   result: MergedResult;
   added: boolean;
   onAdded: React.Dispatch<React.SetStateAction<Set<number>>>;
+  anilistConnected: boolean;
 }) {
   const router = useRouter();
-  const [state, action, pending] = useActionState<AddEntryState, FormData>(
+  // A title MyAnimeList does not have is added through AniList instead, which
+  // is a different action with a different source of truth — see
+  // app/actions/add-anilist-entry.ts. Both are wired up unconditionally
+  // because hooks cannot be called behind a branch; only one is ever
+  // submitted.
+  const [malState, malAction, malPending] = useActionState<AddEntryState, FormData>(
     addEntry,
     null,
   );
+  const [anilistState, anilistAction, anilistPending] = useActionState<
+    AddAniListEntryState,
+    FormData
+  >(addAniListEntry, null);
+
+  const anilistOnly = result.mal_media_id === null;
+  const state = anilistOnly ? anilistState : malState;
+  const action = anilistOnly ? anilistAction : malAction;
+  const pending = anilistOnly ? anilistPending : malPending;
   // Guards the effect below. `state` keeps its successful value for the life
   // of the component, so without this the effect re-fires on every render that
   // follows the add — and since it calls router.refresh(), which triggers
@@ -269,16 +298,19 @@ function CatalogResultCard({
   const handled = useRef(false);
 
   const malId = result.mal_media_id;
+  // Rows are tracked as added by whichever id they actually have. AniList-only
+  // ids are negated so they cannot collide with a MAL id in the same set.
+  const addedKey = malId ?? -(result.anilist_media_id ?? 0);
 
   useEffect(() => {
-    if (!state?.ok || handled.current || malId === null) return;
+    if (!state?.ok || handled.current) return;
     handled.current = true;
 
-    onAdded((prev) => new Set(prev).add(malId));
+    onAdded((prev) => new Set(prev).add(addedKey));
     // The action revalidated the library; pull the fresh rows in so the title
     // shows up in the half above without a manual reload.
     router.refresh();
-  }, [state, onAdded, router, malId]);
+  }, [state, onAdded, router, addedKey]);
 
   const hasMismatch = result.mismatches.length > 0;
 
@@ -350,25 +382,38 @@ function CatalogResultCard({
           <Check className="size-3" />
           Added
         </p>
-      ) : malId === null ? (
-        // AniList has no MyAnimeList counterpart for this title, and the
-        // library is keyed on MAL ids — so there is nothing to add against.
-        // Said plainly rather than offering a button that would fail.
-        <p className="text-center text-[10px] leading-tight text-muted-foreground">
-          Not on MyAnimeList, so it can&rsquo;t be added yet
-        </p>
+      ) : anilistOnly && !anilistConnected ? (
+        // Adding this title writes to AniList, since MyAnimeList does not have
+        // it. Unlike searching, that needs a connected account — so the card
+        // says what is missing rather than offering a button that would fail.
+        <Link
+          href="/api/anilist/connect"
+          className="text-center text-[10px] leading-tight text-muted-foreground underline underline-offset-2 hover:text-foreground"
+        >
+          Connect AniList to add
+        </Link>
       ) : (
         <form action={action}>
-          <input type="hidden" name="mal_media_id" value={malId} />
+          {anilistOnly ? (
+            <input
+              type="hidden"
+              name="anilist_media_id"
+              value={result.anilist_media_id ?? ""}
+            />
+          ) : (
+            <input type="hidden" name="mal_media_id" value={malId ?? ""} />
+          )}
           {/* The search already matched this title across both catalogs, so
               the AniList id is known here and the mirror need not look it up
               again. Empty when only MyAnimeList had the title; the action
               reads that as "no id", not as "clear the one on file". */}
-          <input
-            type="hidden"
-            name="anilist_media_id"
-            value={result.anilist_media_id ?? ""}
-          />
+          {anilistOnly ? null : (
+            <input
+              type="hidden"
+              name="anilist_media_id"
+              value={result.anilist_media_id ?? ""}
+            />
+          )}
           {/* Plan to read is the safe default: it claims no progress the user
               hasn't made. They can change it on the entry page. */}
           <input type="hidden" name="list_status" value="plan_to_read" />
