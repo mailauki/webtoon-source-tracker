@@ -21,6 +21,7 @@ import {
 import type { LibraryRow } from "@/lib/data/entries";
 import type { RankedSource } from "@/lib/data/rank-sources";
 import { linkableSources } from "@/lib/data/source-links";
+import { syncTargets } from "@/lib/data/sync-targets";
 
 /**
  * Sends a partial progress update for one entry.
@@ -155,6 +156,14 @@ export function useEntryCardActions({
   // An unknown total (ongoing series) never caps progress.
   const atEnd = Boolean(total && total > 0 && entry.num_chapters_read >= total);
 
+  // The same rule the entry page's editor applies, from the same module: both
+  // surfaces submit updateProgress, so both have to agree about where an edit
+  // goes. Only `nowhereToSave` matters here — the case the action refuses
+  // outright, where offering the item would mean one that can only fail. The
+  // service names are left to the entry page, which has room for the sentence;
+  // a menu row has to stay short enough to scan.
+  const { nowhereToSave } = syncTargets(entry);
+
   const attached = entry.entry_sources;
   const linkable = linkableSources(attached);
   const addable = addableSources(attached, topSources);
@@ -172,8 +181,13 @@ export function useEntryCardActions({
       kind: "run",
       key: "add-chapter",
       Icon: Plus,
-      label: "Add 1 chapter",
-      disabled: atEnd || isPending,
+      // The disabled reason belongs in the label: both surfaces render it, and
+      // a greyed-out row with no explanation is a dead end on a phone, where
+      // there is no title attribute to reveal on hover.
+      label: nowhereToSave
+        ? "Can't record progress — AniList syncing is off"
+        : "Add 1 chapter",
+      disabled: atEnd || isPending || nowhereToSave,
       run: () =>
         run(() =>
           submitPatch(entry, {
@@ -189,7 +203,7 @@ export function useEntryCardActions({
       key: "status",
       Icon: Check,
       label: status.label,
-      disabled: isPending,
+      disabled: isPending || nowhereToSave,
       run: () => run(() => submitStatus(entry, status.value)),
     });
   }

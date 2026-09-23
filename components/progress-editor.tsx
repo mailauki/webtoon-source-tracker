@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { EntryDetail } from "@/lib/data/entries";
+import { syncTargets } from "@/lib/data/sync-targets";
 
 const STATUS_OPTIONS = [
   { value: "reading", label: "Reading" },
@@ -19,42 +20,10 @@ const STATUS_OPTIONS = [
 
 export function ProgressEditor({ entry }: { entry: EntryDetail }) {
   const total = entry.media_titles.num_chapters;
-  /**
-   * The services this edit will actually reach.
-   *
-   * Two things decide it, and reading only the first was wrong: whether the
-   * site has the title at all, and whether the user still syncs it there. A
-   * title excluded from MyAnimeList but not AniList is written only to
-   * AniList, and the button used to promise MyAnimeList — see the branches in
-   * app/actions/progress.ts, which this mirrors exactly.
-   */
-  const targets = [
-    entry.media_titles.mal_media_id !== null && entry.sync_to_mal
-      ? "MyAnimeList"
-      : null,
-    entry.media_titles.anilist_media_id !== null && entry.sync_to_anilist
-      ? "AniList"
-      : null,
-  ].filter((name): name is string => name !== null);
+  // Shared with the library card's menu and sheet, which submit the same
+  // action — see lib/data/sync-targets.ts.
+  const { targets, nowhereToSave, label: remote } = syncTargets(entry);
 
-  /**
-   * Whether the edit can be recorded anywhere at all.
-   *
-   * An AniList-only title with AniList switched off has no home for it: the
-   * action refuses such an edit rather than saving a local-only change that no
-   * sync would ever carry. The form says so rather than letting the user type
-   * a number and be told no on submit.
-   */
-  const nowhereToSave =
-    entry.media_titles.mal_media_id === null && !entry.sync_to_anilist;
-
-  // "MyAnimeList and AniList", or the one that applies. With neither, the edit
-  // is kept locally — which is a real outcome for a title paused on both, not
-  // an error.
-  const remote =
-    targets.length === 2
-      ? "MyAnimeList and AniList"
-      : (targets[0] ?? "your library only");
   const formRef = useRef<HTMLFormElement>(null);
 
   const [state, action] = useActionState<ProgressState, FormData>(
