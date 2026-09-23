@@ -1,13 +1,16 @@
 import "server-only";
 
-import type { AniListClient } from "./client";
+import { anilistRequest, type AniListClient } from "./client";
 import { AniListApiError } from "./errors";
 import {
   anilistListCollectionSchema,
   anilistMediaIdPageSchema,
+  anilistSearchMediaSchema,
+  anilistSearchPageSchema,
   anilistViewerSchema,
   type AniListListEntry,
   type AniListListStatus,
+  type AniListSearchMedia,
   type AniListViewer,
 } from "./types";
 
@@ -48,6 +51,19 @@ const LIST_QUERY = /* GraphQL */ `
           media {
             id
             idMal
+            title {
+              romaji
+              english
+            }
+            format
+            chapters
+            volumes
+            status
+            isAdult
+            coverImage {
+              large
+              medium
+            }
           }
         }
       }
@@ -230,4 +246,189 @@ export async function saveListEntries(
   }
 
   return { saved, failed };
+}
+
+/**
+ * AniList's manga formats that are prose rather than panels.
+ *
+ * The counterpart to NOVEL_KINDS in lib/data/search.ts, which holds MAL's
+ * spelling of the same split. AniList uses one value where MAL uses two —
+ * there is no separate "light novel" format — so both of MAL's map here.
+ */
+const NOVEL_FORMATS = new Set(["NOVEL"]);
+
+/** Whether an AniList `format` is a novel. Unknown formats are not. */
+export function isAniListNovel(format: string | null | undefined): boolean {
+  return NOVEL_FORMATS.has(format ?? "");
+}
+
+const SEARCH_QUERY = /* GraphQL */ `
+  query ($search: String, $perPage: Int, $isAdult: Boolean) {
+    Page(page: 1, perPage: $perPage) {
+      media(search: $search, type: MANGA, isAdult: $isAdult, sort: SEARCH_MATCH) {
+        id
+        idMal
+        title {
+          romaji
+          english
+        }
+        format
+        chapters
+        volumes
+        status
+        isAdult
+        coverImage {
+          large
+          medium
+        }
+      }
+    }
+  }
+`;
+
+/**
+ * Searches the AniList catalog.
+ *
+ * Takes no client, by design. AniList serves catalog reads anonymously, so
+ * this works for an account that has never connected AniList — the token is
+ * only needed for Viewer and for writing list entries. That is what lets the
+ * merged search answer in full regardless of what the user has linked.
+ *
+ * Adult titles are excluded by passing `isAdult: false`, which AniList filters
+ * server-side. Unlike MAL there is no second local pass: `isAdult` is a
+ * boolean AniList sets itself, not a rating string open to interpretation, and
+ * it is returned on every hit so a caller can still check it.
+ *
+ * `sort: SEARCH_MATCH` orders by relevance to the term rather than by
+ * popularity, which is what makes the first rows comparable to MAL's.
+ */
+export async function searchManga(
+  query: string,
+  perPage = 50,
+  { includeMature = false }: { includeMature?: boolean } = {},
+): Promise<AniListSearchMedia[]> {
+  const raw = await anilistRequest<unknown>(null, SEARCH_QUERY, {
+    search: query,
+    perPage,
+    // Undefined rather than true: passing `isAdult: true` would return ONLY
+    // adult titles, where the intent is "do not filter them out".
+    isAdult: includeMature ? undefined : false,
+  });
+
+  return anilistSearchPageSchema.parse(raw).Page.media;
+}
+
+const MEDIA_BY_ID_QUERY = /* GraphQL */ `
+  query ($id: Int) {
+    Media(id: $id, type: MANGA) {
+      id
+      idMal
+      title {
+        romaji
+        english
+      }
+      format
+      chapters
+      volumes
+      status
+      isAdult
+      coverImage {
+        large
+        medium
+      }
+    }
+  }
+`;
+
+/**
+ * One title by its AniList id, or null if AniList no longer has it.
+ *
+ * Used by the AniList-only add path to re-read a title before storing it,
+ * rather than trusting fields posted by the browser — the same reasoning that
+ * has addEntry re-fetch the MAL node. Takes a client because that path already
+ * requires a connected account to write with; the anonymous search above is
+ * the read-only case.
+ *
+ * A missing title comes back as `Media: null` with an error attached, which
+ * anilistRequest throws on, so that is caught and reported as null here.
+ */
+export async function getMediaById(
+  client: AniListClient,
+  mediaId: number,
+): Promise<AniListSearchMedia | null> {
+  let raw;
+  try {
+    raw = await client.request<{ Media: unknown }>(MEDIA_BY_ID_QUERY, {
+      id: mediaId,
+    });
+  } catch (cause) {
+    // Only a "not found" is swallowed. Auth and rate-limit errors must reach
+    // the caller, which reports them differently.
+    if (cause instanceof AniListApiError && cause.status === 404) return null;
+    throw cause;
+  }
+
+  return raw.Media === null ? null : anilistSearchMediaSchema.parse(raw.Media);
+}
+
+const DELETE_ENTRY_QUERY = /* GraphQL */ `
+  mutation ($id: Int) {
+    DeleteMediaListEntry(id: $id) {
+      deleted
+    }
+  }
+`;
+
+const LIST_ENTRY_ID_QUERY = /* GraphQL */ `
+  query ($userId: Int, $mediaId: Int) {
+    MediaList(userId: $userId, mediaId: $mediaId, type: MANGA) {
+      id
+    }
+  }
+`;
+
+/**
+ * Takes a title off the user's AniList list.
+ *
+ * Two round trips, because AniList's delete is keyed on the *list entry* id
+ * rather than the media id every other call here uses — the app never stores
+ * that id, so it has to be looked up. A title that is not on the list has no
+ * entry to find, which AniList reports as an error; that is treated as success
+ * for the same reason the MyAnimeList side treats 404 as success. The caller's
+ * intent is already satisfied.
+ *
+ * Returns whether anything was actually removed, so the caller can tell "taken
+ * off your list" from "was not on it".
+ */
+export async function deleteListEntry(
+  client: AniListClient,
+  anilistUserId: number,
+  mediaId: number,
+): Promise<boolean> {
+  let entryId: number | null = null;
+
+  try {
+    const found = await client.request<{ MediaList: { id: number } | null }>(
+      LIST_ENTRY_ID_QUERY,
+      { userId: anilistUserId, mediaId },
+    );
+    entryId = found.MediaList?.id ?? null;
+  } catch (cause) {
+    // "Not Found" for a title the user does not track. Auth and rate-limit
+    // errors must still reach the caller.
+    if (cause instanceof AniListApiError) return false;
+    throw cause;
+  }
+
+  if (entryId === null) return false;
+
+  try {
+    const result = await client.request<{
+      DeleteMediaListEntry: { deleted: boolean | null } | null;
+    }>(DELETE_ENTRY_QUERY, { id: entryId });
+    return result.DeleteMediaListEntry?.deleted === true;
+  } catch (cause) {
+    if (cause instanceof AniListApiError) return false;
+    throw cause;
+  }
 }

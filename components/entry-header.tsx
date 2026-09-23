@@ -1,5 +1,3 @@
-import { ExternalLink } from "lucide-react";
-
 import { CoverImage } from "@/components/cover-image";
 import {
   HiatusBadge,
@@ -23,7 +21,9 @@ import { progressLabel, statusLabel } from "@/lib/data/entry-labels";
  * about the same title. What it adds is everything a card has no room for and
  * a detail page owes: the canonical title under the English one, the score,
  * the rereading flag, the media kind, every source rather than the first
- * three, and the way out to MyAnimeList.
+ * three. The way out to each catalog lives in EntrySyncStatus below this,
+ * which also says whether progress still travels there — and which, unlike a
+ * bare link, copes with a title MyAnimeList does not have.
  *
  * Deliberately NOT the shared EntryCard in `row` layout. Three things differ
  * and all three matter: this is a Server Component (the card is a client one,
@@ -205,15 +205,6 @@ export function EntryHeader({
           </div>
         ) : null}
 
-        <a
-          href={`https://myanimelist.net/manga/${title.mal_media_id}`}
-          target="_blank"
-          rel="noreferrer noopener"
-          className="inline-flex w-fit items-center gap-1 text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-        >
-          View on MyAnimeList
-          <ExternalLink className="size-3" />
-        </a>
       </div>
     </div>
   );

@@ -333,7 +333,12 @@ export async function syncMalList(
       .in("mal_media_id", batch);
 
     if (error) throw new Error(`Catalog lookup failed: ${error.message}`);
-    for (const row of data ?? []) idMap.set(row.mal_media_id, row.id);
+    // The query filtered on `mal_media_id`, so every row here has one; the
+    // narrowing is for the compiler's benefit, since the column is nullable
+    // now that the catalog can also hold AniList-only titles.
+    for (const row of data ?? []) {
+      if (row.mal_media_id !== null) idMap.set(row.mal_media_id, row.id);
+    }
   }
 
   // Genres are catalog-level facts, so they are written with the catalog
@@ -368,7 +373,40 @@ export async function syncMalList(
     });
   }
 
-  for (const batch of chunk(entryRows, BATCH_SIZE)) {
+  // Rows this sync must not write over, for two different reasons.
+  //
+  // Archived: the user removed the title. Writing its progress back from
+  // MyAnimeList would make the removal look like it had silently failed, with
+  // the title reappearing on the shelf at the next sync.
+  //
+  // sync_to_mal = false: the user detached this title from MyAnimeList, either
+  // by excluding it or by removing it there while keeping it here. Their local
+  // progress is now the only copy that moves — app/actions/progress.ts writes
+  // such a row from the request rather than from MAL's echo — so overwriting
+  // it here would silently undo every edit they make, and MAL's copy is stale
+  // or absent in exactly the case that matters.
+  const { data: protectedRows, error: protectedError } = await admin
+    .from("user_entries")
+    .select("title_id, archived_at, sync_to_mal")
+    .eq("user_id", userId)
+    .or("archived_at.not.is.null,sync_to_mal.eq.false");
+
+  if (protectedError) {
+    throw new Error(`Protected-row lookup failed: ${protectedError.message}`);
+  }
+
+  // Archived is tracked separately: it is the only one of the two that also
+  // needs exempting from the removal step below, where sync_to_mal is read
+  // from its own query for the same purpose.
+  const archived = new Set(
+    (protectedRows ?? [])
+      .filter((r) => r.archived_at !== null)
+      .map((r) => r.title_id),
+  );
+  const protectedIds = new Set((protectedRows ?? []).map((r) => r.title_id));
+  const liveRows = entryRows.filter((r) => !protectedIds.has(r.title_id));
+
+  for (const batch of chunk(liveRows, BATCH_SIZE)) {
     const { error } = await admin
       .from("user_entries")
       .upsert(batch, { onConflict: "user_id,title_id" });
@@ -385,10 +423,14 @@ export async function syncMalList(
   //   b) the fetched count is more than half of what we already have.
   let removed = 0;
 
+  // Live rows only: an archived title is not something MAL was expected to
+  // return, so counting it would make the "did MAL send at least half of what
+  // we hold" guard stricter than it should be and suppress real removals.
   const { count: existingCount } = await admin
     .from("user_entries")
     .select("id", { count: "exact", head: true })
-    .eq("user_id", userId);
+    .eq("user_id", userId)
+    .is("archived_at", null);
 
   // TODO(soft-delete): this is a hard delete, and it cascades to entry_sources
   // — the hand-entered data no sync can rebuild. The 50% guard below makes a
@@ -400,15 +442,61 @@ export async function syncMalList(
     entryRows.length > (existingCount ?? 0) * 0.5;
 
   if (looksComplete && entryRows.length > 0) {
-    const keepTitleIds = entryRows.map((r) => r.title_id);
+    const keepTitleIds = liveRows.map((r) => r.title_id);
     // Guarded above: an empty list would render `not in ()`, which is invalid
     // SQL and would otherwise delete the user's whole library.
+
+    // Titles that do not exist on MyAnimeList are exempt from removal, and
+    // this is load-bearing rather than a refinement. The rule above is "MAL
+    // did not return it, so the user removed it there" — which is only sound
+    // for titles MAL could have returned. An AniList-only entry is absent from
+    // every MAL response by definition, so without this it would be deleted on
+    // the first sync after it was added, cascading to the hand-entered
+    // entry_sources that no sync can rebuild.
+    const { data: anilistOnly, error: anilistOnlyError } = await admin
+      .from("media_titles")
+      .select("id")
+      .is("mal_media_id", null);
+
+    if (anilistOnlyError) {
+      throw new Error(`Removal guard failed: ${anilistOnlyError.message}`);
+    }
+
+    // The second exemption, and the reason sync_to_mal is not merely the
+    // mirror image of sync_to_anilist. The rule this delete implements is
+    // "MyAnimeList did not return it, so the user removed it there" — and
+    // that inference only holds while the app is actually keeping the title
+    // on MyAnimeList. Once the user has excluded it, they may well delete it
+    // there on purpose and still want it tracked here, so its absence from
+    // the response stops being evidence of anything.
+    const { data: excluded, error: excludedError } = await admin
+      .from("user_entries")
+      .select("title_id")
+      .eq("user_id", userId)
+      .eq("sync_to_mal", false);
+
+    if (excludedError) {
+      throw new Error(`Removal guard failed: ${excludedError.message}`);
+    }
+
+    // Fail closed: if either exempt set could not be read, the throws above
+    // skip the delete entirely. Stale rows are recoverable by the next sync;
+    // a wrongly deleted entry and its entry_sources are not.
+    const exempt = [
+      ...(anilistOnly ?? []).map((r) => r.id),
+      ...(excluded ?? []).map((r) => r.title_id),
+      // Already removed by the user. MAL not returning them is expected, and
+      // deleting the row would destroy the entry_sources that archiving was
+      // chosen to preserve.
+      ...archived,
+    ];
+    const keep = [...new Set([...keepTitleIds, ...exempt])];
 
     const { data: deleted, error } = await admin
       .from("user_entries")
       .delete()
       .eq("user_id", userId)
-      .not("title_id", "in", `(${keepTitleIds.join(",")})`)
+      .not("title_id", "in", `(${keep.join(",")})`)
       .select("id");
 
     if (error) throw new Error(`Removal failed: ${error.message}`);

@@ -53,7 +53,13 @@ export type EntryView = {
   /** English where MAL has one. The heading AND the accessible name. */
   name: string;
   coverUrl: string | null;
-  malMediaId: number;
+  /**
+   * Null for a title only AniList has: the catalog no longer requires a
+   * MyAnimeList id. Surfaces that offer to add a title must check it — adding
+   * posts this to `addEntry`, which writes to MyAnimeList first and rejects a
+   * missing id.
+   */
+  malMediaId: number | null;
   /** MAL's chapter count, which the source dialog's "own all" divides by. */
   malTotal: ReturnType<typeof chapterTotal>;
   /** The raw catalog count the progress bar divides by. May be 0 or null. */

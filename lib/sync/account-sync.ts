@@ -146,9 +146,50 @@ export async function syncAccounts(
     anilist: anilistList.complete,
   });
 
+  // Titles the user has excluded from one side or the other. Applied to the
+  // planned writes rather than to the lists above, deliberately: the planner
+  // still sees both sides in full, so an excluded title is reported as
+  // in-sync or not on its real state rather than looking like a title neither
+  // service has. Only the write is withheld.
+  const { data: exclusions, error: exclusionsError } = await admin
+    .from("user_entries")
+    .select(
+      "sync_to_mal, sync_to_anilist, archived_at, media_titles!inner (mal_media_id)",
+    )
+    .eq("user_id", userId)
+    .or("sync_to_mal.eq.false,sync_to_anilist.eq.false,archived_at.not.is.null");
+
+  if (exclusionsError) {
+    throw new Error(`Could not read sync exclusions: ${exclusionsError.message}`);
+  }
+
+  const noMal = new Set<number>();
+  const noAniList = new Set<number>();
+  for (const row of exclusions ?? []) {
+    const title = row.media_titles as unknown as { mal_media_id: number | null };
+    if (title?.mal_media_id == null) continue;
+
+    // A removed title is excluded from both sides regardless of its flags:
+    // copying it between services is exactly what the user asked to stop.
+    const removed = row.archived_at !== null;
+    if (removed || !row.sync_to_mal) noMal.add(title.mal_media_id);
+    if (removed || !row.sync_to_anilist) noAniList.add(title.mal_media_id);
+  }
+
   const toMal: PlannedWrite[] = [];
   const toAniList: PlannedWrite[] = [];
+  let excluded = 0;
   for (const write of plan.writes) {
+    const blocked =
+      write.target === "mal"
+        ? noMal.has(write.malId)
+        : noAniList.has(write.malId);
+
+    if (blocked) {
+      excluded++;
+      continue;
+    }
+
     (write.target === "mal" ? toMal : toAniList).push(write);
   }
 
@@ -254,6 +295,7 @@ export async function syncAccounts(
     inSync: plan.inSync,
     unmatched,
     remaining,
+    excluded,
     failed,
   };
 }
@@ -285,12 +327,18 @@ async function cacheAniListIds(
     if (!data || data.length === 0) continue;
 
     const { error: upsertError } = await admin.from("media_titles").upsert(
-      data.map((row) => ({
-        media_type: "manga",
-        mal_media_id: row.mal_media_id,
-        title: row.title,
-        anilist_media_id: anilistIds.get(row.mal_media_id) ?? null,
-      })),
+      // Filtered rather than asserted: the query above selects by
+      // `mal_media_id`, so a null cannot occur, but the column is nullable now
+      // that AniList-only titles share this table and an upsert keyed on a
+      // null id would not match the partial unique index.
+      data
+        .filter((row) => row.mal_media_id !== null)
+        .map((row) => ({
+          media_type: "manga",
+          mal_media_id: row.mal_media_id,
+          title: row.title,
+          anilist_media_id: anilistIds.get(row.mal_media_id!) ?? null,
+        })),
       { onConflict: "media_type,mal_media_id" },
     );
 

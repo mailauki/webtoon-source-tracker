@@ -375,7 +375,7 @@ export type Database = {
           created_at: string
           id: number
           main_picture_url: string | null
-          mal_media_id: number
+          mal_media_id: number | null
           mal_media_kind: string | null
           mal_status: string | null
           media_type: string
@@ -392,7 +392,7 @@ export type Database = {
           created_at?: string
           id?: never
           main_picture_url?: string | null
-          mal_media_id: number
+          mal_media_id?: number | null
           mal_media_kind?: string | null
           mal_status?: string | null
           media_type?: string
@@ -409,7 +409,7 @@ export type Database = {
           created_at?: string
           id?: never
           main_picture_url?: string | null
-          mal_media_id?: number
+          mal_media_id?: number | null
           mal_media_kind?: string | null
           mal_status?: string | null
           media_type?: string
@@ -597,6 +597,7 @@ export type Database = {
       }
       user_entries: {
         Row: {
+          archived_at: string | null
           created_at: string
           id: number
           is_rereading: boolean
@@ -605,12 +606,15 @@ export type Database = {
           num_chapters_read: number
           num_volumes_read: number
           score: number
+          sync_to_anilist: boolean
+          sync_to_mal: boolean
           synced_at: string
           title_id: number
           updated_at: string
           user_id: string
         }
         Insert: {
+          archived_at?: string | null
           created_at?: string
           id?: never
           is_rereading?: boolean
@@ -619,12 +623,15 @@ export type Database = {
           num_chapters_read?: number
           num_volumes_read?: number
           score?: number
+          sync_to_anilist?: boolean
+          sync_to_mal?: boolean
           synced_at?: string
           title_id: number
           updated_at?: string
           user_id: string
         }
         Update: {
+          archived_at?: string | null
           created_at?: string
           id?: never
           is_rereading?: boolean
@@ -633,6 +640,8 @@ export type Database = {
           num_chapters_read?: number
           num_volumes_read?: number
           score?: number
+          sync_to_anilist?: boolean
+          sync_to_mal?: boolean
           synced_at?: string
           title_id?: number
           updated_at?: string
@@ -694,6 +703,20 @@ export type Database = {
           p_user_id: string
         }
         Returns: undefined
+      }
+      media_titles_upsert_anilist: {
+        Args: {
+          p_anilist_media_id: number
+          p_main_picture_url?: string
+          p_mal_status?: string
+          p_media_kind?: string
+          p_nsfw?: string
+          p_num_chapters?: number
+          p_num_volumes?: number
+          p_title: string
+          p_title_en?: string
+        }
+        Returns: number
       }
     }
     Enums: {

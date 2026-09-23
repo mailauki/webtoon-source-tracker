@@ -549,3 +549,76 @@ describe("the actions sheet", () => {
     ).toBeDisabled();
   });
 });
+
+/**
+ * The card's quick actions obey the same sync rules as the entry page.
+ *
+ * Both surfaces submit `updateProgress`, so both have to agree about where an
+ * edit goes. The menu and the sheet share `useEntryCardActions`, which is why
+ * one rule covers all three places a chapter can be added.
+ */
+describe("quick actions and sync exclusions", () => {
+  const anilistOnlyPaused = row({
+    media_titles: {
+      id: 500,
+      title: "Tower of God",
+      num_chapters: 179,
+      main_picture_url: null,
+      mal_media_id: null,
+      anilist_media_id: 112348,
+    },
+    sync_to_anilist: false,
+  } as unknown as Partial<LibraryRow>);
+
+  it("offers the chapter action normally", async () => {
+    await openMenu();
+    expect(
+      screen.getByRole("menuitem", { name: /Add 1 chapter/ }),
+    ).not.toHaveAttribute("aria-disabled", "true");
+  });
+
+  // The one shape updateProgress refuses outright: AniList has the title,
+  // MyAnimeList does not, and AniList syncing is off. Offering it would be a
+  // menu item that can only produce an error toast.
+  it("disables it and says why when the edit has nowhere to go", async () => {
+    await openMenu(anilistOnlyPaused);
+
+    const item = screen.getByRole("menuitem", {
+      name: /AniList syncing is off/,
+    });
+    expect(item).toHaveAttribute("aria-disabled", "true");
+    expect(
+      screen.queryByRole("menuitem", { name: /^Add 1 chapter$/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("applies the same rule in the sheet", async () => {
+    // Same hook, so this is a guard against the two drifting rather than a
+    // second implementation.
+    await openSheet(anilistOnlyPaused);
+    expect(
+      screen.getByRole("button", { name: /AniList syncing is off/ }),
+    ).toBeDisabled();
+  });
+
+  it("still allows an edit when only MyAnimeList is paused", async () => {
+    // The local row leads and AniList is mirrored, so this must stay live.
+    await openMenu(
+      row({
+        media_titles: {
+          id: 500,
+          title: "Tower of God",
+          num_chapters: 179,
+          main_picture_url: null,
+          mal_media_id: 121496,
+          anilist_media_id: 105398,
+        },
+        sync_to_mal: false,
+      } as unknown as Partial<LibraryRow>),
+    );
+
+    expect(
+      screen.getByRole("menuitem", { name: /Add 1 chapter/ }),
+    ).not.toHaveAttribute("aria-disabled", "true");
+  });
+});

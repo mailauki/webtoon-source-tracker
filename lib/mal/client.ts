@@ -47,6 +47,78 @@ function encodeForm(form: Record<string, string | number | boolean | undefined>)
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
+ * A request made with the app's own client id rather than a user's token.
+ *
+ * MAL accepts `X-MAL-CLIENT-ID` for public catalog reads, which is what lets
+ * search work for an account that has never connected MyAnimeList. It is only
+ * good for public data: anything under /users/@me still needs a bearer token.
+ *
+ * Retries and timeout are shared with the authed path below by way of
+ * `fetchWithRetry` — the difference between the two is the header, not the
+ * error handling.
+ */
+export async function malPublicRequest<T>(
+  path: string,
+  query?: RequestOptions["query"],
+): Promise<T> {
+  const clientId = process.env.MAL_CLIENT_ID;
+  if (!clientId) throw new MalApiError("MAL_CLIENT_ID is not set", 0);
+
+  const response = await fetchWithRetry(buildUrl(path, query), {
+    "X-MAL-CLIENT-ID": clientId,
+  });
+
+  if (response.ok) return (await response.json()) as T;
+
+  // No token is involved, so a 401 here means the client id itself is wrong —
+  // a configuration problem, not something a reconnect would fix.
+  if (response.status === 401) {
+    throw new MalApiError("MyAnimeList rejected the client id", 401);
+  }
+  if (response.status === 403) throw new MalRateLimitError();
+
+  throw new MalApiError(
+    `MyAnimeList request failed (${response.status}): ${await response.text()}`,
+    response.status,
+  );
+}
+
+/**
+ * One GET with the shared retry policy, returning the last response.
+ *
+ * Retries 429s and 5xxs, honouring Retry-After when MAL sends one. 401/403 and
+ * other 4xxs come straight back for the caller to interpret — what they mean
+ * differs between the authed and client-id paths.
+ */
+async function fetchWithRetry(
+  url: string,
+  headers: Record<string, string>,
+): Promise<Response> {
+  let last: Response | undefined;
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    last = await fetch(url, {
+      headers,
+      // Per-user data must never enter the shared Data Cache.
+      cache: "no-store",
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+
+    const retryable = last.status === 429 || last.status >= 500;
+    if (!retryable || attempt === MAX_RETRIES - 1) return last;
+
+    const retryAfter = Number(last.headers.get("retry-after"));
+    await sleep(
+      Number.isFinite(retryAfter) && retryAfter > 0
+        ? retryAfter * 1000
+        : 2 ** attempt * 500 + Math.random() * 250, // jittered
+    );
+  }
+
+  return last!;
+}
+
+/**
  * A MyAnimeList API client bound to one user.
  *
  * Token freshness is handled by reacting to 401s, never by inspecting
@@ -127,7 +199,12 @@ export class MalClient {
       });
 
       if (response.ok) {
-        return (await response.json()) as T;
+        // DELETE /manga/{id}/my_list_status answers 200 with an empty body,
+        // and response.json() throws on empty input. Anything with no content
+        // resolves to undefined, which is what deleteListStatus expects; every
+        // other endpoint here returns a JSON object and is unaffected.
+        const text = await response.text();
+        return (text ? JSON.parse(text) : undefined) as T;
       }
 
       // 401 -> refresh once, then retry the original request.

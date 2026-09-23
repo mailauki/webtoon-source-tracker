@@ -154,3 +154,39 @@ describe("rows missing a value", () => {
     expect(ids(sortEntries(rows, sort("added", "asc")))).toEqual([2, 1]);
   });
 });
+
+/**
+ * Sorting with two catalogs behind the library.
+ *
+ * The grid is one flat list — provider is not a sort key and not a tiebreaker,
+ * so rows from MyAnimeList and AniList interleave purely by value. What makes
+ * that worth pinning is how it broke: `mal_updated_at` is MAL's vocabulary for
+ * "when the user last touched this", the AniList write paths did not set it,
+ * and rows missing the active key sort LAST in both directions. A title added
+ * from AniList seconds ago therefore landed at the very bottom of "Newest
+ * first". Verified against production, where it sat at position 1121 of 1121.
+ */
+describe("sorting across both catalogs", () => {
+  const at = (iso: string) => new Date(iso).toISOString();
+
+  // Two MAL-backed rows and one from AniList, the AniList one most recent.
+  const mixed = [
+    row(1, { title: "MAL older", updated: at("2026-09-01T00:00:00Z") }),
+    row(2, { title: "AniList newest", updated: at("2026-09-23T00:00:00Z") }),
+    row(3, { title: "MAL newer", updated: at("2026-09-10T00:00:00Z") }),
+  ];
+
+  it("interleaves the two sources by date rather than grouping them", () => {
+    expect(ids(sortEntries(mixed, sort("updated", "desc")))).toEqual([2, 3, 1]);
+    expect(ids(sortEntries(mixed, sort("updated", "asc")))).toEqual([1, 3, 2]);
+  });
+
+  it("buries a row whose timestamp was never set, in both directions", () => {
+    // The bug, stated as a property: this is why the AniList write paths must
+    // stamp mal_updated_at rather than leaving it null.
+    const withNull = [...mixed, row(4, { title: "AniList unset", updated: null })];
+
+    expect(ids(sortEntries(withNull, sort("updated", "desc"))).at(-1)).toBe(4);
+    expect(ids(sortEntries(withNull, sort("updated", "asc"))).at(-1)).toBe(4);
+  });
+});

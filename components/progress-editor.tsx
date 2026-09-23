@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { EntryDetail } from "@/lib/data/entries";
+import { syncTargets } from "@/lib/data/sync-targets";
 
 const STATUS_OPTIONS = [
   { value: "reading", label: "Reading" },
@@ -19,6 +20,10 @@ const STATUS_OPTIONS = [
 
 export function ProgressEditor({ entry }: { entry: EntryDetail }) {
   const total = entry.media_titles.num_chapters;
+  // Shared with the library card's menu and sheet, which submit the same
+  // action — see lib/data/sync-targets.ts.
+  const { targets, nowhereToSave, label: remote } = syncTargets(entry);
+
   const formRef = useRef<HTMLFormElement>(null);
 
   const [state, action] = useActionState<ProgressState, FormData>(
@@ -55,7 +60,9 @@ export function ProgressEditor({ entry }: { entry: EntryDetail }) {
       <div>
         <h2 className="font-display text-lg font-semibold">Progress</h2>
         <p className="text-sm text-muted-foreground">
-          Changes are saved to MyAnimeList.
+          {nowhereToSave
+            ? "This title is only on AniList, and you've turned AniList syncing off for it — so there's nowhere to record progress."
+            : `Changes are saved to ${remote}.`}
         </p>
       </div>
 
@@ -68,7 +75,7 @@ export function ProgressEditor({ entry }: { entry: EntryDetail }) {
               variant="outline"
               size="icon"
               className="rounded-pill"
-              disabled={isPending || optimisticChapters <= 0}
+              disabled={isPending || nowhereToSave || optimisticChapters <= 0}
               onClick={() => submitChapters(optimisticChapters - 1)}
               aria-label="One chapter back"
             >
@@ -91,6 +98,7 @@ export function ProgressEditor({ entry }: { entry: EntryDetail }) {
               className="rounded-pill"
               disabled={
                 isPending ||
+                nowhereToSave ||
                 (total !== null && total > 0 && optimisticChapters >= total)
               }
               onClick={() => submitChapters(optimisticChapters + 1)}
@@ -105,7 +113,8 @@ export function ProgressEditor({ entry }: { entry: EntryDetail }) {
           </div>
           {total && total > 0 && optimisticChapters >= total ? (
             <p className="text-xs text-muted-foreground">
-              Finishing the last chapter marks this completed on MyAnimeList.
+              Finishing the last chapter marks this completed
+              {targets.length > 0 ? ` on ${remote}` : ""}.
             </p>
           ) : null}
         </div>
@@ -163,11 +172,14 @@ export function ProgressEditor({ entry }: { entry: EntryDetail }) {
           <div className="sm:col-span-3">
             <Button
               type="submit"
-              disabled={isPending}
+              // Disabled rather than left to fail on submit: the action
+              // refuses this case, and letting someone type a chapter number
+              // before telling them is the worse of the two.
+              disabled={isPending || nowhereToSave}
               className="rounded-pill bg-brand px-6 font-bold text-brand-foreground hover:bg-brand/90"
             >
               {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-              Save to MyAnimeList
+              {targets.length > 0 ? `Save to ${remote}` : "Save"}
             </Button>
           </div>
         </form>

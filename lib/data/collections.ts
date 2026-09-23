@@ -120,6 +120,9 @@ export async function getTrackedEntries(): Promise<Map<number, TrackedEntry>> {
             "id, title_id, list_status, entry_sources ( sources ( slug ) )",
             { count: "exact" },
           )
+          // Archived titles are not tracked any more, so a collection card
+          // should offer to add them again rather than showing them as owned.
+          .is("archived_at", null)
           .order("id", { ascending: true })
           .range(from, to),
       "tracked titles",
@@ -314,6 +317,7 @@ export async function getLibraryTitles() {
             count: "exact",
           },
         )
+        .is("archived_at", null)
         .order("mal_updated_at", { ascending: false, nullsFirst: false })
         // A unique tiebreak, so a page boundary cannot fall inside a run of
         // rows that share an update stamp.

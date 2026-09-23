@@ -6,6 +6,8 @@ import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { EntryCollections } from "@/components/entry-collections";
 import { EntryHeader } from "@/components/entry-header";
+import { EntryRemove } from "@/components/entry-remove";
+import { EntrySyncStatus } from "@/components/entry-sync-status";
 import { EntrySourceEditor } from "@/components/entry-source-editor";
 import { EntryTags } from "@/components/entry-tags";
 import { ProgressEditor } from "@/components/progress-editor";
@@ -88,6 +90,19 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
           />
         </EntryHeader>
 
+        {/* Below the header rather than inside it: EntryHeader is the shelf
+            row at detail scale, and this is not something a row has. It also
+            replaces the header's own "View on MyAnimeList" link, which builds
+            a URL from `mal_media_id` unconditionally — that is null for a
+            title only AniList has, so the link would point at /manga/null. */}
+        <EntrySyncStatus
+          malMediaId={title.mal_media_id}
+          anilistMediaId={title.anilist_media_id}
+          syncToMal={entry.sync_to_mal}
+          syncToAniList={entry.sync_to_anilist}
+          archived={entry.archived_at !== null}
+        />
+
         <ProgressEditor entry={entry} />
 
         <EntrySourceEditor
@@ -100,6 +115,16 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
         {/* Below the sources: where you read a title is the point of the app,
             and which lists you filed it under is the lighter question. */}
         <EntryCollections titleId={title.id} collections={collections} />
+
+        {/* Last on the page, and visually quiet: this is the one action here
+            that can reach past the app and change a list on another site. */}
+        <EntryRemove
+          entryId={entry.id}
+          title={displayTitle(title)}
+          onMal={title.mal_media_id !== null}
+          onAniList={title.anilist_media_id !== null}
+          archived={entry.archived_at !== null}
+        />
       </div>
     </AppShell>
   );

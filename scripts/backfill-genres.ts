@@ -461,10 +461,18 @@ async function main(admin: SupabaseAdmin, malClientId: string, malClientSecret: 
     if (error) throw new Error(`Catalog read failed: ${error.message}`);
     if (!rows || rows.length === 0) break;
 
-    const idMap = new Map(rows.map((r) => [r.mal_media_id, r.id]));
+    // AniList-only titles are skipped outright: this script enriches the
+    // catalog from MyAnimeList, and a row MAL has never heard of has nothing
+    // to fetch. Unlike the sync paths, this one pages the whole catalog rather
+    // than selecting by mal_media_id, so these rows genuinely arrive here.
+    const malRows = rows.filter(
+      (r): r is typeof r & { mal_media_id: number } => r.mal_media_id !== null,
+    );
+
+    const idMap = new Map(malRows.map((r) => [r.mal_media_id, r.id]));
     const nodes: MangaNode[] = [];
 
-    for (const row of rows) {
+    for (const row of malRows) {
       try {
         const result = await fetchTitle(
           admin,

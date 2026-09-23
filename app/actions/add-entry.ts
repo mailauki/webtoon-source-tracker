@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { describeMirror, mirrorToAniList } from "@/lib/anilist/mirror";
 import { verifySession } from "@/lib/auth/dal";
+import { anilistIdPatch } from "@/lib/data/cross-search";
 import { MalClient } from "@/lib/mal/client";
 import { getManga, updateListStatus } from "@/lib/mal/endpoints";
 import { MalAuthError, MalRateLimitError } from "@/lib/mal/errors";
@@ -20,6 +21,21 @@ export type AddEntryState =
 const addSchema = z.object({
   malMediaId: z.coerce.number().int().positive(),
   listStatus: z.enum(MAL_LIST_STATUSES).default("plan_to_read"),
+  /**
+   * The AniList id the search already resolved for this title, if it found one.
+   *
+   * Optional, and only ever a head start: the cross-catalog search matches on
+   * AniList's own `idMal`, so by the time a result is on screen the mapping
+   * mirrorToAniList would otherwise go looking for is already known. Passing it
+   * through saves that lookup — which matters beyond one request, because the
+   * lookup needs a connected AniList account and the search does not. A title
+   * added before AniList is connected would otherwise reach mirrorToAniList
+   * with nothing cached and no client to resolve it with.
+   *
+   * Empty string coerces to undefined rather than 0: the hidden input is always
+   * present in the form, and carries "" when the search found no counterpart.
+   */
+  anilistMediaId: z.coerce.number().int().positive().optional(),
 });
 
 /**
@@ -43,13 +59,14 @@ export async function addEntry(
   const parsed = addSchema.safeParse({
     malMediaId: formData.get("mal_media_id"),
     listStatus: formData.get("list_status") || undefined,
+    anilistMediaId: formData.get("anilist_media_id") || undefined,
   });
 
   if (!parsed.success) {
     return { ok: false, error: "That title couldn't be added." };
   }
 
-  const { malMediaId, listStatus } = parsed.data;
+  const { malMediaId, listStatus, anilistMediaId } = parsed.data;
 
   // --- MAL first -----------------------------------------------------------
   // Re-fetch the node rather than trusting the client's posted fields: this is
@@ -105,6 +122,9 @@ export async function addEntry(
         // path that writes a catalog row, and a title added from search must
         // carry its rating or it would be invisible to the hide-adult switch.
         nsfw: node.nsfw ?? null,
+        // Only ever written when the search resolved one — see anilistIdPatch,
+        // which is careful never to blank an id already on the row.
+        ...anilistIdPatch(anilistMediaId),
         synced_at: now,
       },
       { onConflict: "media_type,mal_media_id" },

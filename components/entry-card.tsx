@@ -643,7 +643,10 @@ const EntryRowBody = forwardRef<
         <CardControls view={view} onOpenSheet={onOpenSheet} overlay={false} />
         {/* An untracked title's one action, sized to sit in the same slot the
         read link would. */}
-        {!entry && !view.entryHref ? (
+        {/* No MyAnimeList id means no way to add it: addEntry writes to MAL
+            first, so the button could only fail. Titles only AniList has are
+            added from /search, which knows how to reach AniList. */}
+        {!entry && !view.entryHref && view.malMediaId !== null ? (
           <AddTitleButton malMediaId={view.malMediaId} name={name} compact />
         ) : null}
         {removable ? (
@@ -685,7 +688,7 @@ function CardFooter({ view }: { view: EntryView }) {
           {view.note}
         </p>
       ) : null}
-      {view.entryHref ? null : (
+      {view.entryHref || view.malMediaId === null ? null : (
         <AddTitleButton malMediaId={view.malMediaId} name={view.name} />
       )}
     </div>

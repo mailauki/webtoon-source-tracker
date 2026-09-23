@@ -30,7 +30,7 @@ export type MirrorOutcome =
  */
 export async function mirrorToAniList(
   userId: string,
-  title: { id: number; mal_media_id: number; anilist_media_id: number | null },
+  title: { id: number; mal_media_id: number | null; anilist_media_id: number | null },
   state: {
     status: MalListStatus;
     num_chapters_read: number;
@@ -55,6 +55,12 @@ export async function mirrorToAniList(
 
     let mediaId = title.anilist_media_id;
     if (mediaId === null) {
+      // An AniList-only row always carries its AniList id — that id is the
+      // only thing identifying it — so reaching here without one means the
+      // row is a MAL title whose counterpart has not been resolved yet.
+      // Without a MAL id there is nothing to look it up by.
+      if (title.mal_media_id === null) return "unmatched";
+
       const found = await findMediaByMalIds(client, [title.mal_media_id]);
       mediaId = found.get(title.mal_media_id) ?? null;
       if (mediaId === null) return "unmatched";
