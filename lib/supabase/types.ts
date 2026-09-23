@@ -65,6 +65,47 @@ export type Database = {
           },
         ]
       }
+      anilist_connections: {
+        Row: {
+          anilist_avatar_url: string | null
+          anilist_user_id: number
+          anilist_username: string
+          connected_at: string
+          last_synced_at: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          anilist_avatar_url?: string | null
+          anilist_user_id: number
+          anilist_username: string
+          connected_at?: string
+          last_synced_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          anilist_avatar_url?: string | null
+          anilist_user_id?: number
+          anilist_username?: string
+          connected_at?: string
+          last_synced_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "anilist_connections_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       collection_items: {
         Row: {
           collection_id: number
@@ -330,6 +371,7 @@ export type Database = {
       }
       media_titles: {
         Row: {
+          anilist_media_id: number | null
           created_at: string
           id: number
           main_picture_url: string | null
@@ -346,6 +388,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          anilist_media_id?: number | null
           created_at?: string
           id?: never
           main_picture_url?: string | null
@@ -362,6 +405,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          anilist_media_id?: number | null
           created_at?: string
           id?: never
           main_picture_url?: string | null
@@ -616,6 +660,23 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      anilist_tokens_delete: { Args: { p_user_id: string }; Returns: undefined }
+      anilist_tokens_get: {
+        Args: { p_user_id: string }
+        Returns: {
+          access_token: string
+          expires_at: string | null
+        }[]
+      }
+      anilist_tokens_upsert: {
+        Args: {
+          p_access_token: string
+          p_expires_at?: string
+          p_token_type?: string
+          p_user_id: string
+        }
+        Returns: undefined
+      }
       mal_tokens_delete: { Args: { p_user_id: string }; Returns: undefined }
       mal_tokens_get: {
         Args: { p_user_id: string }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { verifySession } from "@/lib/auth/dal";
 import {
+  MAL_COOKIE_PATH,
   PKCE_COOKIE,
   STATE_COOKIE,
   buildAuthorizeUrl,
@@ -34,7 +35,10 @@ export async function GET() {
     // cross-site redirect back from myanimelist.net, so the callback would
     // find no verifier and every link attempt would fail.
     sameSite: "lax" as const,
-    path: "/mal",
+    // Must cover the callback's URL, or the browser never sends these back
+    // to it. This was "/mal" until the handlers moved under /api, after which
+    // every callback found no verifier and failed as "link request expired".
+    path: MAL_COOKIE_PATH,
     maxAge: 600,
   };
 

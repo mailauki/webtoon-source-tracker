@@ -8,6 +8,12 @@ Your account lives in Supabase. MyAnimeList is a **connection** you link to it,
 not a login — so you can unlink and relink without losing anything, and account
 recovery works normally.
 
+AniList can be connected the same way. MyAnimeList stays the library's source
+of truth; AniList is kept in step with it — progress saved in the app is
+mirrored there, and **Settings → Sync accounts** reconciles the two lists
+(both ways, newest edit wins, or one way). Nothing is ever deleted from
+either site.
+
 ## Scope
 
 Deliberate boundaries, so a feature that crosses one gets questioned rather
@@ -40,6 +46,7 @@ what.
 - Tailwind v4 + shadcn/ui (owned source, restyled)
 - Supabase — Postgres, Auth, RLS
 - MyAnimeList API v2
+- AniList GraphQL API
 
 ## Setup
 
@@ -81,7 +88,8 @@ Browser ─▶ proxy.ts            cheap cookie check only (no DB, no network)
         app/(app)/*  ─▶ lib/auth/dal.ts    real auth, cached per request
              │
              ├─▶ Supabase (RLS)            library, entries, sources
-             └─▶ Server Actions ─▶ MalClient ─▶ api.myanimelist.net
+             └─▶ Server Actions ─┬▶ MalClient     ─▶ api.myanimelist.net
+                                 └▶ AniListClient ─▶ graphql.anilist.co
 ```
 
 **Two-layer auth.** `proxy.ts` only checks whether a session cookie exists, to
@@ -97,6 +105,8 @@ independently reachable HTTP endpoints, so a layout check does not protect them.
 | `profiles` | one row per auth user |
 | `mal_connections` | links an account to a MAL account (`active` / `disconnected` / `needs_reauth`) |
 | `private.mal_tokens` | OAuth tokens; unreachable via the Data API |
+| `anilist_connections` | links an account to an AniList account, same statuses as MAL |
+| `private.anilist_tokens` | AniList access token; same isolation as `mal_tokens` |
 | `media_titles` | **shared catalog** — one row per MAL title, owned by nobody |
 | `user_entries` | one user's progress against a title |
 | `entry_sources` | **where that user reads it** — the product |
@@ -130,4 +140,15 @@ Each of these was found the hard way; all are load-bearing.
   when every page fetched cleanly *and* the result exceeds half the stored
   count. A partial MAL response must never cascade away hand-entered sources.
 - **Writes go to MAL first.** The local cache updates only from MAL's echoed
-  response, so it can fall behind MAL but never ahead.
+  response, so it can fall behind MAL but never ahead. AniList is mirrored
+  *after* both succeed, best-effort — a failed AniList write never fails the
+  save; the account sync repairs it.
+- **AniList tokens last a year and cannot be refreshed.** Its token response
+  includes a `refresh_token`, but AniList does not honour it. On expiry the
+  connection goes `needs_reauth` and the user reconnects.
+- **AniList scores are written as `scoreRaw` (0–100)**, never `score`, which is
+  read in the user's own score format — a 7 sent to a POINT_100 user lands as
+  7/100.
+- **Titles are matched across the two sites by MAL id** (AniList's `idMal`).
+  An AniList title with no MAL counterpart cannot be synced — common for
+  Korean webtoons — and is reported as skipped rather than guessed at.

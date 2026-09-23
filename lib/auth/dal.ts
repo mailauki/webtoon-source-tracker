@@ -10,6 +10,8 @@ import type { Database } from "@/lib/supabase/types";
 export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 export type MalConnection =
   Database["public"]["Tables"]["mal_connections"]["Row"];
+export type AniListConnection =
+  Database["public"]["Tables"]["anilist_connections"]["Row"];
 export type LibraryPrefs =
   Database["public"]["Tables"]["library_prefs"]["Row"];
 
@@ -98,6 +100,27 @@ export const getMalConnection = cache(async (): Promise<MalConnection | null> =>
 
   return data;
 });
+
+/**
+ * The user's AniList connection, or null when they have not linked one.
+ *
+ * Same shape and meaning as getMalConnection: a `needs_reauth` row drives the
+ * reconnect prompt, a `disconnected` one reads as not connected.
+ */
+export const getAniListConnection = cache(
+  async (): Promise<AniListConnection | null> => {
+    const { userId } = await verifySession();
+    const supabase = await createClient();
+
+    const { data } = await supabase
+      .from("anilist_connections")
+      .select("*")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    return data;
+  },
+);
 
 /** All identities (email, google, discord…) linked to the current account. */
 export const getUserIdentities = cache(async () => {

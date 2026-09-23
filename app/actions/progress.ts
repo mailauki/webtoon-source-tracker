@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { describeMirror, mirrorToAniList } from "@/lib/anilist/mirror";
 import { verifySession } from "@/lib/auth/dal";
 import { MalClient } from "@/lib/mal/client";
 import { updateListStatus } from "@/lib/mal/endpoints";
@@ -59,7 +60,9 @@ export async function updateProgress(
   // keeps that safe even if this ever moves to an admin client.
   const { data: entry, error: loadError } = await supabase
     .from("user_entries")
-    .select("id, user_id, num_chapters_read, media_titles!inner (mal_media_id, num_chapters)")
+    .select(
+      "id, user_id, num_chapters_read, media_titles!inner (id, mal_media_id, anilist_media_id, num_chapters)",
+    )
     .eq("id", entryId)
     .maybeSingle();
 
@@ -150,8 +153,18 @@ export async function updateProgress(
     };
   }
 
+  // --- then AniList, best-effort -------------------------------------------
+  // Only after MAL and the local copy both hold the edit. It never fails the
+  // save: see mirrorToAniList for why.
+  const mirrored = describeMirror(
+    await mirrorToAniList(userId, entry.media_titles, echoed),
+  );
+
   revalidatePath(`/entry/${entryId}`);
   revalidatePath("/library");
 
-  return { ok: true, message: "Saved to MyAnimeList." };
+  return {
+    ok: true,
+    message: mirrored ? `Saved to MyAnimeList. ${mirrored}` : "Saved to MyAnimeList.",
+  };
 }
