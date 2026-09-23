@@ -602,6 +602,8 @@ export type Database = {
           num_chapters_read: number
           num_volumes_read: number
           score: number
+          sync_to_anilist: boolean
+          sync_to_mal: boolean
           synced_at: string
           title_id: number
           updated_at: string
@@ -616,6 +618,8 @@ export type Database = {
           num_chapters_read?: number
           num_volumes_read?: number
           score?: number
+          sync_to_anilist?: boolean
+          sync_to_mal?: boolean
           synced_at?: string
           title_id: number
           updated_at?: string
@@ -630,6 +634,8 @@ export type Database = {
           num_chapters_read?: number
           num_volumes_read?: number
           score?: number
+          sync_to_anilist?: boolean
+          sync_to_mal?: boolean
           synced_at?: string
           title_id?: number
           updated_at?: string

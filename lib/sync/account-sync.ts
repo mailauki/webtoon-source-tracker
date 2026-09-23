@@ -146,9 +146,44 @@ export async function syncAccounts(
     anilist: anilistList.complete,
   });
 
+  // Titles the user has excluded from one side or the other. Applied to the
+  // planned writes rather than to the lists above, deliberately: the planner
+  // still sees both sides in full, so an excluded title is reported as
+  // in-sync or not on its real state rather than looking like a title neither
+  // service has. Only the write is withheld.
+  const { data: exclusions, error: exclusionsError } = await admin
+    .from("user_entries")
+    .select("sync_to_mal, sync_to_anilist, media_titles!inner (mal_media_id)")
+    .eq("user_id", userId)
+    .or("sync_to_mal.eq.false,sync_to_anilist.eq.false");
+
+  if (exclusionsError) {
+    throw new Error(`Could not read sync exclusions: ${exclusionsError.message}`);
+  }
+
+  const noMal = new Set<number>();
+  const noAniList = new Set<number>();
+  for (const row of exclusions ?? []) {
+    const title = row.media_titles as unknown as { mal_media_id: number | null };
+    if (title?.mal_media_id == null) continue;
+    if (!row.sync_to_mal) noMal.add(title.mal_media_id);
+    if (!row.sync_to_anilist) noAniList.add(title.mal_media_id);
+  }
+
   const toMal: PlannedWrite[] = [];
   const toAniList: PlannedWrite[] = [];
+  let excluded = 0;
   for (const write of plan.writes) {
+    const blocked =
+      write.target === "mal"
+        ? noMal.has(write.malId)
+        : noAniList.has(write.malId);
+
+    if (blocked) {
+      excluded++;
+      continue;
+    }
+
     (write.target === "mal" ? toMal : toAniList).push(write);
   }
 
@@ -254,6 +289,7 @@ export async function syncAccounts(
     inSync: plan.inSync,
     unmatched,
     remaining,
+    excluded,
     failed,
   };
 }

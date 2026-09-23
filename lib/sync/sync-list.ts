@@ -425,10 +425,30 @@ export async function syncMalList(
       throw new Error(`Removal guard failed: ${anilistOnlyError.message}`);
     }
 
-    // Fail closed: if the exempt set could not be read, skipping the delete
-    // leaves stale rows, while running it destroys irreplaceable data. The
-    // next sync retries either way.
-    const exempt = (anilistOnly ?? []).map((r) => r.id);
+    // The second exemption, and the reason sync_to_mal is not merely the
+    // mirror image of sync_to_anilist. The rule this delete implements is
+    // "MyAnimeList did not return it, so the user removed it there" — and
+    // that inference only holds while the app is actually keeping the title
+    // on MyAnimeList. Once the user has excluded it, they may well delete it
+    // there on purpose and still want it tracked here, so its absence from
+    // the response stops being evidence of anything.
+    const { data: excluded, error: excludedError } = await admin
+      .from("user_entries")
+      .select("title_id")
+      .eq("user_id", userId)
+      .eq("sync_to_mal", false);
+
+    if (excludedError) {
+      throw new Error(`Removal guard failed: ${excludedError.message}`);
+    }
+
+    // Fail closed: if either exempt set could not be read, the throws above
+    // skip the delete entirely. Stale rows are recoverable by the next sync;
+    // a wrongly deleted entry and its entry_sources are not.
+    const exempt = [
+      ...(anilistOnly ?? []).map((r) => r.id),
+      ...(excluded ?? []).map((r) => r.title_id),
+    ];
     const keep = [...new Set([...keepTitleIds, ...exempt])];
 
     const { data: deleted, error } = await admin

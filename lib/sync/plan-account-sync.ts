@@ -55,6 +55,8 @@ export type AccountSyncResult = {
   unmatched: number;
   /** Writes held back by the per-run cap or a rate limit; run again for these. */
   remaining: number;
+  /** Writes withheld because the user excluded that title from that site. */
+  excluded: number;
   /** Writes a service rejected outright. */
   failed: number;
 };
@@ -192,6 +194,11 @@ export function describeAccountSync(result: AccountSyncResult): string {
   }
   if (result.failed > 0) {
     parts.push(`${result.failed} ${plural(result.failed)} couldn't be saved.`);
+  }
+  if (result.excluded > 0) {
+    parts.push(
+      `${result.excluded} ${plural(result.excluded)} skipped because you turned syncing off for ${result.excluded === 1 ? "it" : "them"}.`,
+    );
   }
   if (result.remaining > 0) {
     parts.push(`${result.remaining} more to go — run it again to continue.`);

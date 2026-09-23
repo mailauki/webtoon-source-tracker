@@ -211,11 +211,30 @@ describe("fromAniListEntry", () => {
 });
 
 describe("describeAccountSync", () => {
-  const empty = { toMal: 0, toAniList: 0, inSync: 0, unmatched: 0, remaining: 0, failed: 0 };
+  const empty = {
+    toMal: 0,
+    toAniList: 0,
+    inSync: 0,
+    unmatched: 0,
+    remaining: 0,
+    excluded: 0,
+    failed: 0,
+  };
 
   it("says when there was nothing to do", () => {
     expect(describeAccountSync({ ...empty, inSync: 4 })).toBe(
       "Nothing to change. 4 already matched.",
+    );
+  });
+
+  it("says when titles were skipped by the user's own exclusions", () => {
+    // Otherwise a run that wrote nothing looks like a bug rather than the
+    // setting the user themselves chose.
+    expect(describeAccountSync({ ...empty, excluded: 3 })).toContain(
+      "3 titles skipped because you turned syncing off for them",
+    );
+    expect(describeAccountSync({ ...empty, excluded: 1 })).toContain(
+      "1 title skipped because you turned syncing off for it",
     );
   });
 
@@ -227,6 +246,7 @@ describe("describeAccountSync", () => {
         inSync: 10,
         unmatched: 1,
         remaining: 20,
+        excluded: 0,
         failed: 2,
       }),
     ).toBe(
