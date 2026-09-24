@@ -133,14 +133,14 @@ describe("collections on the entry page", () => {
     ).toBeInTheDocument();
   });
 
-  it("points at /collections when there are none yet", () => {
+  it("points at your collections on /discover when there are none yet", () => {
     // Making one navigates away, so this section links rather than owning a
     // dialog that would throw away the entry page.
     render(<EntryCollections titleId={TITLE_ID} collections={[]} />);
 
     expect(screen.getByRole("link", { name: /Make one/ })).toHaveAttribute(
       "href",
-      "/collections",
+      "/discover#your-collections",
     );
   });
 });

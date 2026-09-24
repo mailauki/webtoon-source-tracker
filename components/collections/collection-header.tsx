@@ -80,7 +80,7 @@ export function CollectionHeader({
     }
     handled.current = true;
     toast.success(deleteState.message ?? "Collection deleted.");
-    router.push("/collections");
+    router.push("/discover");
   }, [deleteState, router]);
 
   return (

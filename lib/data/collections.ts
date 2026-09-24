@@ -4,9 +4,7 @@ import { hidesMatureTitles } from "@/lib/auth/dal";
 import {
   hydrateCollection,
   type CollectionTarget,
-  summariseCollection,
   type Collection,
-  type CollectionSummary,
   type RawCollection,
   type RawTrackedRow,
   type TrackedEntry,
@@ -16,13 +14,14 @@ import { readAllRows } from "@/lib/data/pagination";
 import { createClient } from "@/lib/supabase/server";
 
 /**
- * Curated collection reads, for /discover and the see-all pages under it.
+ * Collection reads, for /discover and the see-all pages under it.
  *
  * Collections come in two shapes (see the collections migration): a null
- * owner_id is a curated editorial row, a non-null one belongs to a user. Only
- * the curated ones are read here. RLS already hides other people's
- * collections, so `is("owner_id", null)` below decides *which* of the visible
- * rows this surface wants — it is not the access check.
+ * owner_id is a curated editorial row, a non-null one belongs to a user.
+ * /discover shows both, but they are read separately: curated rows first, the
+ * viewer's own further down. RLS already hides other people's collections, so
+ * the owner_id filters below decide *which* of the visible rows each read
+ * wants — they are not the access check.
  *
  * These use the request-scoped (RLS-enforced) client. Curated rows are
  * readable by any signed-in user under collections_select_visible, so nothing
@@ -227,36 +226,39 @@ export async function getCuratedCollection(
 //
 // Everything below reads user-owned rows: a non-null owner_id, which RLS
 // already narrows to the caller. The `not("owner_id", "is", null)` filters are
-// therefore about shape, not access — they keep curated rows off a page that
-// means "yours", the mirror of the `is("owner_id", null)` above.
+// therefore about shape, not access — they keep curated rows off the shelves
+// that mean "yours", the mirror of the `is("owner_id", null)` above.
 
 /**
- * Every collection the viewer has made, newest first.
+ * Every collection the viewer has made, newest first, each trimmed to a
+ * shelf's worth of titles — the same shape `getCuratedShelves` returns, so
+ * /discover renders both kinds with one shelf component.
  *
  * Ordered by created_at rather than `sort_order`: that column is the editorial
- * running order of /discover, and a user has no way to set it. Newest first
- * means a collection just made is where it was left.
+ * running order of the curated shelves, and a user has no way to set it.
+ * Newest first means a collection just made is where it was left.
  */
-export async function getMyCollections(): Promise<CollectionSummary[]> {
+export async function getMyShelves(perShelf = 12): Promise<Collection[]> {
   const supabase = await createClient();
 
-  const [{ data, error }, hideMature] = await Promise.all([
+  const [{ data, error }, tracked, hideMature] = await Promise.all([
     supabase
       .from("collections")
       .select(COLLECTION_SELECT)
       .not("owner_id", "is", null)
       .order("created_at", { ascending: false }),
+    getTrackedEntries(),
     hidesMatureTitles(),
   ]);
 
   if (error) throw new Error(`Failed to load your collections: ${error.message}`);
 
-  // A collection the switch empties still appears here, unlike a curated
-  // shelf: this is the index of things the user made, and one of their own
-  // collections vanishing from it would read as deletion.
-  return ((data ?? []) as unknown as RawCollection[])
-    .map((row) => screenCollection(row, hideMature))
-    .map(summariseCollection);
+  // Empty collections are kept, unlike a curated shelf: these are things the
+  // user made, and one of them vanishing — because it is new, or because the
+  // mature switch emptied it — would read as deletion.
+  return ((data ?? []) as unknown as RawCollection[]).map((row) =>
+    hydrateCollection(screenCollection(row, hideMature), tracked, perShelf),
+  );
 }
 
 /**
@@ -265,8 +267,8 @@ export async function getMyCollections(): Promise<CollectionSummary[]> {
  * Returns null when the id does not exist or belongs to someone else — RLS
  * makes those indistinguishable, which is what we want: a wrong id and
  * someone else's id both 404 rather than confirming existence. A curated
- * collection reached by id 404s here too, for the same reason its page is
- * under /discover: it is not the viewer's to edit.
+ * collection reached by id 404s here too: it is not the viewer's to edit, and
+ * its page is /discover/[slug].
  */
 export async function getMyCollection(id: number): Promise<Collection | null> {
   const supabase = await createClient();
@@ -349,8 +351,8 @@ export type LibraryTitle = Awaited<ReturnType<typeof getLibraryTitles>>[number];
  * The viewer's collections, reduced to what the card menu and the entry page
  * need to file a title.
  *
- * Deliberately not `getMyCollections()`: that carries each collection's cover
- * preview for the index, none of which these surfaces show. This is the same
+ * Deliberately not `getMyShelves()`: that carries each collection's titles
+ * for the shelves on /discover, none of which these surfaces show. This is the same
  * rows narrowed to a name and its membership.
  *
  * `withItemIds` is opt-in because the entry page can remove as well as add,

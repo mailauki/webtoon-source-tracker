@@ -11,6 +11,15 @@ export default function DiscoverLoading() {
         <Skeleton className="h-8 w-44 self-start rounded-pill sm:self-auto" />
       </div>
 
+      {/* "Your collections" heading and its New collection button. */}
+      <div className="flex items-end justify-between gap-4">
+        <div className="grid gap-2">
+          <Skeleton className="h-7 w-44" />
+          <Skeleton className="h-4 w-56" />
+        </div>
+        <Skeleton className="h-9 w-36 rounded-pill" />
+      </div>
+
       {/* Two shelves' worth. The real page renders as many as there are
           collections, but a skeleton that guessed high would jump the layout
           more than one that guesses low. */}

@@ -13,7 +13,7 @@ import { getSources } from "@/lib/data/sources";
 
 export async function generateMetadata({
   params,
-}: PageProps<"/collections/[id]">) {
+}: PageProps<"/discover/collections/[id]">) {
   const { id } = await params;
   const collection = await getMyCollection(Number(id));
   return { title: collection ? collection.name : "Not found" };
@@ -23,13 +23,15 @@ export async function generateMetadata({
  * One of the viewer's own collections: what is in it, and the controls to
  * change that.
  *
- * The route is keyed on the surrogate id rather than a slug because user
+ * The counterpart to /discover/[slug]: the same page for a collection the
+ * viewer made rather than one an admin curated, plus the controls to change
+ * it. The route is keyed on the surrogate id rather than a slug because user
  * collections have no slug — collections_shape_ck reserves that for curated
- * rows, which live under /discover.
+ * rows.
  */
 export default async function MyCollectionPage({
   params,
-}: PageProps<"/collections/[id]">) {
+}: PageProps<"/discover/collections/[id]">) {
   await verifySession();
 
   const { id } = await params;
@@ -54,9 +56,9 @@ export default async function MyCollectionPage({
       secondaryRow={
         <div className="flex items-center justify-between gap-2">
           <Button asChild variant="ghost" size="sm" className="rounded-pill text-muted-foreground">
-            <Link href="/collections">
+            <Link href="/discover">
               <ArrowLeft data-icon="inline-start" />
-              Collections
+              Discover
             </Link>
           </Button>
           <AddTitlesDialog

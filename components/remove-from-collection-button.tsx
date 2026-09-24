@@ -12,8 +12,9 @@ import {
  * Takes one title back off a collection the viewer owns.
  *
  * Carries the collection id rather than a callback: a Server Component
- * renders these on both /discover and /collections, and a function prop
- * across that boundary throws at runtime (see tests/rsc-boundary.test.ts).
+ * renders these on both /discover/[slug] and /discover/collections/[id], and
+ * a function prop across that boundary throws at runtime (see
+ * tests/rsc-boundary.test.ts).
  *
  * Lifted out of CollectionCard when the card was unified, alongside
  * AddTitleButton — the two are the collection surfaces' own actions, and

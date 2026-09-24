@@ -79,7 +79,7 @@ export async function createCollection(
     return { error: error.message };
   }
 
-  revalidatePath("/collections");
+  revalidatePath("/discover");
   return { message: `Created “${parsed.data.name}”.`, collectionId: data.id };
 }
 
@@ -122,8 +122,8 @@ export async function updateCollection(
     return { error: error.message };
   }
 
-  revalidatePath("/collections");
-  revalidatePath(`/collections/${parsed.data.id}`);
+  revalidatePath("/discover");
+  revalidatePath(`/discover/collections/${parsed.data.id}`);
   return { message: "Saved." };
 }
 
@@ -148,7 +148,7 @@ export async function deleteCollection(
 
   if (error) return { error: error.message };
 
-  revalidatePath("/collections");
+  revalidatePath("/discover");
   return { message: "Collection deleted." };
 }
 
@@ -201,8 +201,8 @@ export async function addToCollection(
     return { error: "That collection isn't yours to add to." };
   }
 
-  revalidatePath("/collections");
-  revalidatePath(`/collections/${parsed.data.collectionId}`);
+  revalidatePath("/discover");
+  revalidatePath(`/discover/collections/${parsed.data.collectionId}`);
   return { message: "Added." };
 }
 
@@ -232,7 +232,7 @@ export async function removeFromCollection(
 
   if (error) return { error: error.message };
 
-  revalidatePath("/collections");
-  revalidatePath(`/collections/${parsed.data.collectionId}`);
+  revalidatePath("/discover");
+  revalidatePath(`/discover/collections/${parsed.data.collectionId}`);
   return { message: "Removed." };
 }
