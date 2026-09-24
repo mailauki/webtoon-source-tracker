@@ -9,6 +9,7 @@ import { AddTitlesDialog } from "@/components/collections/add-titles-dialog";
 import { CollectionHeader } from "@/components/collections/collection-header";
 import { verifySession } from "@/lib/auth/dal";
 import { getLibraryTitles, getMyCollection } from "@/lib/data/collections";
+import { getSources } from "@/lib/data/sources";
 
 export async function generateMetadata({
   params,
@@ -35,9 +36,10 @@ export default async function MyCollectionPage({
   const collectionId = Number(id);
   if (!Number.isInteger(collectionId) || collectionId <= 0) notFound();
 
-  const [collection, library] = await Promise.all([
+  const [collection, library, sources] = await Promise.all([
     getMyCollection(collectionId),
     getLibraryTitles(),
+    getSources(),
   ]);
 
   // RLS makes "does not exist" and "belongs to someone else" indistinguishable,
@@ -89,6 +91,7 @@ export default async function MyCollectionPage({
             items={collection.items}
             collectionId={collection.id}
             removable
+            catalog={sources}
           />
         )}
       </div>

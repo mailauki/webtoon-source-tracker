@@ -8,6 +8,7 @@ import { CollectionFilters } from "@/components/collection-filters";
 import { verifySession } from "@/lib/auth/dal";
 import type { CollectionItem } from "@/lib/data/collection-items";
 import { getTrackedEntries } from "@/lib/data/collections";
+import { getSources } from "@/lib/data/sources";
 import { getTagBySlug, getTitlesForTag } from "@/lib/data/tags";
 
 export async function generateMetadata({
@@ -36,9 +37,10 @@ export default async function TagPage({
 
   if (!tag) notFound();
 
-  const [titles, tracked] = await Promise.all([
+  const [titles, tracked, sources] = await Promise.all([
     getTitlesForTag(tag.id),
     getTrackedEntries(),
+    getSources(),
   ]);
 
   // There is no collection_items row here — a tag link is not a shelf
@@ -80,7 +82,7 @@ export default async function TagPage({
           </p>
         </div>
 
-        <CollectionFilters items={items} />
+        <CollectionFilters items={items} catalog={sources} />
       </div>
     </AppShell>
   );

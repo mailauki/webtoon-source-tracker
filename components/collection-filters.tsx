@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { ListFilter } from "lucide-react";
 
 import { EntryCard } from "@/components/entry-card";
+import { SelectionBar, SelectToggle } from "@/components/selection-bar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,6 +28,7 @@ import {
 import type { CollectionItem } from "@/lib/data/collection-items";
 import { collectionView } from "@/lib/data/entry-view";
 import { STATUS_LABELS } from "@/lib/data/entry-labels";
+import type { Source } from "@/lib/data/rank-sources";
 
 /** A source the viewer actually has attached somewhere on this page. */
 type SourceChip = { value: string; label: string };
@@ -57,14 +59,21 @@ export function CollectionFilters({
   /** Passed through to each card, for a collection the viewer owns. */
   collectionId,
   removable = false,
+  catalog = [],
 }: {
   items: CollectionItem[];
   collectionId?: number;
   removable?: boolean;
+  /** The source catalog, for select mode's "Add source". */
+  catalog?: Source[];
 }) {
   const [filters, setFilters] = useState<CollectionFilterState>(
     NO_COLLECTION_FILTERS,
   );
+  // Select mode, as on the library — see SelectionBar. Only titles the viewer
+  // tracks can be picked: every bulk edit acts on an entry, and an untracked
+  // title has none.
+  const [selected, setSelected] = useState<Set<number> | null>(null);
 
   const trackedCount = useMemo(
     () => items.filter((i) => i.tracked).length,
@@ -124,6 +133,7 @@ export function CollectionFilters({
           />
           {/* The count only says something once the chips have changed it.
               Unfiltered it would restate the page's own heading count. */}
+          <SelectToggle selected={selected} setSelected={setSelected} />
           {narrowed ? (
             <p className="text-xs text-muted-foreground">
               {visible.length} of {items.length}
@@ -150,20 +160,51 @@ export function CollectionFilters({
         </div>
       ) : (
         <ul className="grid grid-cols-2 items-stretch gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {visible.map((item) => (
-            <li key={item.id}>
-              <EntryCard
-                view={collectionView(item)}
-                removable={
-                  removable && collectionId !== undefined
-                    ? { collectionId, itemId: item.id }
-                    : undefined
-                }
-              />
-            </li>
-          ))}
+          {visible.map((item) => {
+            const entryId = item.tracked ? item.entryId : null;
+            const dimmed = selected && entryId === null;
+            return (
+              <li
+                key={item.id}
+                inert={!!dimmed}
+                className={dimmed ? "opacity-40" : undefined}
+              >
+                <EntryCard
+                  view={collectionView(item)}
+                  removable={
+                    removable && collectionId !== undefined
+                      ? { collectionId, itemId: item.id }
+                      : undefined
+                  }
+                  selection={
+                    selected && entryId !== null
+                      ? {
+                          checked: selected.has(entryId),
+                          onToggle: () => {
+                            const next = new Set(selected);
+                            if (!next.delete(entryId)) next.add(entryId);
+                            setSelected(next);
+                          },
+                        }
+                      : undefined
+                  }
+                />
+              </li>
+            );
+          })}
         </ul>
       )}
+
+      {selected ? (
+        <SelectionBar
+          selectable={visible.flatMap((i) =>
+            i.tracked && i.entryId !== null ? [i.entryId] : [],
+          )}
+          selected={selected}
+          setSelected={setSelected}
+          sources={catalog}
+        />
+      ) : null}
     </div>
   );
 }

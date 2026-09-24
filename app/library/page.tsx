@@ -2,7 +2,11 @@ import Link from "next/link";
 
 import { AppShell } from "@/components/app-shell";
 import { LibraryFilterMenu } from "@/components/library-filter-menu";
-import { LibraryFilters, LibraryGrid } from "@/components/library-grid";
+import {
+  LibraryFilters,
+  LibraryGrid,
+  SelectToggle,
+} from "@/components/library-grid";
 import { RandomPick } from "@/components/random-pick";
 import { SyncButton } from "@/components/sync-button";
 import { Button } from "@/components/ui/button";
@@ -184,7 +188,10 @@ export default async function LibraryPage() {
         // they did now lives in the menu; see LibraryFilterMenu for why each
         // filter became the kind of menu item it did.
         secondaryRow={
-          <LibraryFilterMenu statuses={statusChips} sources={sourceChips} />
+          <div className="flex items-center gap-2">
+            <LibraryFilterMenu statuses={statusChips} sources={sourceChips} />
+            <SelectToggle />
+          </div>
         }
       >
         <div className="grid gap-6">

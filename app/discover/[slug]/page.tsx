@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { CollectionFilters } from "@/components/collection-filters";
 import { verifySession } from "@/lib/auth/dal";
 import { getCuratedCollection } from "@/lib/data/collections";
+import { getSources } from "@/lib/data/sources";
 
 export async function generateMetadata({
   params,
@@ -28,7 +29,10 @@ export default async function CollectionPage({
   await verifySession();
 
   const { slug } = await params;
-  const collection = await getCuratedCollection(slug);
+  const [collection, sources] = await Promise.all([
+    getCuratedCollection(slug),
+    getSources(),
+  ]);
 
   // Covers three cases that should be indistinguishable from outside: no such
   // slug, a collection that has been retired (is_active false), and a user
@@ -67,7 +71,7 @@ export default async function CollectionPage({
           </p>
         </div>
 
-        <CollectionFilters items={collection.items} />
+        <CollectionFilters items={collection.items} catalog={sources} />
       </div>
     </AppShell>
   );
