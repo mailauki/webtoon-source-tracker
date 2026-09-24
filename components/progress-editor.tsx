@@ -18,8 +18,18 @@ const STATUS_OPTIONS = [
   { value: "plan_to_read", label: "Plan to read" },
 ];
 
-export function ProgressEditor({ entry }: { entry: EntryDetail }) {
-  const total = entry.media_titles.num_chapters;
+export function ProgressEditor({
+  entry,
+  total = entry.media_titles.num_chapters,
+}: {
+  entry: EntryDetail;
+  /**
+   * The chapter count to count up to. The entry page passes the higher of
+   * MyAnimeList's and AniList's when they disagree; the stored count is the
+   * fallback while that is still loading.
+   */
+  total?: number | null;
+}) {
   // Shared with the library card's menu and sheet, which submit the same
   // action — see lib/data/sync-targets.ts.
   const { targets, nowhereToSave, label: remote } = syncTargets(entry);
@@ -48,6 +58,7 @@ export function ProgressEditor({ entry }: { entry: EntryDetail }) {
     const formData = new FormData();
     formData.set("entry_id", String(entry.id));
     formData.set("num_chapters_read", String(clamped));
+    if (total) formData.set("total", String(total));
 
     startTransition(() => {
       setOptimisticChapters(clamped);
@@ -121,6 +132,7 @@ export function ProgressEditor({ entry }: { entry: EntryDetail }) {
 
         <form ref={formRef} action={action} className="grid gap-4 sm:grid-cols-3">
           <input type="hidden" name="entry_id" value={entry.id} />
+          {total ? <input type="hidden" name="total" value={total} /> : null}
 
           <div className="grid gap-2">
             <Label htmlFor="chapters-exact">Set exactly</Label>

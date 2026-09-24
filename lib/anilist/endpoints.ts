@@ -4,12 +4,14 @@ import { anilistRequest, type AniListClient } from "./client";
 import { AniListApiError } from "./errors";
 import {
   anilistListCollectionSchema,
+  anilistMediaExtrasSchema,
   anilistMediaIdPageSchema,
   anilistSearchMediaSchema,
   anilistSearchPageSchema,
   anilistViewerSchema,
   type AniListListEntry,
   type AniListListStatus,
+  type AniListMediaExtras,
   type AniListSearchMedia,
   type AniListViewer,
 } from "./types";
@@ -386,6 +388,61 @@ export async function getMediaById(
   }
 
   return raw.Media === null ? null : anilistSearchMediaSchema.parse(raw.Media);
+}
+
+const MEDIA_EXTRAS_QUERY = /* GraphQL */ `
+  query ($id: Int, $idMal: Int) {
+    Media(id: $id, idMal: $idMal, type: MANGA) {
+      id
+      chapters
+      status
+      externalLinks {
+        url
+        site
+        type
+        language
+        isDisabled
+      }
+    }
+  }
+`;
+
+/**
+ * AniList's chapter count and external links for one title, by whichever id
+ * the catalog row has. Anonymous, like searchManga: nothing here is per-user.
+ *
+ * The unused id is left out rather than sent as null — AniList reads
+ * `id: null` as a filter and answers Not Found.
+ *
+ * Returns null when AniList has no such title, or cannot be reached at all:
+ * the entry page shows this as a hint beside data it already has, so an
+ * AniList outage must cost the hint and nothing else.
+ */
+export async function getMediaExtras(ids: {
+  anilistMediaId: number | null;
+  malMediaId: number | null;
+}): Promise<AniListMediaExtras | null> {
+  const variables =
+    ids.anilistMediaId !== null
+      ? { id: ids.anilistMediaId }
+      : ids.malMediaId !== null
+        ? { idMal: ids.malMediaId }
+        : null;
+  if (!variables) return null;
+
+  try {
+    const raw = await anilistRequest<{ Media: unknown }>(
+      null,
+      MEDIA_EXTRAS_QUERY,
+      variables,
+    );
+    return raw.Media === null ? null : anilistMediaExtrasSchema.parse(raw.Media);
+  } catch (cause) {
+    if (!(cause instanceof AniListApiError)) {
+      console.error("[anilist/extras] failed:", cause);
+    }
+    return null;
+  }
 }
 
 const DELETE_ENTRY_QUERY = /* GraphQL */ `
