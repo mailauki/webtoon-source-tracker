@@ -15,7 +15,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export type RemoveEntryState =
   | { ok: true; message: string }
-  | { ok: false; error: string }
+  | { ok: false; error: string; needsReauth?: boolean; rateLimited?: boolean }
   | null;
 
 /**
@@ -109,12 +109,14 @@ export async function removeEntry(
       if (cause instanceof MalAuthError) {
         return {
           ok: false,
+          needsReauth: true,
           error: "Your MyAnimeList connection expired. Please reconnect.",
         };
       }
       if (cause instanceof MalRateLimitError) {
         return {
           ok: false,
+          rateLimited: true,
           error: "MyAnimeList is rate limiting us. Try again shortly.",
         };
       }
@@ -163,12 +165,14 @@ export async function removeEntry(
       if (cause instanceof AniListAuthError) {
         return {
           ok: false,
+          needsReauth: true,
           error: "Your AniList connection expired. Please reconnect.",
         };
       }
       if (cause instanceof AniListRateLimitError) {
         return {
           ok: false,
+          rateLimited: true,
           error: "AniList is rate limiting us. Try again shortly.",
         };
       }

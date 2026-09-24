@@ -208,8 +208,11 @@ just narrowed it to them.
 - **One action taking many ids, not many actions.** Next dispatches Server
   Actions sequentially per client, so firing N from the browser queues them
   anyway and gives up any chance of reporting progress while they run.
-- **Worth doing, in order:** status change, add to collection, quick-add a
-  source. Bulk *removal* multiplies exactly the unrecoverable cascade
+- **Done:** status change, quick-add a source, and removal (the per-title
+  dialog's library/MAL/AniList choices; Undo covers the library half only) —
+  `bulkEdit` in `app/actions/bulk-edit.ts`, `components/selection-bar.tsx`, on
+  the library and every page that renders `CollectionFilters`.
+  **Still to do:** add to collection. Bulk *removal* multiplies exactly the unrecoverable cascade
   `TODO(remove-entry)` is careful about, so it should come last if at all, and
   not before `TODO(soft-delete)` makes it undoable.
 

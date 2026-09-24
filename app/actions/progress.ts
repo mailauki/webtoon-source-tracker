@@ -13,7 +13,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export type ProgressState =
   | { ok: true; message: string }
-  | { ok: false; error: string; needsReauth?: boolean }
+  | { ok: false; error: string; needsReauth?: boolean; rateLimited?: boolean }
   | null;
 
 const patchSchema = z.object({
@@ -240,6 +240,7 @@ export async function updateProgress(
     if (cause instanceof MalRateLimitError) {
       return {
         ok: false,
+        rateLimited: true,
         error: "MyAnimeList is rate limiting us. Try again shortly.",
       };
     }

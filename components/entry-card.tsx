@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { forwardRef, useState } from "react";
-import { Ellipsis, ExternalLink } from "lucide-react";
+import { Check, Ellipsis, ExternalLink } from "lucide-react";
 
 import { CoverImage } from "@/components/cover-image";
 import { AddTitleButton } from "@/components/add-title-button";
@@ -69,6 +69,7 @@ export function EntryCard({
   topSources = [],
   catalog = [],
   removable,
+  selection,
 }: {
   /**
    * A library row, for the shelf and the search page. Normalised here rather
@@ -91,6 +92,12 @@ export function EntryCard({
    * and a function prop across that boundary throws at runtime.
    */
   removable?: { collectionId: number; itemId: number };
+  /**
+   * The shelf's select mode. While set, the whole card is one toggle: the
+   * link, the ⋯ and the right-click menu are all made inert, or the first tap
+   * would both pick the title and open it.
+   */
+  selection?: { checked: boolean; onToggle: () => void };
 }) {
   // Both live outside <ContextMenuContent> — Radix unmounts menu content on
   // close and would take them with it.
@@ -121,6 +128,33 @@ export function EntryCard({
   // Nothing tracked means nothing to act on: the menu, the sheet and the
   // source dialog all edit an entry that does not exist yet. The card stands
   // alone, with its Add button as the only action.
+  if (selection) {
+    return (
+      <div className="relative">
+        <div inert>{body}</div>
+        <button
+          type="button"
+          aria-pressed={selection.checked}
+          aria-label={`Select ${name}`}
+          onClick={selection.onToggle}
+          className={`absolute inset-0 rounded-xl ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+            selection.checked ? "ring-3 ring-brand bg-brand/15" : ""
+          }`}
+        >
+          <span
+            className={`absolute top-2 left-2 flex size-6 items-center justify-center rounded-full border-2 ${
+              selection.checked
+                ? "border-brand bg-brand text-brand-foreground"
+                : "border-white bg-slate-900/40"
+            }`}
+          >
+            {selection.checked ? <Check className="size-4" /> : null}
+          </span>
+        </button>
+      </div>
+    );
+  }
+
   if (!entry) return body;
 
   return (

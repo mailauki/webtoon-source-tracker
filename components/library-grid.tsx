@@ -4,6 +4,10 @@ import { createContext, useContext, useState, useTransition } from "react";
 
 import { saveLibraryPrefs } from "@/app/actions/library-prefs";
 import { EntryCard } from "@/components/entry-card";
+import {
+  SelectionBar,
+  SelectToggle as SharedSelectToggle,
+} from "@/components/selection-bar";
 import { selectCandidates } from "@/lib/data/pick-random";
 import {
   ALL,
@@ -36,10 +40,10 @@ import type { Source } from "@/lib/data/rank-sources";
  * this page. Both now live at /search, which searches this shelf and the
  * MyAnimeList catalog off one term. The chips stay here, where the shelf is.
  *
- * TODO(bulk-edit): a multi-select would belong in this provider too — it
- * already owns the rows and already spans the header and the grid, and the
- * chips have just narrowed the shelf to the set someone wants to act on. The
- * hard part is the write side, not the selection; see TODO.md.
+ * The multi-select lives here too: this already owns the rows and spans the
+ * header (where the Select button starts it) and the grid (where cards are
+ * picked), and the chips have just narrowed the shelf to the set someone
+ * wants to act on. See TODO.md, `TODO(bulk-edit)`.
  */
 
 type Filters = {
@@ -108,6 +112,13 @@ type LibraryFilterContext = State & {
    * keep in step.
    */
   entries: LibraryRow[];
+  /**
+   * The ids picked in select mode, or null when not selecting. A mode rather
+   * than a checkbox per card: a card's tap is a link and its ⋯ opens a sheet,
+   * and both are suppressed while this is non-null.
+   */
+  selected: Set<number> | null;
+  setSelected: (value: Set<number> | null) => void;
 };
 
 const FilterContext = createContext<LibraryFilterContext | null>(null);
@@ -159,6 +170,7 @@ export function LibraryFilters({
     layout: "grid",
     ...initial,
   });
+  const [selected, setSelected] = useState<Set<number> | null>(null);
 
   function update(patch: Partial<Filters>) {
     setState((current) => ({ ...current, ...patch }));
@@ -209,6 +221,8 @@ export function LibraryFilters({
         setLayout: updateLayout,
         pending,
         entries,
+        selected,
+        setSelected,
       }}
     >
       {children}
@@ -239,8 +253,17 @@ export function LibraryGrid({
   /** Chips hid everything. */
   emptyFiltered: React.ReactNode;
 }) {
-  const { status, source, hideHiatus, ownedOnly, hideNsfw, sort, layout } =
-    useLibraryFilters();
+  const {
+    status,
+    source,
+    hideHiatus,
+    ownedOnly,
+    hideNsfw,
+    sort,
+    layout,
+    selected,
+    setSelected,
+  } = useLibraryFilters();
 
   // The same function the dice draws from, so the shelf and the roll can never
   // disagree about which titles a chip selection covers.
@@ -258,28 +281,58 @@ export function LibraryGrid({
     return <>{narrowed ? emptyFiltered : emptyUnfiltered}</>;
   }
 
+  function toggle(id: number) {
+    const next = new Set(selected);
+    if (!next.delete(id)) next.add(id);
+    setSelected(next);
+  }
+
   return (
-    <div
-      className={
-        layout === "row"
-          ? // One column. The row carries its own internal columns — cover,
-            // text, stat strip — so the list is a stack, not a grid.
-            "grid gap-2"
-          : // Fewer, wider columns than the old bare-cover grid: the card now
-            // carries a title, a chip row and a stat strip over the art, and
-            // at 8-across none of them had the width to be legible.
-            "grid grid-cols-2 items-stretch gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
-      }
-    >
-      {ordered.map((entry) => (
-        <EntryCard
-          key={entry.id}
-          entry={entry}
-          layout={layout}
-          topSources={topSources}
-          catalog={catalog}
+    <>
+      <div
+        className={
+          layout === "row"
+            ? // One column. The row carries its own internal columns — cover,
+              // text, stat strip — so the list is a stack, not a grid.
+              "grid gap-2"
+            : // Fewer, wider columns than the old bare-cover grid: the card now
+              // carries a title, a chip row and a stat strip over the art, and
+              // at 8-across none of them had the width to be legible.
+              "grid grid-cols-2 items-stretch gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+        }
+      >
+        {ordered.map((entry) => (
+          <EntryCard
+            key={entry.id}
+            entry={entry}
+            layout={layout}
+            topSources={topSources}
+            catalog={catalog}
+            selection={
+              selected
+                ? {
+                    checked: selected.has(entry.id),
+                    onToggle: () => toggle(entry.id),
+                  }
+                : undefined
+            }
+          />
+        ))}
+      </div>
+      {selected ? (
+        <SelectionBar
+          selectable={ordered.map((e) => e.id)}
+          selected={selected}
+          setSelected={setSelected}
+          sources={catalog}
         />
-      ))}
-    </div>
+      ) : null}
+    </>
   );
+}
+
+/** The library's Select button, bound to the provider's selection. */
+export function SelectToggle() {
+  const { selected, setSelected } = useLibraryFilters();
+  return <SharedSelectToggle selected={selected} setSelected={setSelected} />;
 }
