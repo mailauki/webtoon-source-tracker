@@ -45,7 +45,7 @@ export function NewCollection() {
     if (!state?.collectionId || handled.current) return;
     handled.current = true;
     setOpen(false);
-    router.push(`/collections/${state.collectionId}`);
+    router.push(`/discover/collections/${state.collectionId}`);
   }, [state, router]);
 
   return (

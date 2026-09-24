@@ -60,7 +60,7 @@ export default async function AdminCollectionPage({
   // getCuratedCollectionForAdmin filters `owner_id is null`, so a user's own
   // collection 404s here even for the admin who owns it — this route is for
   // editorial shelves, and the reader-facing page for a private one is
-  // /collections/[id].
+  // /discover/collections/[id].
   //
   // A retired shelf is deliberately NOT a 404: this is where it gets
   // un-retired, so it has to survive its own retirement.

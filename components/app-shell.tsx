@@ -1,4 +1,4 @@
-import { Compass, Layers, LibraryBig, LogOut, Search, Settings, ShieldUser } from "lucide-react";
+import { Compass, LibraryBig, LogOut, Search, Settings, ShieldUser } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -96,7 +96,6 @@ export async function AppShell({
 							    kind of errand as browsing the shelf. */}
 							<NavLink icon={<Search data-icon="inline-start" />} label="Search" url="/search" />
 							<NavLink icon={<Compass data-icon="inline-start" />} label="Discover" url="/discover" />
-							<NavLink icon={<Layers data-icon="inline-start" />} label="Collections" url="/collections" />
 							<NavLink icon={<Settings data-icon="inline-start" />} label="Settings" url="/settings" />
 							{admin && <NavLink icon={<ShieldUser data-icon="inline-start" />} label="Admin" url="/admin" />}
 						</nav>

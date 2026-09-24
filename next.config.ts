@@ -16,6 +16,18 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // Your own collections moved onto /discover, beside the curated ones. Kept
+  // so old bookmarks and links land in the right place.
+  async redirects() {
+    return [
+      { source: "/collections", destination: "/discover", permanent: true },
+      {
+        source: "/collections/:id",
+        destination: "/discover/collections/:id",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

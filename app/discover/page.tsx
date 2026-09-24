@@ -3,14 +3,22 @@ import { Compass, LayoutGrid } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { CollectionShelf } from "@/components/collection-shelf";
+import { NewCollection } from "@/components/collections/new-collection";
 import { Button } from "@/components/ui/button";
 import { verifySession } from "@/lib/auth/dal";
-import { getCuratedShelves } from "@/lib/data/collections";
+import { getCuratedShelves, getMyShelves } from "@/lib/data/collections";
 
 export const metadata = { title: "Discover" };
 
 /**
- * Curated collections, as stacked shelves.
+ * Collections, as stacked shelves: the viewer's own, then the curated ones.
+ *
+ * The two used to be separate pages — /collections for yours, /discover for
+ * the editorial ones — but they are the same thing to a reader: a named group
+ * of titles with a see-all page behind it. They share the `collections` table
+ * and differ only by whether owner_id is null, so they share a shelf here too.
+ * The only difference that surfaces is who can edit: yours carry a "New
+ * collection" button here and edit controls on their own page.
  *
  * Deliberately separate from /library. The library is your own shelf and
  * already carries status chips, source chips, sort, hide-hiatus and search;
@@ -31,7 +39,10 @@ export const metadata = { title: "Discover" };
 export default async function DiscoverPage() {
   await verifySession();
 
-  const shelves = await getCuratedShelves();
+  const [mine, shelves] = await Promise.all([
+    getMyShelves(),
+    getCuratedShelves(),
+  ]);
 
   return (
     <AppShell>
@@ -41,8 +52,8 @@ export default async function DiscoverPage() {
             Discover
           </h1>
           <p className="text-sm text-muted-foreground">
-            Collections of titles worth a look — add any of them straight to
-            your library.
+            Your own collections alongside curated picks of titles worth a look
+            — add any of them straight to your library.
           </p>
         </div>
 
@@ -72,32 +83,72 @@ export default async function DiscoverPage() {
           </div>
         </div>
 
-        {shelves.length === 0 ? (
-          // Curated collections are seeded server-side (there is no admin UI),
-          // so an empty page here means none have been written yet rather than
-          // that anything failed. Say so, and send the reader somewhere useful
-          // — the category banner above is still a way on from here.
-          <div className="flex min-h-[40vh] flex-col items-center justify-center gap-3 text-center">
-            <Compass className="size-8 text-muted-foreground" />
-            <h2 className="font-display text-lg font-bold">
-              No collections yet
-            </h2>
-            <p className="max-w-sm text-sm text-muted-foreground">
-              Curated collections show up here once they have been put together.
-              In the meantime, your own shelf is where the reading happens.
-            </p>
-            <Link
-              href="/library"
-              className="text-sm font-semibold text-brand hover:underline"
-            >
-              Go to your library
-            </Link>
+        {/* Anchored so the entry page's "Make one" and "Manage your
+            collections" links land on this section rather than the top. */}
+        <section id="your-collections" className="grid scroll-mt-32 gap-6">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div className="grid gap-1">
+              <h2 className="font-display text-xl font-bold tracking-tight">
+                Your collections
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Your own groupings, private to you.
+              </p>
+            </div>
+            <NewCollection />
           </div>
-        ) : (
-          shelves.map((collection) => (
-            <CollectionShelf key={collection.id} collection={collection} />
-          ))
-        )}
+
+          {mine.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+              Make one for anything you want to keep together — comfort rereads,
+              a shortlist for a friend, everything you started and never
+              finished.
+            </p>
+          ) : (
+            mine.map((collection) => (
+              <CollectionShelf key={collection.id} collection={collection} />
+            ))
+          )}
+        </section>
+
+        <section className="grid gap-6">
+          <div className="grid gap-1">
+            <h2 className="font-display text-xl font-bold tracking-tight">
+              Curated collections
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Hand-picked titles worth a look.
+            </p>
+          </div>
+
+          {shelves.length === 0 ? (
+            // Curated collections are written from /admin, so an empty section
+            // here means none have been published yet rather than that anything
+            // failed. Say so, and send the reader somewhere useful
+            // — the category banner above is still a way on from here.
+            <div className="flex min-h-[30vh] flex-col items-center justify-center gap-3 text-center">
+              <Compass className="size-8 text-muted-foreground" />
+              <h3 className="font-display text-lg font-bold">
+                No curated collections yet
+              </h3>
+              <p className="max-w-sm text-sm text-muted-foreground">
+                Curated collections show up here once they have been put
+                together. In the meantime, your own shelf is where the reading
+                happens.
+              </p>
+              <Link
+                href="/library"
+                className="text-sm font-semibold text-brand hover:underline"
+              >
+                Go to your library
+              </Link>
+            </div>
+          ) : (
+            shelves.map((collection) => (
+              <CollectionShelf key={collection.id} collection={collection} />
+            ))
+          )}
+        </section>
       </div>
     </AppShell>
   );

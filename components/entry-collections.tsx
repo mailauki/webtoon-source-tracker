@@ -33,9 +33,9 @@ import {
  * A list of just the memberships answers "where is this" but not "where could
  * it go", and the second question is why the section gets opened.
  *
- * No "new collection" button: the one on /collections navigates to the new
+ * No "new collection" button: the one on /discover navigates to the new
  * collection on success, which would throw away the entry page the reader is
- * on. Making a collection is a trip to /collections; this section files into
+ * on. Making a collection is a trip to /discover; this section files into
  * the ones that exist.
  */
 export function EntryCollections({
@@ -66,7 +66,10 @@ export function EntryCollections({
         <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
           A collection is any grouping that makes sense to you — comfort
           rereads, titles to recommend, the ones you keep meaning to finish.{" "}
-          <Link href="/collections" className="underline hover:text-foreground">
+          <Link
+            href="/discover#your-collections"
+            className="underline hover:text-foreground"
+          >
             Make one
           </Link>
           .
@@ -92,7 +95,10 @@ export function EntryCollections({
 
       {collections.length > 0 ? (
         <p className="text-xs text-muted-foreground">
-          <Link href="/collections" className="hover:text-foreground">
+          <Link
+            href="/discover#your-collections"
+            className="hover:text-foreground"
+          >
             Manage your collections
           </Link>
         </p>
