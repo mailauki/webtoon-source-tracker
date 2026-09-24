@@ -94,3 +94,32 @@ export function toMalPublicationStatus(
 ): string | null {
   return status ? (ANILIST_STATUS_TO_MAL[status] ?? null) : null;
 }
+
+/**
+ * MAL's `media_type` for an AniList title, from its format and country.
+ *
+ * AniList has one MANGA format for every comic and says where it is from in
+ * `countryOfOrigin` instead, where MAL splits the same titles into manga,
+ * manhwa and manhua. Reading the country is what keeps a Korean webtoon that
+ * only AniList has off the Manga shelf. The rest lowercase into MAL's own
+ * spelling (ONE_SHOT → one_shot); NOVEL stays `novel`, since AniList has no
+ * separate light-novel format to tell the two apart.
+ */
+export function toMalMediaKind(
+  format: string | null | undefined,
+  countryOfOrigin: string | null | undefined,
+): string | null {
+  if (!format) return null;
+  if (format !== "MANGA") return format.toLowerCase();
+
+  switch (countryOfOrigin) {
+    case "KR":
+      return "manhwa";
+    // Taiwanese comics are manhua too; MAL files them the same way.
+    case "CN":
+    case "TW":
+      return "manhua";
+    default:
+      return "manga";
+  }
+}

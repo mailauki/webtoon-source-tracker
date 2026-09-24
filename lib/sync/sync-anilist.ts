@@ -197,6 +197,7 @@ export async function syncAniListList(
       coverUrl:
         entry.media.coverImage?.large ?? entry.media.coverImage?.medium ?? null,
       format: entry.media.format ?? null,
+      countryOfOrigin: entry.media.countryOfOrigin ?? null,
       chapters: entry.media.chapters ?? null,
       volumes: entry.media.volumes ?? null,
       status: entry.media.status ?? null,

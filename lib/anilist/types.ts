@@ -58,6 +58,7 @@ export const anilistListEntrySchema = z.object({
       })
       .optional(),
     format: z.string().nullable().optional(),
+    countryOfOrigin: z.string().nullable().optional(),
     chapters: z.number().nullable().optional(),
     volumes: z.number().nullable().optional(),
     status: z.string().nullable().optional(),
@@ -78,7 +79,9 @@ export const anilistListCollectionSchema = z.object({
   MediaListCollection: z
     .object({
       lists: z
-        .array(z.object({ entries: z.array(anilistListEntrySchema).nullable() }))
+        .array(
+          z.object({ entries: z.array(anilistListEntrySchema).nullable() }),
+        )
         .nullable(),
       hasNextChunk: z.boolean().nullable(),
     })
@@ -111,6 +114,8 @@ export const anilistSearchMediaSchema = z.object({
     english: z.string().nullable(),
   }),
   format: z.string().nullable(),
+  // Optional: it was added to the queries after the rest of this shape.
+  countryOfOrigin: z.string().nullable().optional(),
   chapters: z.number().nullable(),
   volumes: z.number().nullable(),
   status: z.string().nullable(),

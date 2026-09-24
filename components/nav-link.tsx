@@ -8,7 +8,7 @@ export default function NavLink({icon, label, url}: {icon: ReactNode, label: str
 			<Button
 				asChild
 				variant="ghost"
-				className="inline-flex max-md:hidden"
+				className="inline-flex max-sm:hidden max-md:text-xs"
 			>
 				<Link href={url}>
 					{icon}
@@ -18,7 +18,7 @@ export default function NavLink({icon, label, url}: {icon: ReactNode, label: str
 			<Button
 				asChild
 				variant="ghost"
-				className="hidden max-md:inline-flex"
+				className="hidden max-sm:inline-flex"
 				size="icon"
 				aria-label={label}
 			>

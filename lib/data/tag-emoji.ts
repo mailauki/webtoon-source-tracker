@@ -133,12 +133,14 @@ const BY_SLUG: Record<string, string> = {
   villainess: "👑",
   zombie: "🧟",
 
-  // Formats
+  // Formats. The comic types take the flag of the country the word means
+  // one from; the rest are shapes, not origins.
   doujinshi: "✏️",
   "light-novel": "📖",
-  manga: "📗",
-  manhua: "🏮",
-  manhwa: "🌏",
+  manga: "🇯🇵",
+  manhua: "🇨🇳",
+  manhwa: "🇰🇷",
+  oel: "🇺🇸",
   novel: "📕",
   "one-shot": "📄",
   oneshot: "📄",

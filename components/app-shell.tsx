@@ -56,7 +56,7 @@ export async function AppShell({
     <div className="flex min-h-screen flex-col">
       <header className="fixed w-full top-0 z-40 border-b border-border bg-background/80 backdrop-blur px-4">
         <div className="h-[60px] mx-auto flex max-w-6xl items-center justify-between gap-4 py-3 pl-2">
-					<div className="flex items-center gap-3 sm:gap-6">
+					<div className="flex items-center gap-3 max-sm:gap-6">
 						{/* The logo always shows; the wordmark rejoins it once there is
 						    room. One icon serves both themes: it is an amber tile with
 						    its own rounded corners baked into the artwork, so it needs no
@@ -84,12 +84,12 @@ export async function AppShell({
 								unoptimized
 								className="size-8 rounded-md"
 							/>
-							<span className="font-display text-lg font-bold tracking-tight max-sm:sr-only">
+							<span className="font-display text-lg font-bold tracking-tight max-md:sr-only">
 								Source<span className="text-brand">Tracker</span>
 							</span>
 						</Link>
 
-						<nav className="flex items-center gap-1">
+						<nav className="flex items-center gap-1 max-sm:gap-4">
 							<NavLink icon={<LibraryBig data-icon="inline-start" />} label="Library" url="/library" />
 							{/* Next to the library rather than out in the icon cluster on the
 							    right: it is where you go to add a title, which is the same
