@@ -1,7 +1,11 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { AniListApiError, AniListAuthError, AniListRateLimitError } from "./errors";
+import {
+  AniListApiError,
+  AniListAuthError,
+  AniListRateLimitError,
+} from "./errors";
 import { getToken } from "./token-store";
 
 const API_URL = "https://graphql.anilist.co";
@@ -55,7 +59,9 @@ export async function anilistRequest<T>(
     if (response.status === 429) {
       const retryAfter = Number(response.headers.get("retry-after"));
       const waitMs =
-        Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 2 ** attempt * 1000;
+        Number.isFinite(retryAfter) && retryAfter > 0
+          ? retryAfter * 1000
+          : 2 ** attempt * 1000;
       if (attempt < MAX_RETRIES - 1 && waitMs <= MAX_RETRY_AFTER_MS) {
         await sleep(waitMs);
         continue;
@@ -118,7 +124,10 @@ export class AniListClient {
     if (!token) {
       throw new AniListAuthError("No AniList connection for this account");
     }
-    if (token.expires_at && new Date(token.expires_at).getTime() <= Date.now()) {
+    if (
+      token.expires_at &&
+      new Date(token.expires_at).getTime() <= Date.now()
+    ) {
       await this.markNeedsReauth();
       throw new AniListAuthError();
     }

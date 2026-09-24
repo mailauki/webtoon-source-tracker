@@ -2,7 +2,7 @@ import "server-only";
 
 import type { createAdminClient } from "@/lib/supabase/admin";
 
-import { toMalPublicationStatus } from "./mapping";
+import { toMalMediaKind, toMalPublicationStatus } from "./mapping";
 
 /** The privileged client these writes run through. */
 type SupabaseAdmin = ReturnType<typeof createAdminClient>;
@@ -36,6 +36,8 @@ export type AniListTitleFields = {
   titleEn: string | null;
   coverUrl: string | null;
   format: string | null;
+  /** Where it is from — what tells manhwa and manhua apart from manga. */
+  countryOfOrigin: string | null;
   chapters: number | null;
   volumes: number | null;
   /** AniList's own status string; translated here, not by the caller. */
@@ -63,7 +65,9 @@ export async function upsertAniListTitle(
     p_title: fields.title,
     p_title_en: orUndefined(fields.titleEn),
     p_main_picture_url: orUndefined(fields.coverUrl),
-    p_media_kind: orUndefined(fields.format?.toLowerCase() ?? null),
+    p_media_kind: orUndefined(
+      toMalMediaKind(fields.format, fields.countryOfOrigin),
+    ),
     p_num_chapters: orUndefined(fields.chapters),
     p_num_volumes: orUndefined(fields.volumes),
     // AniList's vocabulary translated into MAL's, which is what the column

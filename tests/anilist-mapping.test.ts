@@ -5,6 +5,7 @@ import {
   toAniListStatus,
   toMalScore,
   toMalStatus,
+  toMalMediaKind,
   toMalPublicationStatus,
 } from "@/lib/anilist/mapping";
 import { ANILIST_LIST_STATUSES } from "@/lib/anilist/types";
@@ -72,5 +73,21 @@ describe("toMalPublicationStatus", () => {
     expect(toMalPublicationStatus("NOT_YET_RELEASED")).toBeNull();
     expect(toMalPublicationStatus(null)).toBeNull();
     expect(toMalPublicationStatus("SOMETHING_NEW")).toBeNull();
+  });
+});
+
+describe("toMalMediaKind", () => {
+  it("splits AniList's one MANGA format by country, as MAL does", () => {
+    expect(toMalMediaKind("MANGA", "JP")).toBe("manga");
+    expect(toMalMediaKind("MANGA", "KR")).toBe("manhwa");
+    expect(toMalMediaKind("MANGA", "CN")).toBe("manhua");
+    expect(toMalMediaKind("MANGA", "TW")).toBe("manhua");
+    expect(toMalMediaKind("MANGA", null)).toBe("manga");
+  });
+
+  it("lowercases the other formats into MAL's spelling, whatever the country", () => {
+    expect(toMalMediaKind("ONE_SHOT", "KR")).toBe("one_shot");
+    expect(toMalMediaKind("NOVEL", "JP")).toBe("novel");
+    expect(toMalMediaKind(null, "KR")).toBeNull();
   });
 });

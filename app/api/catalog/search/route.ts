@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { AniListRateLimitError } from "@/lib/anilist/errors";
+import { toMalMediaKind } from "@/lib/anilist/mapping";
 import {
   isAniListNovel,
   searchManga as searchAniList,
@@ -140,23 +141,23 @@ async function fetchMal(
   includeMature: boolean,
 ): Promise<{ hits: MalHit[]; error?: Failure }> {
   const attempt = async (client: MalClient | null) => {
-    const found = await searchMal(client, query, FETCH_LIMIT, { includeMature });
+    const found = await searchMal(client, query, FETCH_LIMIT, {
+      includeMature,
+    });
     return found.data
       .map((item) => item.node)
       .filter((node) => matchesMediaKind(node.media_type, kind))
-      .map(
-        (node): MalHit => ({
-          mal_media_id: node.id,
-          title: node.title,
-          title_en: node.alternative_titles?.en || null,
-          main_picture_url:
-            node.main_picture?.large ?? node.main_picture?.medium ?? null,
-          media_kind: node.media_type ?? null,
-          num_chapters: node.num_chapters ?? null,
-          num_volumes: node.num_volumes ?? null,
-          mal_status: node.status ?? null,
-        }),
-      );
+      .map((node): MalHit => ({
+        mal_media_id: node.id,
+        title: node.title,
+        title_en: node.alternative_titles?.en || null,
+        main_picture_url:
+          node.main_picture?.large ?? node.main_picture?.medium ?? null,
+        media_kind: node.media_type ?? null,
+        num_chapters: node.num_chapters ?? null,
+        num_volumes: node.num_volumes ?? null,
+        mal_status: node.status ?? null,
+      }));
   };
 
   try {
@@ -222,24 +223,25 @@ async function fetchAniList(
     const hits = media
       // The same switch as the MAL half, against AniList's own vocabulary.
       .filter((item) =>
-        kind === "novels" ? isAniListNovel(item.format) : !isAniListNovel(item.format),
+        kind === "novels"
+          ? isAniListNovel(item.format)
+          : !isAniListNovel(item.format),
       )
-      .map(
-        (item): AniListHit => ({
-          anilist_media_id: item.id,
-          mal_media_id: item.idMal,
-          // AniList has no single canonical title. Romaji matches what MAL
-          // calls `title`, which keeps the two halves reading alike.
-          title: item.title.romaji ?? item.title.english ?? "Untitled",
-          title_en: item.title.english,
-          main_picture_url:
-            item.coverImage?.large ?? item.coverImage?.medium ?? null,
-          media_kind: item.format,
-          num_chapters: item.chapters,
-          num_volumes: item.volumes,
-          anilist_status: item.status,
-        }),
-      );
+      .map((item): AniListHit => ({
+        anilist_media_id: item.id,
+        mal_media_id: item.idMal,
+        // AniList has no single canonical title. Romaji matches what MAL
+        // calls `title`, which keeps the two halves reading alike.
+        title: item.title.romaji ?? item.title.english ?? "Untitled",
+        title_en: item.title.english,
+        main_picture_url:
+          item.coverImage?.large ?? item.coverImage?.medium ?? null,
+        // MAL's vocabulary, so a hit reads "manhwa" in either half.
+        media_kind: toMalMediaKind(item.format, item.countryOfOrigin),
+        num_chapters: item.chapters,
+        num_volumes: item.volumes,
+        anilist_status: item.status,
+      }));
 
     return { hits };
   } catch (cause) {
@@ -273,7 +275,9 @@ async function ownedMalIds(
 ): Promise<Set<number>> {
   const ids = [
     ...malHits.map((h) => h.mal_media_id),
-    ...anilistHits.flatMap((h) => (h.mal_media_id === null ? [] : [h.mal_media_id])),
+    ...anilistHits.flatMap((h) =>
+      h.mal_media_id === null ? [] : [h.mal_media_id],
+    ),
   ];
 
   const owned = new Set<number>();

@@ -12,6 +12,7 @@ import {
   type SourceDialogRequest,
 } from "@/components/entry-card-menu";
 import { EntrySourceDialog } from "@/components/entry-source-dialog";
+import { ProgressBar, SourceBadges, StatStrip } from "@/components/entry-parts";
 import {
   HiatusBadge,
   MatureBadge,
@@ -21,6 +22,7 @@ import {
   TrackedBadge,
 } from "@/components/source-badge";
 import { EntryCardSheet } from "@/components/entry-card-sheet";
+import { Badge } from "@/components/ui/badge";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import type { LibraryRow } from "@/lib/data/entries";
 import { progressLabel, statusLabel } from "@/lib/data/entry-labels";
@@ -295,7 +297,8 @@ const EntryGridBody = forwardRef<
     Radix clones its single child, so those land on this component rather than
     on an element — without spreading them through, right-click reaches no
     handler and the menu never opens. */
-    <div className="group/card relative" ref={ref} {...trigger}>
+    <div className="group/card" ref={ref} {...trigger}>
+			<div className="relative rounded-xl overflow-hidden">
       <CardLink
         href={view.entryHref}
         name={name}
@@ -392,6 +395,7 @@ const EntryGridBody = forwardRef<
       ) : null}
 
       <CardFooter view={view} />
+			</div>
     </div>
   );
 });
@@ -521,26 +525,41 @@ const EntryRowBody = forwardRef<
     buttons, and nesting an anchor inside the row link would be hoisted out by
     the parser and break hydration. `...trigger` and the ref come from
     <ContextMenuTrigger asChild> — see EntryGridBody. */
-    <div className="group/row relative" ref={ref} {...trigger}>
+    <div className="group/row" ref={ref} {...trigger}>
+			<div className="group relative overflow-hidden rounded-xl border border-border bg-card shadow-sm ring-offset-background transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
       <CardLink
         href={view.entryHref}
         name={name}
         // `pr-24` keeps the text clear of the controls parked on the right.
-        className="group flex items-stretch gap-3 overflow-hidden rounded-xl border border-border bg-card pr-24 shadow-sm ring-offset-background transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        // className="group w-full flex justify-start gap-3 overflow-hidden rounded-xl border border-border bg-card pr-14 shadow-sm ring-offset-background transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+				className="flex mr-14"
       >
-        {/* A portrait thumbnail at the leading edge. Fixed width so every
-        row's text starts on the same line however tall the row grows. */}
-        <div className="relative w-16 shrink-0 self-stretch overflow-hidden bg-muted">
-          <CoverImage
-            src={view.coverUrl}
-            title={name}
-            sizes="64px"
-            className="object-cover transition-transform duration-200 group-hover/row:scale-105"
-          />
+        {/* A square cover, full-bleed at the leading edge, and what sets the
+        row's height: the card grows to the cover, not the cover shrunk to the
+        card. The outer strip only shows if the text ever runs taller. Fixed
+        width so every row's text starts on the same line. */}
+        <div className="w-28 shrink-0 self-stretch bg-muted">
+          <div className="relative aspect-square overflow-hidden">
+            <CoverImage
+              src={view.coverUrl}
+              title={name}
+              sizes="112px"
+              // `object-top`: a square cuts a lot off a portrait cover, and the
+              // logo and the face are up top.
+              className="object-cover object-top transition-transform duration-200 group-hover/row:scale-105"
+            />
+          </div>
         </div>
 
-        <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 py-2">
-          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+				{/* <div className="flex flex-col gap-1 items-start flex-1 py-2 px-3">
+					
+				</div> */}
+
+        {/* The entry header's layout at row scale — title and state
+        badges, then status and sources, then the stat strip and its bar — so
+        opening a row reads as the row growing into the page. */}
+        <div className="flex min-w-0 flex-1 flex-col justify-start gap-1.5 py-2 px-3">
+          <div className="flex min-w-0 items-center gap-1.5">
             <h3 className="truncate font-display text-sm font-bold leading-tight">
               {name}
             </h3>
@@ -553,27 +572,13 @@ const EntryRowBody = forwardRef<
             {view.mature ? <MatureBadge /> : null}
           </div>
 
-          <div className="flex min-w-0 flex-wrap items-center gap-1">
+          <div className="flex min-w-fit flex-wrap items-center gap-1">
             {entry ? (
-              <span className="text-[11px] text-muted-foreground">
+              <Badge variant="secondary" className="rounded-pill">
                 {statusLabel(entry.listStatus)}
-              </span>
+              </Badge>
             ) : null}
-            {visible.map((es) =>
-              es.sources ? (
-                <SourceBadge
-                  key={es.id}
-                  source={{
-                    name: es.sources.name,
-                    isPrimary: es.is_primary,
-                    isPaid: es.is_paid,
-                    isOfficial: es.is_official,
-                    isHiatus: es.is_hiatus,
-                    isOwned: es.is_owned,
-                  }}
-                />
-              ) : null,
-            )}
+            <SourceBadges sources={visible} />
             {overflow > 0 ? (
               <span className="rounded-pill bg-secondary px-2 text-xs font-semibold text-secondary-foreground">
                 +{overflow}
@@ -589,57 +594,32 @@ const EntryRowBody = forwardRef<
             ) : null}
           </div>
 
-          {/* The progress bar sits under the text rather than along the row's
-          edge: a row is short enough that a hairline on the border would read
-          as part of the border. Only drawn when there is a total to divide
-          by. */}
-          {entry && entry.pct !== null ? (
-            <div
-              className="h-1 w-full max-w-48 overflow-hidden rounded-full bg-muted"
-              role="progressbar"
-              aria-valuenow={entry.pct}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label={`${entry.pct}% read`}
-            >
-              <div
-                className="h-full bg-brand"
-                style={{ width: `${entry.pct}%` }}
+          {entry ? (
+            <>
+              <StatStrip
+                size="sm"
+                cells={[
+                  {
+                    label: "Chapters",
+                    value: progressLabel(entry.chaptersRead, total),
+                  },
+                  // No known total means no percentage to report — an ongoing
+                  // series would otherwise read as a confident 0%.
+                  {
+                    label: "Progress",
+                    value: entry.pct !== null ? `${entry.pct}%` : "—",
+                  },
+                ]}
               />
-            </div>
+              <ProgressBar pct={entry.pct} className="max-w-48" />
+            </>
           ) : null}
         </div>
-
-        {/* The stat strip, turned on its side: the grid's divided cells as
-        columns at the trailing edge. Hidden on a phone, where the row has no
-        width to spare — the title and chips are what matter there, and the
-        numbers are one tap away on the entry page. */}
-        {entry ? (
-          <div className="hidden shrink-0 items-stretch divide-x divide-border border-l border-border bg-muted/50 text-center sm:flex">
-            <div className="flex w-20 flex-col justify-center px-2 py-1.5">
-              <p className="text-[9px] leading-none text-muted-foreground">
-                Read
-              </p>
-              <p className="mt-0.5 truncate text-[11px] font-bold leading-none whitespace-nowrap tabular-nums">
-                {progressLabel(entry.chaptersRead, total)}
-              </p>
-            </div>
-            <div className="flex w-16 flex-col justify-center px-2 py-1.5">
-              <p className="text-[9px] leading-none text-muted-foreground">
-                Progress
-              </p>
-              <p className="mt-0.5 text-[11px] font-bold leading-none tabular-nums">
-                {/* No known total means no percentage to report — an ongoing
-                series would otherwise read as a confident 0%. */}
-                {entry.pct !== null ? `${entry.pct}%` : "—"}
-              </p>
-            </div>
-          </div>
-        ) : null}
       </CardLink>
 
       {/* Parked at the trailing edge, vertically centred. */}
-      <div className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-1">
+      {/* <div className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-1"> */}
+			<div className="absolute top-0 right-0 w-14 p-3 flex items-center gap-1">
         <CardControls view={view} onOpenSheet={onOpenSheet} overlay={false} />
         {/* An untracked title's one action, sized to sit in the same slot the
         read link would. */}
@@ -657,6 +637,7 @@ const EntryRowBody = forwardRef<
           />
         ) : null}
       </div>
+			</div>
     </div>
   );
 });

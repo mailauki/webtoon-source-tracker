@@ -1,9 +1,9 @@
 import { CoverImage } from "@/components/cover-image";
+import { ProgressBar, SourceBadges, StatStrip } from "@/components/entry-parts";
 import {
   HiatusBadge,
   NoSourceBadge,
   OwnedBadge,
-  SourceBadge,
 } from "@/components/source-badge";
 import { Badge } from "@/components/ui/badge";
 import { ownsEveryChapter } from "@/lib/data/chapter-ranges";
@@ -35,8 +35,8 @@ import { progressLabel, statusLabel } from "@/lib/data/entry-labels";
  * one has.
  *
  * What it does share is the vocabulary: the same badges, the same
- * `progressLabel`, the same stat-strip shape. Those are the things that would
- * actually read as inconsistent if they drifted.
+ * `progressLabel`, and the stat strip, bar and source list from entry-parts —
+ * the things that would actually read as inconsistent if they drifted.
  */
 export function EntryHeader({
   entry,
@@ -75,22 +75,26 @@ export function EntryHeader({
     // The row's shape at detail scale: stacked on a phone, where a 160px
     // cover beside text leaves the text nothing, and side by side from `sm`.
     <div className="flex flex-col gap-4 overflow-hidden rounded-xl border border-border bg-card sm:flex-row sm:items-stretch sm:gap-5">
-      {/* Full-bleed at the leading edge, like the row's thumbnail — the cover
-      runs to the card's edge rather than floating inside padding. */}
-      <div className="relative aspect-[2/1] w-full shrink-0 overflow-hidden bg-muted sm:aspect-auto sm:w-40">
-        <CoverImage
-          src={title.main_picture_url}
-          title={name}
-          sizes="(max-width: 640px) 100vw, 160px"
-          // `object-top` for the same reason the grid card uses it: a webtoon
-          // cover puts the logo and the face up top, and the phone crop here
-          // is severe.
-          className="object-cover object-top"
-          preload
-        />
+      {/* The grid card's 9/16 portrait, and what sets the header's height
+      from `sm`: full-bleed at the leading edge, with the card grown to it. The
+      outer strip only shows if the text ever runs taller. On a phone, where a
+      full-width 9/16 would be taller than the screen, it sits centred over the
+      text instead. */}
+      <div className="mx-4 mt-4 w-40 shrink-0 self-center sm:m-0 sm:bg-muted sm:w-44 sm:self-stretch">
+        <div className="relative aspect-[9/16] overflow-hidden rounded-lg sm:rounded-none">
+          <CoverImage
+            src={title.main_picture_url}
+            title={name}
+            sizes="176px"
+            // `object-top` for the same reason the grid card uses it: a webtoon
+            // cover puts the logo and the face up top.
+            className="object-cover object-top"
+            preload
+          />
+        </div>
       </div>
 
-      <div className="flex min-w-0 flex-1 flex-col justify-center gap-3 px-4 pb-4 sm:py-4 sm:pl-0 sm:pr-5">
+      <div className="flex min-w-0 flex-1 flex-col justify-start gap-3 px-4 pb-4 sm:py-4 sm:pl-0 sm:pr-5">
         <div className="grid gap-1">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <h1 className="font-display text-2xl font-bold">{name}</h1>
@@ -134,21 +138,7 @@ export function EntryHeader({
         this" is the question it exists to answer. */}
         {ordered.length > 0 ? (
           <div className="flex flex-wrap items-center gap-1">
-            {ordered.map((es) =>
-              es.sources ? (
-                <SourceBadge
-                  key={es.id}
-                  source={{
-                    name: es.sources.name,
-                    isPrimary: es.is_primary,
-                    isPaid: es.is_paid,
-                    isOfficial: es.is_official,
-                    isHiatus: es.is_hiatus,
-                    isOwned: es.is_owned,
-                  }}
-                />
-              ) : null,
-            )}
+            <SourceBadges sources={ordered} />
           </div>
         ) : null}
 
@@ -157,54 +147,33 @@ export function EntryHeader({
         {/* The stat strip, as a row draws it: divided cells, tabular figures.
         Three cells rather than the row's two — this page has the width, and
         volumes are a fact the shelf has no room for. */}
-        <div className="flex w-fit items-stretch divide-x divide-border rounded-md border border-border bg-muted/50 text-center">
-          <div className="px-3 py-1.5">
-            <p className="text-[10px] leading-none text-muted-foreground">
-              Chapters
-            </p>
-            <p className="mt-1 text-sm font-bold leading-none tabular-nums">
-              {progressLabel(entry.num_chapters_read, total)}
-            </p>
-          </div>
-          <div className="px-3 py-1.5">
-            <p className="text-[10px] leading-none text-muted-foreground">
-              Progress
-            </p>
-            <p className="mt-1 text-sm font-bold leading-none tabular-nums">
-              {/* No known total means no percentage to report — an ongoing
-              series would otherwise read as a confident 0%. */}
-              {pct !== null ? `${pct}%` : "—"}
-            </p>
-          </div>
-          {/* Only when MAL knows of any: a volume count of nothing is not a
-          fact worth a third of the strip. */}
-          {title.num_volumes && title.num_volumes > 0 ? (
-            <div className="px-3 py-1.5">
-              <p className="text-[10px] leading-none text-muted-foreground">
-                Volumes
-              </p>
-              <p className="mt-1 text-sm font-bold leading-none tabular-nums">
-                {progressLabel(entry.num_volumes_read, title.num_volumes)}
-              </p>
-            </div>
-          ) : null}
-        </div>
+        <StatStrip
+          cells={[
+            {
+              label: "Chapters",
+              value: progressLabel(entry.num_chapters_read, total),
+            },
+            // No known total means no percentage to report — an ongoing
+            // series would otherwise read as a confident 0%.
+            { label: "Progress", value: pct !== null ? `${pct}%` : "—" },
+            // Only when MAL knows of any: a volume count of nothing is not a
+            // fact worth a third of the strip.
+            ...(title.num_volumes && title.num_volumes > 0
+              ? [
+                  {
+                    label: "Volumes",
+                    value: progressLabel(
+                      entry.num_volumes_read,
+                      title.num_volumes,
+                    ),
+                  },
+                ]
+              : []),
+          ]}
+        />
 
-        {/* The bar, under the strip it belongs to. Only drawn when there is a
-        total to divide by. */}
-        {pct !== null ? (
-          <div
-            className="h-1 w-full max-w-xs overflow-hidden rounded-full bg-muted"
-            role="progressbar"
-            aria-valuenow={pct}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-label={`${pct}% read`}
-          >
-            <div className="h-full bg-brand" style={{ width: `${pct}%` }} />
-          </div>
-        ) : null}
-
+        {/* The bar, under the strip it belongs to. */}
+        <ProgressBar pct={pct} className="max-w-xs" />
       </div>
     </div>
   );

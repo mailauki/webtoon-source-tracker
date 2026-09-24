@@ -30,7 +30,11 @@ export type MirrorOutcome =
  */
 export async function mirrorToAniList(
   userId: string,
-  title: { id: number; mal_media_id: number | null; anilist_media_id: number | null },
+  title: {
+    id: number;
+    mal_media_id: number | null;
+    anilist_media_id: number | null;
+  },
   state: {
     status: MalListStatus;
     num_chapters_read: number;

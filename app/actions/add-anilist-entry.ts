@@ -170,6 +170,7 @@ export async function addAniListEntry(
       titleEn: media.title.english,
       coverUrl: media.coverImage?.large ?? media.coverImage?.medium ?? null,
       format: media.format,
+      countryOfOrigin: media.countryOfOrigin ?? null,
       chapters: media.chapters,
       volumes: media.volumes,
       status: media.status,

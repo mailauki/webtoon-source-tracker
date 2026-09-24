@@ -40,9 +40,12 @@ export default async function CategoriesPage() {
   // empty grid, and an empty page reached from a deliberate press reads as a
   // broken link rather than as an honest "nothing here yet". groupByKind then
   // drops any kind left with nothing.
+  //
+  // Formats lead here, out of the usual order: Manga, Manhwa or Manhua is the
+  // first thing most people browsing are choosing between.
   const groups = groupByKind(
     tags.filter((tag) => (taggedCounts.get(tag.id) ?? 0) > 0),
-  );
+  ).sort((a, b) => Number(b.kind === "format") - Number(a.kind === "format"));
 
   const total = groups.reduce((sum, group) => sum + group.tags.length, 0);
 

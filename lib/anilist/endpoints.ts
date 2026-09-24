@@ -38,7 +38,12 @@ export async function getViewer(client: AniListClient): Promise<AniListViewer> {
  */
 const LIST_QUERY = /* GraphQL */ `
   query ($userId: Int, $chunk: Int) {
-    MediaListCollection(userId: $userId, type: MANGA, chunk: $chunk, perChunk: 500) {
+    MediaListCollection(
+      userId: $userId
+      type: MANGA
+      chunk: $chunk
+      perChunk: 500
+    ) {
       hasNextChunk
       lists {
         entries {
@@ -56,6 +61,7 @@ const LIST_QUERY = /* GraphQL */ `
               english
             }
             format
+            countryOfOrigin
             chapters
             volumes
             status
@@ -91,7 +97,8 @@ export async function getMangaList(
       userId: anilistUserId,
       chunk,
     });
-    const collection = anilistListCollectionSchema.parse(raw).MediaListCollection;
+    const collection =
+      anilistListCollectionSchema.parse(raw).MediaListCollection;
 
     for (const list of collection?.lists ?? []) {
       for (const entry of list.entries ?? []) byMedia.set(entry.mediaId, entry);
@@ -138,7 +145,10 @@ export async function findMediaByMalIds(
 
     // A batch of 50 ids can still page if AniList has duplicates for some.
     for (let page = 1; page <= 5; page++) {
-      const raw = await client.request<unknown>(MEDIA_BY_MAL_QUERY, { ids, page });
+      const raw = await client.request<unknown>(MEDIA_BY_MAL_QUERY, {
+        ids,
+        page,
+      });
       const parsed = anilistMediaIdPageSchema.parse(raw).Page;
 
       for (const media of parsed.media) {
@@ -265,7 +275,12 @@ export function isAniListNovel(format: string | null | undefined): boolean {
 const SEARCH_QUERY = /* GraphQL */ `
   query ($search: String, $perPage: Int, $isAdult: Boolean) {
     Page(page: 1, perPage: $perPage) {
-      media(search: $search, type: MANGA, isAdult: $isAdult, sort: SEARCH_MATCH) {
+      media(
+        search: $search
+        type: MANGA
+        isAdult: $isAdult
+        sort: SEARCH_MATCH
+      ) {
         id
         idMal
         title {
@@ -273,6 +288,7 @@ const SEARCH_QUERY = /* GraphQL */ `
           english
         }
         format
+        countryOfOrigin
         chapters
         volumes
         status
@@ -328,6 +344,7 @@ const MEDIA_BY_ID_QUERY = /* GraphQL */ `
         english
       }
       format
+      countryOfOrigin
       chapters
       volumes
       status

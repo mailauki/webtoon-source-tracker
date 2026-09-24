@@ -27,7 +27,9 @@ export async function getToken(
   }
 
   const row = data?.[0];
-  return row ? { access_token: row.access_token, expires_at: row.expires_at } : null;
+  return row
+    ? { access_token: row.access_token, expires_at: row.expires_at }
+    : null;
 }
 
 /**
