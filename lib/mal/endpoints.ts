@@ -81,6 +81,26 @@ export async function getManga(client: MalClient, mangaId: number) {
 }
 
 /**
+ * MAL's current chapter count for a title, read live with the app's client id.
+ *
+ * The stored `num_chapters` is only as fresh as the last sync; the entry
+ * page's chapter check wants today's number. Null when MAL has none or cannot
+ * be reached — the caller falls back to the stored count.
+ */
+export async function getChapterCount(mangaId: number): Promise<number | null> {
+  try {
+    const raw = await malPublicRequest<{ num_chapters?: number | null }>(
+      `/manga/${mangaId}`,
+      { fields: "num_chapters" },
+    );
+    return raw.num_chapters ?? null;
+  } catch (cause) {
+    console.error("[mal/chapters] failed:", cause);
+    return null;
+  }
+}
+
+/**
  * MAL's rating for an entry it considers explicit or borderline.
  *
  * The set and the rule for reading it live in lib/data/nsfw.ts, because

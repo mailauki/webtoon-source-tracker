@@ -263,3 +263,45 @@ export async function removeEntrySource(
   revalidatePath("/library");
   return { message: "Source removed." };
 }
+
+/**
+ * Sets only the URL of an attached source.
+ *
+ * Separate from updateEntrySource, which writes every field from the form and
+ * would reset the flags and counts of a row this only means to give a link.
+ * Used by the AniList link import.
+ */
+export async function setEntrySourceUrl(
+  _prev: EntrySourceState,
+  formData: FormData,
+): Promise<EntrySourceState> {
+  await verifySession();
+
+  const parsed = z
+    .object({
+      id: z.coerce.number().int().positive(),
+      entryId: z.coerce.number().int().positive(),
+      url: urlSchema,
+    })
+    .safeParse({
+      id: formData.get("id"),
+      entryId: formData.get("entry_id"),
+      url: formData.get("url") ?? "",
+    });
+
+  if (!parsed.success || !parsed.data.url) {
+    return { error: parsed.error?.issues[0].message ?? "No link to save." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("entry_sources")
+    .update({ url: parsed.data.url })
+    .eq("id", parsed.data.id);
+
+  if (error) return { error: error.message };
+
+  revalidatePath(`/entry/${parsed.data.entryId}`);
+  revalidatePath("/library");
+  return { message: "Link saved." };
+}

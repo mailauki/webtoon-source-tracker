@@ -132,3 +132,31 @@ export const anilistSearchPageSchema = z.object({
     media: z.array(anilistSearchMediaSchema),
   }),
 });
+
+/**
+ * What the entry page reads from AniList about one title: its own chapter
+ * count, to hold against MyAnimeList's, and the external links it lists, which
+ * can become source URLs.
+ *
+ * `type` is AniList's ExternalLinkType (INFO, STREAMING, SOCIAL); for manga,
+ * STREAMING is where to read it.
+ */
+export const anilistMediaExtrasSchema = z.object({
+  id: z.number(),
+  chapters: z.number().nullable(),
+  status: z.string().nullable(),
+  externalLinks: z
+    .array(
+      z.object({
+        url: z.string().nullable(),
+        site: z.string(),
+        type: z.string().nullable(),
+        /** An English language name ("English", "Korean"), not a code. */
+        language: z.string().nullable(),
+        isDisabled: z.boolean().nullable(),
+      }),
+    )
+    .nullable(),
+});
+
+export type AniListMediaExtras = z.infer<typeof anilistMediaExtrasSchema>;

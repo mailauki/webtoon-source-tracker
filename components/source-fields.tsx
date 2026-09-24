@@ -1,7 +1,7 @@
 "use client";
 
 import { Minus, Plus } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,8 +47,15 @@ export type EntrySource = {
 export function SourceFields({
   source,
   total = null,
+  suggestedUrl = null,
 }: {
   source?: EntrySource;
+  /**
+   * AniList's link for the chosen source, offered under the URL field. Filled
+   * in on a tap, never automatically: the field may already hold the link
+   * the reader actually uses.
+   */
+  suggestedUrl?: string | null;
   /**
    * MAL's chapter count for this title, when it has one. Optional because the
    * form works without it — it only powers the fill-it-in shortcut.
@@ -106,6 +113,9 @@ export function SourceFields({
   }
 
   const id = source?.id ?? "new";
+  // The URL field stays uncontrolled like the rest; the ref is only for the
+  // Use link button to write into it.
+  const urlRef = useRef<HTMLInputElement>(null);
 
   return (
     <>
@@ -113,6 +123,7 @@ export function SourceFields({
         <div className="grid gap-2">
           <Label htmlFor={`url-${id}`}>Link (optional)</Label>
           <Input
+            ref={urlRef}
             id={`url-${id}`}
             name="url"
             type="url"
@@ -120,6 +131,24 @@ export function SourceFields({
             defaultValue={source?.url ?? ""}
             placeholder="https://…"
           />
+          {suggestedUrl ? (
+            <div className="flex min-w-0 items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0 rounded-pill"
+                onClick={() => {
+                  if (urlRef.current) urlRef.current.value = suggestedUrl;
+                }}
+              >
+                Use link
+              </Button>
+              <span className="truncate text-xs text-muted-foreground">
+                From AniList: {suggestedUrl}
+              </span>
+            </div>
+          ) : null}
         </div>
         <div className="grid gap-2">
           <Label htmlFor={`chapters-${id}`}>Chapters read here</Label>

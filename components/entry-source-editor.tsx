@@ -39,12 +39,15 @@ export function EntrySourceEditor({
   sources,
   catalog,
   total = null,
+  anilistLinks = {},
 }: {
   entryId: number;
   sources: EntrySource[];
   catalog: Source[];
   /** MAL's chapter count for this title, for the "own all" shortcut. */
   total?: ChapterTotal | null;
+  /** AniList's reading link per source id — see catalogLinks. */
+  anilistLinks?: Record<number, string>;
 }) {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -86,6 +89,7 @@ export function EntrySourceEditor({
           entryId={entryId}
           available={available}
           total={total}
+          anilistLinks={anilistLinks}
           onDone={() => setAdding(false)}
         />
       ) : null}
@@ -292,11 +296,13 @@ function AddSourceForm({
   entryId,
   available,
   total,
+  anilistLinks,
   onDone,
 }: {
   entryId: number;
   available: Source[];
   total: ChapterTotal | null;
+  anilistLinks: Record<number, string>;
   onDone: () => void;
 }) {
   const [state, action] = useActionState<EntrySourceState, FormData>(
@@ -317,8 +323,28 @@ function AddSourceForm({
   const isOther =
     available.find((s) => String(s.id) === selected)?.slug === "other";
 
+  // Sources AniList has a link for that are not on this entry yet.
+  const quickAdds = available.filter((s) => anilistLinks[s.id]);
+
   return (
     <div className="grid gap-3 rounded-lg border border-border bg-card p-4">
+      {quickAdds.length > 0 ? (
+        <div className="grid gap-2">
+          <p className="text-sm font-medium">Add from AniList</p>
+          <ul className="grid gap-2">
+            {quickAdds.map((s) => (
+              <QuickAdd
+                key={s.id}
+                entryId={entryId}
+                source={s}
+                url={anilistLinks[s.id]}
+                onDone={onDone}
+              />
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       {isOther ? (
         <form action={customAction} className="grid gap-2">
           <Label htmlFor="custom-name">Name this source</Label>
@@ -386,7 +412,10 @@ function AddSourceForm({
           </select>
         </div>
 
-        <SourceFields total={total} />
+        <SourceFields
+          total={total}
+          suggestedUrl={selected ? anilistLinks[Number(selected)] : null}
+        />
 
         {state?.error ? (
           <p role="alert" className="text-sm text-alert">
@@ -409,6 +438,65 @@ function AddSourceForm({
         </div>
       </form>
     </div>
+  );
+}
+
+/**
+ * One tap to attach a source AniList lists, with AniList's link.
+ *
+ * Its own form beside the main one (forms cannot nest), and the only fields
+ * it sets are the source and the link: anything else is a normal edit away.
+ *
+ * Closes the whole add form on success, like the main Add button does: the
+ * source now sits in the list below, and a form left open beside it would
+ * read as a second step still waiting.
+ */
+function QuickAdd({
+  entryId,
+  source,
+  url,
+  onDone,
+}: {
+  entryId: number;
+  source: Source;
+  url: string;
+  onDone: () => void;
+}) {
+  const [state, action] = useActionState<EntrySourceState, FormData>(
+    async (prev, formData) => {
+      const result = await addEntrySource(prev, formData);
+      if (result?.message) onDone();
+      return result;
+    },
+    null,
+  );
+
+  return (
+    <li className="grid gap-1">
+      <form action={action} className="flex items-center justify-between gap-3">
+        <input type="hidden" name="entry_id" value={entryId} />
+        <input type="hidden" name="source_id" value={source.id} />
+        <input type="hidden" name="url" value={url} />
+        {/* addEntrySource reads an absent checkbox as unticked, and a site
+            AniList lists as a reading link is an official one. */}
+        <input type="hidden" name="is_official" value="on" />
+
+        <div className="min-w-0 text-sm">
+          <p className="font-medium">{source.name}</p>
+          <p className="truncate text-xs text-muted-foreground">{url}</p>
+        </div>
+
+        <SubmitButton className="h-8 shrink-0 rounded-pill px-3">
+          <Plus className="size-4" />
+          Add
+        </SubmitButton>
+      </form>
+      {state?.error ? (
+        <p role="alert" className="text-sm text-alert">
+          {state.error}
+        </p>
+      ) : null}
+    </li>
   );
 }
 

@@ -25,6 +25,13 @@ const patchSchema = z.object({
   score: z
     .union([z.literal(""), z.coerce.number().int().min(0).max(10)])
     .optional(),
+  /**
+   * The chapter count the editor was counting up to — higher than the stored
+   * one when AniList is ahead of MyAnimeList. Only ever raises the completion
+   * threshold below (it is maxed with the stored count), so a forged value can
+   * delay an auto-complete on the sender's own entry, never cause one.
+   */
+  total: z.union([z.literal(""), z.coerce.number().int().positive()]).optional(),
 });
 
 /**
@@ -46,13 +53,14 @@ export async function updateProgress(
     numChaptersRead: formData.get("num_chapters_read") ?? "",
     listStatus: formData.get("list_status") || undefined,
     score: formData.get("score") ?? "",
+    total: formData.get("total") ?? "",
   });
 
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0].message };
   }
 
-  const { entryId, numChaptersRead, listStatus, score } = parsed.data;
+  const { entryId, numChaptersRead, listStatus, score, total } = parsed.data;
   const supabase = await createClient();
 
   // Load the entry and assert ownership explicitly. RLS already scopes this
@@ -74,7 +82,10 @@ export async function updateProgress(
   }
 
   const malMediaId = entry.media_titles.mal_media_id;
-  const totalChapters = entry.media_titles.num_chapters;
+  const totalChapters = Math.max(
+    entry.media_titles.num_chapters ?? 0,
+    total || 0,
+  );
 
   const patch: {
     num_chapters_read?: number;
