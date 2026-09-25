@@ -6,6 +6,7 @@ import { VIEWER_QUERY } from "@/lib/anilist/endpoints";
 import { STATE_COOKIE, exchangeCodeForToken } from "@/lib/anilist/oauth";
 import { saveToken } from "@/lib/anilist/token-store";
 import { anilistViewerSchema } from "@/lib/anilist/types";
+import { isAppState, readAppCallback, redirectToApp } from "@/lib/auth/app-link";
 import { verifySession } from "@/lib/auth/dal";
 import { verifyState } from "@/lib/mal/oauth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -19,6 +20,11 @@ function fail(origin: string, reason: string) {
 }
 
 export async function GET(request: NextRequest) {
+  // App links finish in the app (leg 3), never in this browser.
+  if (isAppState(request.nextUrl.searchParams.get("state"))) {
+    return redirectToApp(request.nextUrl.searchParams);
+  }
+
   const { userId } = await verifySession();
   const { searchParams, origin } = request.nextUrl;
 
@@ -42,11 +48,21 @@ export async function GET(request: NextRequest) {
     return fail(origin, "Security check failed. Please try again.");
   }
 
+  const error = await link(userId, code);
+  if (error) return fail(origin, error);
+
+  const response = NextResponse.redirect(`${origin}/settings?anilist=connected`);
+  response.cookies.delete({ name: STATE_COOKIE, path: "/api/anilist" });
+  return response;
+}
+
+/** Exchanges the code and attaches the AniList account. Returns an error message, or null. */
+async function link(userId: string, code: string): Promise<string | null> {
   let token;
   try {
     token = await exchangeCodeForToken(code);
   } catch (cause) {
-    return fail(origin, `Could not complete the link: ${(cause as Error).message}`);
+    return `Could not complete the link: ${(cause as Error).message}`;
   }
 
   // Identify the AniList account before storing anything.
@@ -58,7 +74,7 @@ export async function GET(request: NextRequest) {
     );
     viewer = anilistViewerSchema.parse(raw.Viewer);
   } catch (cause) {
-    return fail(origin, `Could not read your AniList profile: ${(cause as Error).message}`);
+    return `Could not read your AniList profile: ${(cause as Error).message}`;
   }
 
   const admin = createAdminClient();
@@ -71,7 +87,7 @@ export async function GET(request: NextRequest) {
     .maybeSingle();
 
   if (existing && existing.user_id !== userId) {
-    return fail(origin, "That AniList account is already connected to another account.");
+    return "That AniList account is already connected to another account.";
   }
 
   const { error: upsertError } = await admin.from("anilist_connections").upsert(
@@ -87,17 +103,24 @@ export async function GET(request: NextRequest) {
   );
 
   if (upsertError) {
-    return fail(origin, `Could not save the connection: ${upsertError.message}`);
+    return `Could not save the connection: ${upsertError.message}`;
   }
 
   // Token last: the FK requires the anilist_connections row to exist first.
   try {
     await saveToken(userId, token);
   } catch (cause) {
-    return fail(origin, `Could not store credentials: ${(cause as Error).message}`);
+    return `Could not store credentials: ${(cause as Error).message}`;
   }
 
-  const response = NextResponse.redirect(`${origin}/settings?anilist=connected`);
-  response.cookies.delete({ name: STATE_COOKIE, path: "/api/anilist" });
-  return response;
+  return null;
+}
+
+/** Leg 3 of an app link — see lib/auth/app-link.ts. */
+export async function POST(request: NextRequest) {
+  const checked = await readAppCallback(request);
+  if (checked instanceof Response) return checked;
+
+  const error = await link(checked.userId, checked.code);
+  return error ? Response.json({ error }, { status: 400 }) : Response.json({ ok: true });
 }

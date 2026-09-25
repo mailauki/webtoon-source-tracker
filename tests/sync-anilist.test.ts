@@ -82,7 +82,7 @@ describe("AniList writes set the sort timestamp", () => {
     const [sync, add, progress] = await Promise.all([
       readFile("lib/sync/sync-anilist.ts", "utf8"),
       readFile("app/actions/add-anilist-entry.ts", "utf8"),
-      readFile("app/actions/progress.ts", "utf8"),
+      readFile("lib/progress/save-progress.ts", "utf8"),
     ]);
 
     for (const source of [sync, add, progress]) {

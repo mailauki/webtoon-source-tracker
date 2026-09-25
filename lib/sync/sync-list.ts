@@ -381,7 +381,7 @@ export async function syncMalList(
   //
   // sync_to_mal = false: the user detached this title from MyAnimeList, either
   // by excluding it or by removing it there while keeping it here. Their local
-  // progress is now the only copy that moves — app/actions/progress.ts writes
+  // progress is now the only copy that moves — lib/progress/save-progress.ts writes
   // such a row from the request rather than from MAL's echo — so overwriting
   // it here would silently undo every edit they make, and MAL's copy is stale
   // or absent in exactly the case that matters.

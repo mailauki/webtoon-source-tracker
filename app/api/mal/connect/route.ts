@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { appCodeVerifier, createAppState, userIdFromBearer } from "@/lib/auth/app-link";
 import { verifySession } from "@/lib/auth/dal";
 import {
   MAL_COOKIE_PATH,
@@ -46,4 +47,17 @@ export async function GET() {
   response.cookies.set(STATE_COOKIE, state, cookieOptions);
 
   return response;
+}
+
+/**
+ * Leg 1 of an app link (see lib/auth/app-link.ts): the iOS app sends its
+ * access token and gets the authorize URL to open itself. No cookies — the
+ * PKCE verifier is derived from the state when the app finishes the link.
+ */
+export async function POST(request: Request) {
+  const userId = await userIdFromBearer(request);
+  if (!userId) return Response.json({ error: "Not signed in" }, { status: 401 });
+
+  const state = createAppState(userId);
+  return Response.json({ url: buildAuthorizeUrl(appCodeVerifier(state), state) });
 }
