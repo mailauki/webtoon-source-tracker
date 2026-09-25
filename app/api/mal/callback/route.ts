@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-import { APP_CALLBACK, APP_TICKET_COOKIE, linkUserId } from "@/lib/auth/app-link";
+import {
+  appCodeVerifier,
+  isAppState,
+  readAppCallback,
+  redirectToApp,
+} from "@/lib/auth/app-link";
+import { verifySession } from "@/lib/auth/dal";
 import {
   MAL_COOKIE_PATH,
   PKCE_COOKIE,
@@ -12,11 +18,10 @@ import {
 import { saveTokens } from "@/lib/mal/token-store";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-function failTo(origin: string, reason: string, app: boolean) {
+function fail(origin: string, reason: string) {
   const response = NextResponse.redirect(
-    `${app ? APP_CALLBACK : `${origin}/settings`}?error=${encodeURIComponent(reason)}`,
+    `${origin}/settings?error=${encodeURIComponent(reason)}`,
   );
-  response.cookies.delete({ name: APP_TICKET_COOKIE, path: MAL_COOKIE_PATH });
   // Clear the one-shot cookies on the way out, as the success path does.
   // A verifier left behind is spent — the next attempt sets fresh ones, but
   // until then a stale pair sits in the browser for its full 10 minutes.
@@ -26,20 +31,17 @@ function failTo(origin: string, reason: string, app: boolean) {
 }
 
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = request.nextUrl;
-  // Set by the connect route when the iOS app started this flow.
-  const ticket = request.cookies.get(APP_TICKET_COOKIE)?.value;
-  const app = Boolean(ticket);
-  const fail = (reason: string) => failTo(origin, reason, app);
-
-  const userId = await linkUserId(ticket);
-  if (!userId) {
-    return fail("The link request expired. Please try again.");
+  // App links finish in the app (leg 3), never in this browser.
+  if (isAppState(request.nextUrl.searchParams.get("state"))) {
+    return redirectToApp(request.nextUrl.searchParams);
   }
+
+  const { userId } = await verifySession();
+  const { searchParams, origin } = request.nextUrl;
 
   const malError = searchParams.get("error");
   if (malError) {
-    return fail(`MyAnimeList returned an error: ${malError}`);
+    return fail(origin, `MyAnimeList returned an error: ${malError}`);
   }
 
   const code = searchParams.get("code");
@@ -48,21 +50,34 @@ export async function GET(request: NextRequest) {
   const codeVerifier = request.cookies.get(PKCE_COOKIE)?.value;
 
   if (!code || !state || !cookieState || !codeVerifier) {
-    return fail("The link request expired. Please try again.");
+    return fail(origin, "The link request expired. Please try again.");
   }
 
   // Two checks, both needed: the state must match the cookie (CSRF), and its
   // signature must belong to THIS user — otherwise a callback captured from
   // another browser could be replayed to attach someone else's MAL account.
   if (state !== cookieState || !verifyState(state, userId)) {
-    return fail("Security check failed. Please try again.");
+    return fail(origin, "Security check failed. Please try again.");
   }
 
+  const error = await link(userId, code, codeVerifier);
+  if (error) return fail(origin, error);
+
+  const response = NextResponse.redirect(`${origin}/library?connected=1`);
+  // Deleted with the path they were set on — a delete without it targets a
+  // different cookie ("/") and leaves these in place until they expire.
+  response.cookies.delete({ name: PKCE_COOKIE, path: MAL_COOKIE_PATH });
+  response.cookies.delete({ name: STATE_COOKIE, path: MAL_COOKIE_PATH });
+  return response;
+}
+
+/** Exchanges the code and attaches the MAL account. Returns an error message, or null. */
+async function link(userId: string, code: string, codeVerifier: string): Promise<string | null> {
   let tokens;
   try {
     tokens = await exchangeCodeForTokens(code, codeVerifier);
   } catch (cause) {
-    return fail(`Could not complete the link: ${(cause as Error).message}`);
+    return `Could not complete the link: ${(cause as Error).message}`;
   }
 
   // Identify the MAL account before storing anything.
@@ -84,7 +99,7 @@ export async function GET(request: NextRequest) {
       picture?: string;
     };
   } catch (cause) {
-    return fail(`Could not read your MyAnimeList profile: ${(cause as Error).message}`);
+    return `Could not read your MyAnimeList profile: ${(cause as Error).message}`;
   }
 
   const admin = createAdminClient();
@@ -98,9 +113,7 @@ export async function GET(request: NextRequest) {
     .maybeSingle();
 
   if (existing && existing.user_id !== userId) {
-    return fail(
-      "That MyAnimeList account is already connected to another account.",
-    );
+    return "That MyAnimeList account is already connected to another account.";
   }
 
   const { error: upsertError } = await admin.from("mal_connections").upsert(
@@ -116,23 +129,25 @@ export async function GET(request: NextRequest) {
   );
 
   if (upsertError) {
-    return fail(`Could not save the connection: ${upsertError.message}`);
+    return `Could not save the connection: ${upsertError.message}`;
   }
 
   // Tokens last: the FK requires the mal_connections row to exist first.
   try {
     await saveTokens(userId, tokens);
   } catch (cause) {
-    return fail(`Could not store credentials: ${(cause as Error).message}`);
+    return `Could not store credentials: ${(cause as Error).message}`;
   }
 
-  const response = NextResponse.redirect(
-    app ? `${APP_CALLBACK}?provider=mal` : `${origin}/library?connected=1`,
-  );
-  response.cookies.delete({ name: APP_TICKET_COOKIE, path: MAL_COOKIE_PATH });
-  // Deleted with the path they were set on — a delete without it targets a
-  // different cookie ("/") and leaves these in place until they expire.
-  response.cookies.delete({ name: PKCE_COOKIE, path: MAL_COOKIE_PATH });
-  response.cookies.delete({ name: STATE_COOKIE, path: MAL_COOKIE_PATH });
-  return response;
+  return null;
+}
+
+/** Leg 3 of an app link — see lib/auth/app-link.ts. */
+export async function POST(request: NextRequest) {
+  const checked = await readAppCallback(request);
+  if (checked instanceof Response) return checked;
+
+  const { userId, code, state } = checked;
+  const error = await link(userId, code, appCodeVerifier(state));
+  return error ? Response.json({ error }, { status: 400 }) : Response.json({ ok: true });
 }

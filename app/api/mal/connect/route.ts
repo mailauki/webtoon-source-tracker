@@ -1,12 +1,7 @@
 import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
 
-import {
-  APP_CALLBACK,
-  APP_TICKET_COOKIE,
-  appConnectUrl,
-  linkUserId,
-} from "@/lib/auth/app-link";
+import { appCodeVerifier, createAppState, userIdFromBearer } from "@/lib/auth/app-link";
+import { verifySession } from "@/lib/auth/dal";
 import {
   MAL_COOKIE_PATH,
   PKCE_COOKIE,
@@ -21,23 +16,10 @@ import {
  *
  * This is linking, not signing in: the user must already have an account, and
  * the resulting connection is attached to it.
- *
- * The iOS app POSTs here with its access token for a ticketed URL, then opens
- * that URL — see lib/auth/app-link.ts.
  */
-export async function POST(request: NextRequest) {
-  return appConnectUrl(request, "/api/mal/connect");
-}
-
-export async function GET(request: NextRequest) {
-  const ticket = request.nextUrl.searchParams.get("ticket");
+export async function GET() {
   // Route handlers are reachable directly, so this check is load-bearing.
-  const userId = await linkUserId(ticket);
-  if (!userId) {
-    return NextResponse.redirect(
-      `${APP_CALLBACK}?error=${encodeURIComponent("The link request expired. Please try again.")}`,
-    );
-  }
+  const { userId } = await verifySession();
 
   const codeVerifier = createCodeVerifier();
   const state = createState(userId);
@@ -63,10 +45,19 @@ export async function GET(request: NextRequest) {
 
   response.cookies.set(PKCE_COOKIE, codeVerifier, cookieOptions);
   response.cookies.set(STATE_COOKIE, state, cookieOptions);
-  // Also cleared on a web start, so a ticket left by an abandoned app flow
-  // cannot route this browser's callback to the app.
-  if (ticket) response.cookies.set(APP_TICKET_COOKIE, ticket, cookieOptions);
-  else response.cookies.delete({ name: APP_TICKET_COOKIE, path: cookieOptions.path });
 
   return response;
+}
+
+/**
+ * Leg 1 of an app link (see lib/auth/app-link.ts): the iOS app sends its
+ * access token and gets the authorize URL to open itself. No cookies — the
+ * PKCE verifier is derived from the state when the app finishes the link.
+ */
+export async function POST(request: Request) {
+  const userId = await userIdFromBearer(request);
+  if (!userId) return Response.json({ error: "Not signed in" }, { status: 401 });
+
+  const state = createAppState(userId);
+  return Response.json({ url: buildAuthorizeUrl(appCodeVerifier(state), state) });
 }
