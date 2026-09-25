@@ -6,6 +6,7 @@ import { z } from "zod";
 import { verifySession } from "@/lib/auth/dal";
 import { canonicalUrl } from "@/lib/data/canonical-url";
 import { parseRanges, toMultirange } from "@/lib/data/chapter-ranges";
+import { isProRequired, PRO_MESSAGES } from "@/lib/pro";
 import { createClient } from "@/lib/supabase/server";
 
 export type EntrySourceState = { error?: string; message?: string } | null;
@@ -148,6 +149,7 @@ export async function addEntrySource(
     if (error.code === "23505") {
       return { error: "That source is already attached to this title." };
     }
+    if (isProRequired(error)) return { error: PRO_MESSAGES.owned };
     return { error: error.message };
   }
 
@@ -229,7 +231,10 @@ export async function updateEntrySource(
     })
     .eq("id", id);
 
-  if (error) return { error: error.message };
+  if (error) {
+    if (isProRequired(error)) return { error: PRO_MESSAGES.owned };
+    return { error: error.message };
+  }
 
   revalidatePath(`/entry/${entryId}`);
   revalidatePath("/library");

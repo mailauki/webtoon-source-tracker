@@ -3,6 +3,7 @@
 import { Minus, Plus } from "lucide-react";
 import { useRef, useState } from "react";
 
+import { ProTeaser } from "@/components/pro-teaser";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -48,6 +49,10 @@ export function SourceFields({
   source,
   total = null,
   suggestedUrl = null,
+  // Defaults to true (unchanged behavior) for callers that don't gate this
+  // yet, e.g. the library card's quick-edit dialog — see Task 3's brief,
+  // which scopes the Pro gate to the entry page's editor only.
+  isPro = true,
 }: {
   source?: EntrySource;
   /**
@@ -61,6 +66,8 @@ export function SourceFields({
    * form works without it — it only powers the fill-it-in shortcut.
    */
   total?: ChapterTotal | null;
+  /** Owned chapters are Pro-only; a free account sees a teaser instead. */
+  isPro?: boolean;
 }) {
   // Drives only whether the count below is *shown*. The checkbox stays
   // uncontrolled (defaultChecked), like every other field here, so this is a
@@ -178,80 +185,85 @@ export function SourceFields({
           The row that reads this back only speaks when `is_owned` is set (see
           EntrySourceEditor), so a remembered count on an unticked source is
           never reported as owned. */}
-      <div hidden={!owned} className={owned ? "grid gap-2" : undefined}>
-        <Label htmlFor={`chapters-owned-${id}`}>Chapters owned</Label>
+      {isPro ? (
+        <div hidden={!owned} className={owned ? "grid gap-2" : undefined}>
+          <Label htmlFor={`chapters-owned-${id}`}>Chapters owned</Label>
 
-        {/* Text, not a number, because ownership is a set: the app has 1-40,
-            a print volume covered 41-54, three were bought loose. Left blank
-            it stays null, which reads as "owned, not counted" rather than
-            "owns none". Deliberately not bounded by the read count: buying
-            ahead of what you have read, and reading ahead of what you own,
-            are both ordinary. */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Matches the Progress stepper's shape: minus, value, plus. There
-              the value is a number; here it is the field itself, since the
-              set it edits cannot be shown as one.
+          {/* Text, not a number, because ownership is a set: the app has
+              1-40, a print volume covered 41-54, three were bought loose.
+              Left blank it stays null, which reads as "owned, not counted"
+              rather than "owns none". Deliberately not bounded by the read
+              count: buying ahead of what you have read, and reading ahead of
+              what you own, are both ordinary. */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Matches the Progress stepper's shape: minus, value, plus.
+                There the value is a number; here it is the field itself,
+                since the set it edits cannot be shown as one.
 
-              `type="button"` on all three is load-bearing: a bare <button>
-              inside a form defaults to submit, so any of them would save the
-              row instead of editing the field. */}
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="rounded-pill"
-            disabled={cannotSubtract}
-            onClick={() => step(-1)}
-            aria-label="Own one fewer chapter"
-          >
-            <Minus className="size-4" />
-          </Button>
-
-          <Input
-            id={`chapters-owned-${id}`}
-            name="chapters_owned"
-            value={ownedText}
-            onChange={(e) => setOwnedText(e.target.value)}
-            placeholder="e.g. 1-40, 55, 60"
-            className="min-w-40 flex-1"
-            aria-describedby={`chapters-owned-hint-${id}`}
-            aria-invalid={!parsed.ok}
-          />
-
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="rounded-pill"
-            disabled={cannotAdd}
-            onClick={() => step(1)}
-            aria-label="Own one more chapter"
-          >
-            <Plus className="size-4" />
-          </Button>
-
-          {total ? (
+                `type="button"` on all three is load-bearing: a bare <button>
+                inside a form defaults to submit, so any of them would save
+                the row instead of editing the field. */}
             <Button
               type="button"
               variant="outline"
+              size="icon"
               className="rounded-pill"
-              onClick={() => setOwnedText(`1-${total.count}`)}
+              disabled={cannotSubtract}
+              onClick={() => step(-1)}
+              aria-label="Own one fewer chapter"
             >
-              {ownAllLabel(total)}
+              <Minus className="size-4" />
             </Button>
-          ) : null}
-        </div>
 
-        {/* A typed syntax needs a mirror, or the first time anyone finds out
-            what the field made of their input is after saving. This says what
-            was understood, in the same words the entry page will use. */}
-        <p
-          id={`chapters-owned-hint-${id}`}
-          className={parsed.ok ? "text-xs text-muted-foreground" : "text-xs text-alert"}
-        >
-          {hint}
-        </p>
-      </div>
+            <Input
+              id={`chapters-owned-${id}`}
+              name="chapters_owned"
+              value={ownedText}
+              onChange={(e) => setOwnedText(e.target.value)}
+              placeholder="e.g. 1-40, 55, 60"
+              className="min-w-40 flex-1"
+              aria-describedby={`chapters-owned-hint-${id}`}
+              aria-invalid={!parsed.ok}
+            />
+
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="rounded-pill"
+              disabled={cannotAdd}
+              onClick={() => step(1)}
+              aria-label="Own one more chapter"
+            >
+              <Plus className="size-4" />
+            </Button>
+
+            {total ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-pill"
+                onClick={() => setOwnedText(`1-${total.count}`)}
+              >
+                {ownAllLabel(total)}
+              </Button>
+            ) : null}
+          </div>
+
+          {/* A typed syntax needs a mirror, or the first time anyone finds
+              out what the field made of their input is after saving. This
+              says what was understood, in the same words the entry page will
+              use. */}
+          <p
+            id={`chapters-owned-hint-${id}`}
+            className={parsed.ok ? "text-xs text-muted-foreground" : "text-xs text-alert"}
+          >
+            {hint}
+          </p>
+        </div>
+      ) : (
+        <ProTeaser feature="owned" />
+      )}
 
       <div className="grid gap-2">
         <Label htmlFor={`notes-${id}`}>Notes</Label>
@@ -295,16 +307,18 @@ export function SourceFields({
           />
           Paid
         </label>
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            name="is_owned"
-            defaultChecked={source?.is_owned ?? false}
-            onChange={(e) => setOwned(e.currentTarget.checked)}
-            className="size-4 accent-[var(--brand)]"
-          />
-          Owned
-        </label>
+        {isPro ? (
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              name="is_owned"
+              defaultChecked={source?.is_owned ?? false}
+              onChange={(e) => setOwned(e.currentTarget.checked)}
+              className="size-4 accent-[var(--brand)]"
+            />
+            Owned
+          </label>
+        ) : null}
         {/* Per source, not per title: a series can pause on one site and keep
             updating on another. */}
         <label className="flex items-center gap-2">

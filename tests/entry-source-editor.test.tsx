@@ -1,4 +1,5 @@
 import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // The editor imports the server actions its forms submit; none is called here.
@@ -14,6 +15,7 @@ vi.mock("@/app/actions/custom-sources", () => ({
 import { EntrySourceEditor } from "@/components/entry-source-editor";
 import type { EntrySource } from "@/components/source-fields";
 import type { ChapterTotal } from "@/lib/data/chapter-totals";
+import type { Source } from "@/lib/data/rank-sources";
 
 function source(overrides: Partial<EntrySource> = {}): EntrySource {
   return {
@@ -32,15 +34,39 @@ function source(overrides: Partial<EntrySource> = {}): EntrySource {
   };
 }
 
-function setup(sources: EntrySource[], total: ChapterTotal | null = null) {
+const catalog: Source[] = [
+  {
+    id: 1,
+    slug: "tapas",
+    name: "Tapas",
+    base_url: null,
+    logo_url: null,
+    owner_id: null,
+    parent_slug: null,
+    sort_order: null,
+  },
+];
+
+function setup(
+  sources: EntrySource[],
+  total: ChapterTotal | null = null,
+  isPro = true,
+) {
   render(
     <EntrySourceEditor
       entryId={7}
       sources={sources}
       catalog={[]}
       total={total}
+      isPro={isPro}
     />,
   );
+}
+
+/** Opens the add-source form the same way a user would: the Add source button. */
+async function openAddForm() {
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: /add source/i }));
 }
 
 afterEach(cleanup);
@@ -199,5 +225,30 @@ describe("owned across sources", () => {
       other({ is_owned: true, chapters_owned: null }),
     ]);
     expect(summary()).not.toBeInTheDocument();
+  });
+});
+
+describe("owned chapters, gated on Pro", () => {
+  it("offers Pro instead of the owned fields to a free account", async () => {
+    render(
+      <EntrySourceEditor entryId={1} sources={[]} catalog={catalog} isPro={false} />,
+    );
+    await openAddForm();
+
+    expect(screen.queryByLabelText(/owned/i)).toBeNull();
+    expect(screen.getByRole("link", { name: /get pro/i })).toHaveAttribute(
+      "href",
+      "/pro",
+    );
+  });
+
+  it("shows the owned fields to a Pro account", async () => {
+    render(
+      <EntrySourceEditor entryId={1} sources={[]} catalog={catalog} isPro />,
+    );
+    await openAddForm();
+
+    expect(screen.getByLabelText("Owned")).toBeInTheDocument();
+    expect(screen.getByLabelText("Chapters owned")).toBeInTheDocument();
   });
 });
