@@ -1,9 +1,10 @@
 import "server-only";
 
 import { createHmac } from "node:crypto";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import { createState, verifyState } from "@/lib/mal/oauth";
+import type { Database } from "@/lib/supabase/types";
 
 /**
  * MAL/AniList linking from the iOS app.
@@ -68,15 +69,32 @@ export function redirectToApp(searchParams: URLSearchParams): Response {
 
 /** Verifies an `Authorization: Bearer <supabase access token>` header. */
 export async function userIdFromBearer(request: Request): Promise<string | null> {
+  return (await userClientFromBearer(request))?.userId ?? null;
+}
+
+/**
+ * The iOS app's user and a Supabase client acting as them — RLS applies to
+ * it exactly as to the web's cookie client — or null for a missing or
+ * invalid token. For app endpoints that read or write the user's rows.
+ */
+export async function userClientFromBearer(
+  request: Request,
+): Promise<{ userId: string; supabase: SupabaseClient<Database> } | null> {
   const token = request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
   if (!token) return null;
 
-  const supabase = createClient(
+  const supabase = createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    },
   );
+  // Verified, not just decoded: getClaims checks the signature.
   const { data, error } = await supabase.auth.getClaims(token);
-  return error ? null : (data?.claims?.sub ?? null);
+  const userId = data?.claims?.sub;
+  return error || !userId ? null : { userId, supabase };
 }
 
 /**

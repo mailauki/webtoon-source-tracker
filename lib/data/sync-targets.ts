@@ -10,7 +10,7 @@
  *
  * Two facts decide it per service, and neither implies the other: whether that
  * site has the title at all, and whether the user still syncs it there. This
- * mirrors the branches in app/actions/progress.ts exactly; if that action's
+ * mirrors the branches in lib/progress/save-progress.ts exactly; if that action's
  * rules change, this changes with it.
  */
 
