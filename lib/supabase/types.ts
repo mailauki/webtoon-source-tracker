@@ -456,6 +456,38 @@ export type Database = {
         }
         Relationships: []
       }
+      pro_entitlements: {
+        Row: {
+          external_id: string | null
+          granted_at: string
+          revoked_at: string | null
+          source: string
+          user_id: string
+        }
+        Insert: {
+          external_id?: string | null
+          granted_at?: string
+          revoked_at?: string | null
+          source: string
+          user_id: string
+        }
+        Update: {
+          external_id?: string | null
+          granted_at?: string
+          revoked_at?: string | null
+          source?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pro_entitlements_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sources: {
         Row: {
           base_url: string | null
