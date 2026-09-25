@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
-import { verifySession } from "@/lib/auth/dal";
+import {
+  APP_CALLBACK,
+  APP_TICKET_COOKIE,
+  appConnectUrl,
+  linkUserId,
+} from "@/lib/auth/app-link";
 import {
   MAL_COOKIE_PATH,
   PKCE_COOKIE,
@@ -15,10 +21,23 @@ import {
  *
  * This is linking, not signing in: the user must already have an account, and
  * the resulting connection is attached to it.
+ *
+ * The iOS app POSTs here with its access token for a ticketed URL, then opens
+ * that URL — see lib/auth/app-link.ts.
  */
-export async function GET() {
+export async function POST(request: NextRequest) {
+  return appConnectUrl(request, "/api/mal/connect");
+}
+
+export async function GET(request: NextRequest) {
+  const ticket = request.nextUrl.searchParams.get("ticket");
   // Route handlers are reachable directly, so this check is load-bearing.
-  const { userId } = await verifySession();
+  const userId = await linkUserId(ticket);
+  if (!userId) {
+    return NextResponse.redirect(
+      `${APP_CALLBACK}?error=${encodeURIComponent("The link request expired. Please try again.")}`,
+    );
+  }
 
   const codeVerifier = createCodeVerifier();
   const state = createState(userId);
@@ -44,6 +63,10 @@ export async function GET() {
 
   response.cookies.set(PKCE_COOKIE, codeVerifier, cookieOptions);
   response.cookies.set(STATE_COOKIE, state, cookieOptions);
+  // Also cleared on a web start, so a ticket left by an abandoned app flow
+  // cannot route this browser's callback to the app.
+  if (ticket) response.cookies.set(APP_TICKET_COOKIE, ticket, cookieOptions);
+  else response.cookies.delete({ name: APP_TICKET_COOKIE, path: cookieOptions.path });
 
   return response;
 }

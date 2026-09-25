@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-import { verifySession } from "@/lib/auth/dal";
+import { APP_CALLBACK, APP_TICKET_COOKIE, linkUserId } from "@/lib/auth/app-link";
 import {
   MAL_COOKIE_PATH,
   PKCE_COOKIE,
@@ -12,10 +12,11 @@ import {
 import { saveTokens } from "@/lib/mal/token-store";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-function fail(origin: string, reason: string) {
+function failTo(origin: string, reason: string, app: boolean) {
   const response = NextResponse.redirect(
-    `${origin}/settings?error=${encodeURIComponent(reason)}`,
+    `${app ? APP_CALLBACK : `${origin}/settings`}?error=${encodeURIComponent(reason)}`,
   );
+  response.cookies.delete({ name: APP_TICKET_COOKIE, path: MAL_COOKIE_PATH });
   // Clear the one-shot cookies on the way out, as the success path does.
   // A verifier left behind is spent — the next attempt sets fresh ones, but
   // until then a stale pair sits in the browser for its full 10 minutes.
@@ -25,12 +26,20 @@ function fail(origin: string, reason: string) {
 }
 
 export async function GET(request: NextRequest) {
-  const { userId } = await verifySession();
   const { searchParams, origin } = request.nextUrl;
+  // Set by the connect route when the iOS app started this flow.
+  const ticket = request.cookies.get(APP_TICKET_COOKIE)?.value;
+  const app = Boolean(ticket);
+  const fail = (reason: string) => failTo(origin, reason, app);
+
+  const userId = await linkUserId(ticket);
+  if (!userId) {
+    return fail("The link request expired. Please try again.");
+  }
 
   const malError = searchParams.get("error");
   if (malError) {
-    return fail(origin, `MyAnimeList returned an error: ${malError}`);
+    return fail(`MyAnimeList returned an error: ${malError}`);
   }
 
   const code = searchParams.get("code");
@@ -39,21 +48,21 @@ export async function GET(request: NextRequest) {
   const codeVerifier = request.cookies.get(PKCE_COOKIE)?.value;
 
   if (!code || !state || !cookieState || !codeVerifier) {
-    return fail(origin, "The link request expired. Please try again.");
+    return fail("The link request expired. Please try again.");
   }
 
   // Two checks, both needed: the state must match the cookie (CSRF), and its
   // signature must belong to THIS user — otherwise a callback captured from
   // another browser could be replayed to attach someone else's MAL account.
   if (state !== cookieState || !verifyState(state, userId)) {
-    return fail(origin, "Security check failed. Please try again.");
+    return fail("Security check failed. Please try again.");
   }
 
   let tokens;
   try {
     tokens = await exchangeCodeForTokens(code, codeVerifier);
   } catch (cause) {
-    return fail(origin, `Could not complete the link: ${(cause as Error).message}`);
+    return fail(`Could not complete the link: ${(cause as Error).message}`);
   }
 
   // Identify the MAL account before storing anything.
@@ -75,7 +84,7 @@ export async function GET(request: NextRequest) {
       picture?: string;
     };
   } catch (cause) {
-    return fail(origin, `Could not read your MyAnimeList profile: ${(cause as Error).message}`);
+    return fail(`Could not read your MyAnimeList profile: ${(cause as Error).message}`);
   }
 
   const admin = createAdminClient();
@@ -90,7 +99,6 @@ export async function GET(request: NextRequest) {
 
   if (existing && existing.user_id !== userId) {
     return fail(
-      origin,
       "That MyAnimeList account is already connected to another account.",
     );
   }
@@ -108,17 +116,20 @@ export async function GET(request: NextRequest) {
   );
 
   if (upsertError) {
-    return fail(origin, `Could not save the connection: ${upsertError.message}`);
+    return fail(`Could not save the connection: ${upsertError.message}`);
   }
 
   // Tokens last: the FK requires the mal_connections row to exist first.
   try {
     await saveTokens(userId, tokens);
   } catch (cause) {
-    return fail(origin, `Could not store credentials: ${(cause as Error).message}`);
+    return fail(`Could not store credentials: ${(cause as Error).message}`);
   }
 
-  const response = NextResponse.redirect(`${origin}/library?connected=1`);
+  const response = NextResponse.redirect(
+    app ? `${APP_CALLBACK}?provider=mal` : `${origin}/library?connected=1`,
+  );
+  response.cookies.delete({ name: APP_TICKET_COOKIE, path: MAL_COOKIE_PATH });
   // Deleted with the path they were set on — a delete without it targets a
   // different cookie ("/") and leaves these in place until they expire.
   response.cookies.delete({ name: PKCE_COOKIE, path: MAL_COOKIE_PATH });

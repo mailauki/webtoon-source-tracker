@@ -6,25 +6,34 @@ import { VIEWER_QUERY } from "@/lib/anilist/endpoints";
 import { STATE_COOKIE, exchangeCodeForToken } from "@/lib/anilist/oauth";
 import { saveToken } from "@/lib/anilist/token-store";
 import { anilistViewerSchema } from "@/lib/anilist/types";
-import { verifySession } from "@/lib/auth/dal";
+import { APP_CALLBACK, APP_TICKET_COOKIE, linkUserId } from "@/lib/auth/app-link";
 import { verifyState } from "@/lib/mal/oauth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-function fail(origin: string, reason: string) {
+function failTo(origin: string, reason: string, app: boolean) {
   const response = NextResponse.redirect(
-    `${origin}/settings?error=${encodeURIComponent(reason)}`,
+    `${app ? APP_CALLBACK : `${origin}/settings`}?error=${encodeURIComponent(reason)}`,
   );
+  response.cookies.delete({ name: APP_TICKET_COOKIE, path: "/api/anilist" });
   response.cookies.delete({ name: STATE_COOKIE, path: "/api/anilist" });
   return response;
 }
 
 export async function GET(request: NextRequest) {
-  const { userId } = await verifySession();
   const { searchParams, origin } = request.nextUrl;
+  // Set by the connect route when the iOS app started this flow.
+  const ticket = request.cookies.get(APP_TICKET_COOKIE)?.value;
+  const app = Boolean(ticket);
+  const fail = (reason: string) => failTo(origin, reason, app);
+
+  const userId = await linkUserId(ticket);
+  if (!userId) {
+    return fail("The link request expired. Please try again.");
+  }
 
   const anilistError = searchParams.get("error");
   if (anilistError) {
-    return fail(origin, `AniList returned an error: ${anilistError}`);
+    return fail(`AniList returned an error: ${anilistError}`);
   }
 
   const code = searchParams.get("code");
@@ -32,21 +41,21 @@ export async function GET(request: NextRequest) {
   const cookieState = request.cookies.get(STATE_COOKIE)?.value;
 
   if (!code || !state || !cookieState) {
-    return fail(origin, "The link request expired. Please try again.");
+    return fail("The link request expired. Please try again.");
   }
 
   // Both checks, as in the MAL callback: the state must match the cookie
   // (CSRF), and its signature must belong to THIS user, so a callback
   // captured elsewhere cannot attach someone else's AniList account.
   if (state !== cookieState || !verifyState(state, userId)) {
-    return fail(origin, "Security check failed. Please try again.");
+    return fail("Security check failed. Please try again.");
   }
 
   let token;
   try {
     token = await exchangeCodeForToken(code);
   } catch (cause) {
-    return fail(origin, `Could not complete the link: ${(cause as Error).message}`);
+    return fail(`Could not complete the link: ${(cause as Error).message}`);
   }
 
   // Identify the AniList account before storing anything.
@@ -58,7 +67,7 @@ export async function GET(request: NextRequest) {
     );
     viewer = anilistViewerSchema.parse(raw.Viewer);
   } catch (cause) {
-    return fail(origin, `Could not read your AniList profile: ${(cause as Error).message}`);
+    return fail(`Could not read your AniList profile: ${(cause as Error).message}`);
   }
 
   const admin = createAdminClient();
@@ -71,7 +80,7 @@ export async function GET(request: NextRequest) {
     .maybeSingle();
 
   if (existing && existing.user_id !== userId) {
-    return fail(origin, "That AniList account is already connected to another account.");
+    return fail("That AniList account is already connected to another account.");
   }
 
   const { error: upsertError } = await admin.from("anilist_connections").upsert(
@@ -87,17 +96,20 @@ export async function GET(request: NextRequest) {
   );
 
   if (upsertError) {
-    return fail(origin, `Could not save the connection: ${upsertError.message}`);
+    return fail(`Could not save the connection: ${upsertError.message}`);
   }
 
   // Token last: the FK requires the anilist_connections row to exist first.
   try {
     await saveToken(userId, token);
   } catch (cause) {
-    return fail(origin, `Could not store credentials: ${(cause as Error).message}`);
+    return fail(`Could not store credentials: ${(cause as Error).message}`);
   }
 
-  const response = NextResponse.redirect(`${origin}/settings?anilist=connected`);
+  const response = NextResponse.redirect(
+    app ? `${APP_CALLBACK}?provider=anilist` : `${origin}/settings?anilist=connected`,
+  );
+  response.cookies.delete({ name: APP_TICKET_COOKIE, path: "/api/anilist" });
   response.cookies.delete({ name: STATE_COOKIE, path: "/api/anilist" });
   return response;
 }

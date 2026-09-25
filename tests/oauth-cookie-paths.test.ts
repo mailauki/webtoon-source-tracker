@@ -1,3 +1,4 @@
+import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/auth/dal", () => ({
@@ -6,6 +7,9 @@ vi.mock("@/lib/auth/dal", () => ({
 
 import { GET as connectAniList } from "@/app/api/anilist/connect/route";
 import { GET as connectMal } from "@/app/api/mal/connect/route";
+import { issueTicket } from "@/lib/auth/app-link";
+
+const request = (path: string) => new NextRequest(`https://example.com${path}`);
 
 /**
  * A cookie is only sent back to URLs under its Path. These flows set their
@@ -35,8 +39,9 @@ afterEach(() => {
 
 describe("OAuth cookie paths", () => {
   it("MAL's cookies reach its callback", async () => {
-    const response = await connectMal();
-    const cookies = response.cookies.getAll();
+    const response = await connectMal(request("/api/mal/connect"));
+    // Skip deletions: a web start clears any ticket an app flow left behind.
+    const cookies = response.cookies.getAll().filter((c) => c.value);
 
     expect(cookies.map((c) => c.name).sort()).toEqual([
       "mal_oauth_state",
@@ -50,12 +55,26 @@ describe("OAuth cookie paths", () => {
   });
 
   it("AniList's cookie reaches its callback", async () => {
-    const response = await connectAniList();
-    const [cookie] = response.cookies.getAll();
+    const response = await connectAniList(request("/api/anilist/connect"));
+    const cookie = response.cookies.get("anilist_oauth_state");
 
-    expect(cookie.name).toBe("anilist_oauth_state");
+    expect(cookie?.value).toBeTruthy();
     expect(
-      cookiePathMatches(cookie.path ?? "/", process.env.ANILIST_REDIRECT_URI!),
+      cookiePathMatches(cookie?.path ?? "/", process.env.ANILIST_REDIRECT_URI!),
     ).toBe(true);
+  });
+
+  it("the iOS app's ticket reaches both callbacks", async () => {
+    const ticket = issueTicket("user-1");
+    for (const [connect, path, callback] of [
+      [connectMal, "/api/mal/connect", process.env.MAL_REDIRECT_URI!],
+      [connectAniList, "/api/anilist/connect", process.env.ANILIST_REDIRECT_URI!],
+    ] as const) {
+      const response = await connect(request(`${path}?ticket=${ticket}`));
+      const cookie = response.cookies.get("app_link_ticket");
+
+      expect(cookie?.value).toBe(ticket);
+      expect(cookiePathMatches(cookie?.path ?? "/", callback)).toBe(true);
+    }
   });
 });
