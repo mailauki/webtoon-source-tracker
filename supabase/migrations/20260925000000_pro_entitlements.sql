@@ -52,9 +52,14 @@ on conflict (user_id) do nothing;
 -- ---------------------------------------------------------------------------
 -- Owned chapters
 -- ---------------------------------------------------------------------------
--- Refuses only a *change* that sets ownership. A non-Pro user (say, after a
--- refund) can still edit the link or notes of a source already marked owned,
--- and can always clear ownership.
+-- Refuses only a *change* that sets or edits ownership while is_owned is (or
+-- becomes) true. Gated on is_owned, not on chapters_owned alone: the count
+-- input stays in the form hidden-but-submitted while its box is unticked (see
+-- components/source-fields.tsx), so a non-Pro user (say, after a refund) can
+-- still untick Owned on a row that remembers a count -- that write carries
+-- chapters_owned but must not be blocked, or ownership could never be
+-- cleared. The same user can still edit the link or notes of a source
+-- already marked owned.
 
 create or replace function private.entry_sources_require_pro()
 returns trigger
@@ -65,9 +70,9 @@ security definer
 set search_path = ''
 as $$
 begin
-  if (new.is_owned or new.chapters_owned is not null)
+  if new.is_owned
      and (tg_op = 'INSERT'
-          or new.is_owned is distinct from old.is_owned
+          or not old.is_owned
           or new.chapters_owned is distinct from old.chapters_owned)
      and not private.has_pro(new.user_id)
   then
@@ -87,8 +92,14 @@ create trigger entry_sources_z_require_pro
 -- Syncing to both services
 -- ---------------------------------------------------------------------------
 -- Linking one of MyAnimeList / AniList is free; linking the second while the
--- first is linked is Pro. Re-linking the same service (e.g. after
--- needs_reauth) touches only its own table, so it is never blocked here.
+-- first is linked is Pro. Only a transition into "linked" is checked: a
+-- row that was already linked (status <> 'disconnected') stays exempt
+-- through any further update -- markNeedsReauth's own update to
+-- 'needs_reauth' (lib/mal/client.ts) must not itself be blocked -- and the
+-- callbacks' upsert(onConflict: user_id) re-links the same service by
+-- issuing a Postgres INSERT against an existing row, which is exempt the
+-- same way an UPDATE would be. A disconnected -> active re-link is a real
+-- transition and is still checked against the other service.
 
 create or replace function private.connections_require_pro()
 returns trigger
@@ -99,9 +110,35 @@ security definer
 set search_path = ''
 as $$
 declare
+  already_linked boolean;
   other_linked boolean;
 begin
   if new.status = 'disconnected' then
+    return new;
+  end if;
+
+  -- Already linked, and staying linked, is never checked: markNeedsReauth's
+  -- update to 'needs_reauth' (lib/mal/client.ts) must not itself be blocked,
+  -- and the callbacks' upsert(onConflict: user_id) re-links the same service
+  -- by issuing a Postgres INSERT against the existing row -- ON CONFLICT
+  -- still fires the BEFORE INSERT trigger first, with that row's own
+  -- user_id as new.user_id, ahead of the conflict resolving. Only a real
+  -- transition into "linked" reaches the check below.
+  if tg_op = 'UPDATE' then
+    already_linked := old.status <> 'disconnected';
+  elsif tg_table_name = 'mal_connections' then
+    select exists (
+      select 1 from public.mal_connections
+      where user_id = new.user_id and status <> 'disconnected'
+    ) into already_linked;
+  else
+    select exists (
+      select 1 from public.anilist_connections
+      where user_id = new.user_id and status <> 'disconnected'
+    ) into already_linked;
+  end if;
+
+  if already_linked then
     return new;
   end if;
 
