@@ -1,6 +1,6 @@
 import type Stripe from "stripe";
 
-import { grantPro, revokePro } from "@/lib/data/grant-pro";
+import { grantPro, PRO_ALREADY_LINKED_ERROR, revokePro } from "@/lib/data/grant-pro";
 import { getStripe } from "@/lib/stripe";
 
 /**
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
         // Stripe retrying will never make a different account's purchase
         // conflict any less. Any other failure (a transient DB error) should
         // be retried, so only that one case returns 200.
-        if (error !== "This purchase already unlocked Pro on another account.") {
+        if (error !== PRO_ALREADY_LINKED_ERROR) {
           return new Response("grantPro failed", { status: 500 });
         }
       }

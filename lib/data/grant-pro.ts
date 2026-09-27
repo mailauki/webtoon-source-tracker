@@ -2,6 +2,9 @@ import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 
+/** grantPro's refusal when a purchase is already tied to a different account — permanent, never worth retrying. */
+export const PRO_ALREADY_LINKED_ERROR = "This purchase already unlocked Pro on another account.";
+
 /**
  * The only writer of pro_entitlements. Service role, because users must not
  * be able to grant themselves Pro; so user_id is always filtered explicitly.
@@ -37,7 +40,7 @@ export async function grantPro(
     { onConflict: "user_id" },
   );
   if (error?.code === "23505") {
-    return { error: "This purchase already unlocked Pro on another account." };
+    return { error: PRO_ALREADY_LINKED_ERROR };
   }
   return error ? { error: error.message } : {};
 }

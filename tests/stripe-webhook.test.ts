@@ -11,7 +11,11 @@ const { constructEvent, grantPro, revokePro } = vi.hoisted(() => ({
 // (empty string is not a valid apiKey), which would break tests and local dev
 // without Stripe keys. The webhook route calls getStripe() lazily instead.
 vi.mock("@/lib/stripe", () => ({ getStripe: () => ({ webhooks: { constructEvent } }) }));
-vi.mock("@/lib/data/grant-pro", () => ({ grantPro, revokePro }));
+vi.mock("@/lib/data/grant-pro", () => ({
+  grantPro,
+  revokePro,
+  PRO_ALREADY_LINKED_ERROR: "This purchase already unlocked Pro on another account.",
+}));
 
 import { POST } from "@/app/api/stripe/webhook/route";
 
