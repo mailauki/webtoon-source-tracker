@@ -59,6 +59,8 @@ export const anilistListEntrySchema = z.object({
       })
       .optional(),
     synonyms: z.array(z.string()).nullable().optional(),
+    /** AniList's fixed genre list — see lib/anilist/genres.ts. */
+    genres: z.array(z.string()).nullable().optional(),
     format: z.string().nullable().optional(),
     countryOfOrigin: z.string().nullable().optional(),
     chapters: z.number().nullable().optional(),
@@ -118,6 +120,9 @@ export const anilistSearchMediaSchema = z.object({
     native: z.string().nullable().optional(),
   }),
   synonyms: z.array(z.string()).nullable().optional(),
+  // Only the single-title lookup asks for this; the search query does not,
+  // since nothing reads genres off a search hit.
+  genres: z.array(z.string()).nullable().optional(),
   format: z.string().nullable(),
   // Optional: it was added to the queries after the rest of this shape.
   countryOfOrigin: z.string().nullable().optional(),

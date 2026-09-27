@@ -64,6 +64,7 @@ const LIST_QUERY = /* GraphQL */ `
               native
             }
             synonyms
+            genres
             format
             countryOfOrigin
             chapters
@@ -351,6 +352,7 @@ const MEDIA_BY_ID_QUERY = /* GraphQL */ `
         native
       }
       synonyms
+      genres
       format
       countryOfOrigin
       chapters

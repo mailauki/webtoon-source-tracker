@@ -3,9 +3,11 @@ import "server-only";
 import { AniListClient } from "@/lib/anilist/client";
 import { getMangaList } from "@/lib/anilist/endpoints";
 import { anilistAltTitles, upsertAniListTitle } from "@/lib/anilist/catalog";
+import { malGenresFor } from "@/lib/anilist/genres";
 import { toMalScore, toMalStatus } from "@/lib/anilist/mapping";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isStale } from "./staleness";
+import { syncGenres } from "./sync-list";
 
 /**
  * Pulls a user's AniList manga list into Supabase.
@@ -210,6 +212,27 @@ export async function syncAniListList(
     known.set(entry.mediaId, { id, malBacked: false });
     titlesAdded++;
   }
+
+  // --- 2b. Genres for AniList-only titles ----------------------------------
+  //
+  // Mapped onto the MAL genres the tag vocabulary is keyed on, so these titles
+  // join the same Discover categories as everything else. Every AniList-only
+  // row in this list, not just the ones created above: that is what tags the
+  // rows added before genres were read at all. syncGenres only inserts links
+  // that are missing, so a title already tagged costs one read.
+  //
+  // MAL-backed rows are skipped: their genres come from MAL's own sync, and
+  // adding AniList's on top would give one title two sites' opinions.
+  const genreIdMap = new Map<number, number>();
+  const genreNodes = entries.flatMap((e) => {
+    const row = known.get(e.mediaId);
+    if (!row || row.malBacked) return [];
+    const genres = malGenresFor(e.media.genres);
+    if (genres.length === 0) return [];
+    genreIdMap.set(e.mediaId, row.id);
+    return [{ id: e.mediaId, genres }];
+  });
+  await syncGenres(admin, genreNodes, genreIdMap);
 
   // --- 3. Create the user's entries ----------------------------------------
   //
