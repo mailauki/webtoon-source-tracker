@@ -225,6 +225,10 @@ export async function addAniListEntry(
         // the bottom of the grid. Just-added is exactly `now`.
         mal_updated_at: now,
         synced_at: now,
+        // Re-adding a title the user removed lands on their archived row, and
+        // an upsert leaves columns it does not name alone — so without this
+        // the add would report success and the title would stay hidden.
+        archived_at: null,
       },
       { onConflict: "user_id,title_id" },
     )

@@ -301,7 +301,11 @@ async function ownedMalIds(
   const { data } = await supabase
     .from("user_entries")
     .select("media_titles!inner (mal_media_id)")
-    .in("media_titles.mal_media_id", [...new Set(ids)]);
+    .in("media_titles.mal_media_id", [...new Set(ids)])
+    // A removed title is archived, not deleted, and is no longer on the
+    // shelf: counting it as owned would hide it here too, leaving no way to
+    // find it again from search.
+    .is("archived_at", null);
 
   for (const row of data ?? []) {
     const title = row.media_titles as unknown as { mal_media_id: number };
