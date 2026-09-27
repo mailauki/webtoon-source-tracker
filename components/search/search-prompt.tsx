@@ -2,7 +2,10 @@
 
 import { Search } from "lucide-react";
 
-import { useSearchFilters } from "@/components/search/search-filters";
+import {
+  useSearchFilters,
+  useSearchQuery,
+} from "@/components/search/search-filters";
 
 /**
  * What the page says before anything has been typed.
@@ -19,7 +22,8 @@ import { useSearchFilters } from "@/components/search/search-filters";
  * mentioned it.
  */
 export function SearchPrompt() {
-  const { query, mediaKind } = useSearchFilters();
+  const { query } = useSearchQuery();
+  const { mediaKind } = useSearchFilters();
 
   if (query.trim() !== "") return null;
 
