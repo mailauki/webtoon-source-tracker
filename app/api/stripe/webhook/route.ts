@@ -18,19 +18,41 @@ export async function POST(request: Request) {
       request.headers.get("stripe-signature") ?? "",
       process.env.STRIPE_WEBHOOK_SECRET ?? "",
     );
-  } catch {
+  } catch (cause) {
+    // Never log the body or the webhook secret — just that verification failed.
+    console.error("Stripe webhook: bad signature", cause);
     return new Response("Bad signature", { status: 400 });
   }
 
-  if (event.type === "checkout.session.completed") {
+  if (
+    event.type === "checkout.session.completed" ||
+    event.type === "checkout.session.async_payment_succeeded"
+  ) {
     const session = event.data.object as Stripe.Checkout.Session;
     if (session.payment_status === "paid" && session.client_reference_id && typeof session.payment_intent === "string") {
-      await grantPro(session.client_reference_id, "stripe", session.payment_intent);
+      const { error } = await grantPro(session.client_reference_id, "stripe", session.payment_intent);
+      if (error) {
+        console.error("Stripe webhook: grantPro failed", error);
+        // The "already unlocked on another account" conflict is permanent —
+        // Stripe retrying will never make a different account's purchase
+        // conflict any less. Any other failure (a transient DB error) should
+        // be retried, so only that one case returns 200.
+        if (error !== "This purchase already unlocked Pro on another account.") {
+          return new Response("grantPro failed", { status: 500 });
+        }
+      }
     }
   } else if (event.type === "charge.refunded") {
     const charge = event.data.object as Stripe.Charge;
-    if (typeof charge.payment_intent === "string") {
-      await revokePro("stripe", charge.payment_intent);
+    // charge.refunded also fires for a partial refund; only a full refund
+    // turns Pro off.
+    if (charge.refunded && typeof charge.payment_intent === "string") {
+      try {
+        await revokePro("stripe", charge.payment_intent);
+      } catch (cause) {
+        console.error("Stripe webhook: revokePro failed", cause);
+        return new Response("revokePro failed", { status: 500 });
+      }
     }
   }
   return new Response("ok");
