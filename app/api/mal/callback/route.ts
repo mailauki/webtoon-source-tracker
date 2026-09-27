@@ -152,5 +152,6 @@ export async function POST(request: NextRequest) {
 
   const { userId, code, state } = checked;
   const error = await link(userId, code, appCodeVerifier(state));
-  return error ? Response.json({ error }, { status: 400 }) : Response.json({ ok: true });
+  if (!error) return Response.json({ ok: true });
+  return Response.json({ error }, { status: error === PRO_MESSAGES.sync ? 402 : 400 });
 }

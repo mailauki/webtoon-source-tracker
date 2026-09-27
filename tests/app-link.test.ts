@@ -1,7 +1,16 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getClaims, verifySession, exchangeCodeForTokens, exchangeCodeForToken } = vi.hoisted(() => ({
+const {
+  getClaims,
+  verifySession,
+  exchangeCodeForTokens,
+  exchangeCodeForToken,
+  anilistRequest,
+  saveTokens,
+  saveToken,
+  proUpsertError,
+} = vi.hoisted(() => ({
   // Bearer tokens in these tests are just user ids.
   getClaims: vi.fn(async (token: string) => ({ data: { claims: { sub: token } }, error: null })),
   verifySession: vi.fn(async () => {
@@ -13,6 +22,12 @@ const { getClaims, verifySession, exchangeCodeForTokens, exchangeCodeForToken } 
   exchangeCodeForToken: vi.fn(async () => {
     throw new Error("stop after the exchange");
   }),
+  anilistRequest: vi.fn(),
+  saveTokens: vi.fn(),
+  saveToken: vi.fn(),
+  // What the database trigger raises when a non-Pro user links a second
+  // service — see lib/pro.ts's PRO_REQUIRED_CODE.
+  proUpsertError: { code: "PT402", message: "Pro required" },
 }));
 
 vi.mock("@supabase/supabase-js", () => ({ createClient: () => ({ auth: { getClaims } }) }));
@@ -25,6 +40,26 @@ vi.mock("@/lib/mal/oauth", async (importOriginal) => ({
 vi.mock("@/lib/anilist/oauth", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/anilist/oauth")>()),
   exchangeCodeForToken,
+}));
+vi.mock("@/lib/anilist/client", () => ({ anilistRequest }));
+vi.mock("@/lib/mal/token-store", () => ({ saveTokens }));
+vi.mock("@/lib/anilist/token-store", () => ({ saveToken }));
+
+/**
+ * A stand-in for createAdminClient() that lets `link()` reach its upsert:
+ * the "any account already using this provider id" lookup finds nothing,
+ * and the upsert itself fails with the Pro-required error.
+ */
+function proBlockedAdminClient() {
+  return {
+    from: () => ({
+      select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null }) }) }),
+      upsert: async () => ({ error: proUpsertError }),
+    }),
+  };
+}
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: vi.fn(() => proBlockedAdminClient()),
 }));
 
 import { POST as anilistCallbackPost } from "@/app/api/anilist/callback/route";
@@ -127,6 +162,28 @@ describe("MAL app link", () => {
     expect(exchangeCodeForTokens).toHaveBeenCalledWith("c", appCodeVerifier(state));
     expect((await response.json()).error).toMatch(/stop after the exchange/);
   });
+
+  it("leg 3 reports the Pro backstop as 402, not 400", async () => {
+    exchangeCodeForTokens.mockResolvedValueOnce({
+      token_type: "Bearer",
+      expires_in: 2415600,
+      access_token: "at",
+      refresh_token: "rt",
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ id: 1, name: "victim" }), { status: 200 })),
+    );
+
+    const state = createAppState(VICTIM);
+    const response = await malCallbackPost(post("/api/mal/callback", VICTIM, { code: "c", state }));
+
+    expect(response.status).toBe(402);
+    expect(await response.json()).toEqual({ error: "Syncing to both MyAnimeList and AniList is part of Pro." });
+    expect(saveTokens).not.toHaveBeenCalled();
+
+    vi.unstubAllGlobals();
+  });
 });
 
 describe("AniList app link", () => {
@@ -144,5 +201,23 @@ describe("AniList app link", () => {
     await anilistCallbackPost(post("/api/anilist/callback", VICTIM, { code: "c", state }));
 
     expect(exchangeCodeForToken).toHaveBeenCalledWith("c");
+  });
+
+  it("leg 3 reports the Pro backstop as 402, not 400", async () => {
+    exchangeCodeForToken.mockResolvedValueOnce({
+      token_type: "Bearer",
+      expires_in: 31_536_000,
+      access_token: "at",
+    });
+    anilistRequest.mockResolvedValueOnce({
+      Viewer: { id: 1, name: "victim", avatar: { medium: null } },
+    });
+
+    const state = createAppState(VICTIM);
+    const response = await anilistCallbackPost(post("/api/anilist/callback", VICTIM, { code: "c", state }));
+
+    expect(response.status).toBe(402);
+    expect(await response.json()).toEqual({ error: "Syncing to both MyAnimeList and AniList is part of Pro." });
+    expect(saveToken).not.toHaveBeenCalled();
   });
 });
