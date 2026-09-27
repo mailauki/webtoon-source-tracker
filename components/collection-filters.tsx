@@ -60,12 +60,15 @@ export function CollectionFilters({
   collectionId,
   removable = false,
   catalog = [],
+  isPro,
 }: {
   items: CollectionItem[];
   collectionId?: number;
   removable?: boolean;
   /** The source catalog, for select mode's "Add source". */
   catalog?: Source[];
+  /** Owned chapters are Pro-only; passed straight through to each card. */
+  isPro: boolean;
 }) {
   const [filters, setFilters] = useState<CollectionFilterState>(
     NO_COLLECTION_FILTERS,
@@ -171,6 +174,7 @@ export function CollectionFilters({
               >
                 <EntryCard
                   view={collectionView(item)}
+                  isPro={isPro}
                   removable={
                     removable && collectionId !== undefined
                       ? { collectionId, itemId: item.id }

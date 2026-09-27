@@ -62,6 +62,7 @@ function setup(
   request: Parameters<typeof EntrySourceDialog>[0]["request"],
   attached = ATTACHED,
   total: Parameters<typeof EntrySourceDialog>[0]["total"] = null,
+  isPro = true,
 ) {
   const onClose = vi.fn();
   render(
@@ -72,6 +73,7 @@ function setup(
       attached={attached}
       catalog={CATALOG}
       total={total}
+      isPro={isPro}
       onClose={onClose}
     />,
   );
@@ -569,5 +571,49 @@ describe("the chapters-owned stepper", () => {
 
     await vi.waitFor(() => expect(updateEntrySource).toHaveBeenCalledOnce());
     expect(updateEntrySource.mock.calls[0][1].get("chapters_owned")).toBe("1-22");
+  });
+});
+
+/**
+ * The Pro gate, reversed here from an earlier ruling: this dialog is the
+ * library card's quick-edit, and a free account reaching it must see the
+ * same Get Pro teaser the entry page's editor shows, not owned controls that
+ * would fail against the database's PT402 trigger on save.
+ */
+describe("owned chapters, gated on Pro", () => {
+  it("offers Pro instead of the owned fields to a free account", () => {
+    setup({ mode: "add" }, [], null, false);
+
+    expect(screen.queryByLabelText(/^Owned$/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Chapters owned")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /get pro/i })).toHaveAttribute(
+      "href",
+      "/pro",
+    );
+  });
+
+  it("shows the owned fields to a Pro account", () => {
+    setup({ mode: "add" }, [], null, true);
+
+    expect(screen.getByLabelText("Owned")).toBeInTheDocument();
+    expect(screen.getByLabelText("Chapters owned")).toBeInTheDocument();
+  });
+
+  /**
+   * The same data-loss guard as tests/entry-source-editor.test.tsx: a free
+   * account cannot see the owned controls here either, so saving an
+   * unrelated edit must not silently un-own the source or wipe its count.
+   */
+  it("keeps an already-owned source's flag and count when a free account saves an edit", async () => {
+    const { user } = setup({ mode: "edit", entrySourceId: 55 }, ATTACHED, null, false);
+
+    expect(screen.queryByLabelText(/^Owned$/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await vi.waitFor(() => expect(updateEntrySource).toHaveBeenCalledOnce());
+    const formData = updateEntrySource.mock.calls[0][1];
+    expect(formData.get("is_owned")).toBe("on");
+    expect(formData.get("chapters_owned")).toBe("1-20");
   });
 });

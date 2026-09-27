@@ -15,6 +15,7 @@ import {
   verifySession,
 } from "@/lib/auth/dal";
 import { getLibrary } from "@/lib/data/entries";
+import { getIsPro } from "@/lib/data/pro";
 import { resolveMediaKind } from "@/lib/data/search";
 import { getSources, getTopSources } from "@/lib/data/sources";
 
@@ -66,11 +67,12 @@ export default async function SearchPage() {
   // title against rows already in the browser is what lets a keystroke narrow
   // the results in the same render, with no round-trip to interrupt typing.
   // The two source lists are what an EntryCard needs to offer its menu.
-  const [entries, sources, topSources, isAdult] = await Promise.all([
+  const [entries, sources, topSources, isAdult, isPro] = await Promise.all([
     getLibrary(),
     getSources(),
     getTopSources(),
     isAgeConfirmedAdult(),
+    getIsPro(),
   ]);
 
   return (
@@ -109,7 +111,7 @@ export default async function SearchPage() {
           ) : null}
 
           <SearchPrompt />
-          <LibraryResults topSources={topSources} catalog={sources} />
+          <LibraryResults topSources={topSources} catalog={sources} isPro={isPro} />
           <CatalogResults anilistConnected={anilistConnected} />
         </div>
       </AppShell>

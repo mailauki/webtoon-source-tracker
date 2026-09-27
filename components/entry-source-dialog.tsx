@@ -37,6 +37,7 @@ export function EntrySourceDialog({
   attached,
   catalog,
   total = null,
+  isPro,
   onClose,
 }: {
   entryId: number;
@@ -46,6 +47,8 @@ export function EntrySourceDialog({
   catalog: Source[];
   /** MAL's chapter count for this title, for the "own all" shortcut. */
   total?: ChapterTotal | null;
+  /** Owned chapters are Pro-only; a free account sees a teaser instead. */
+  isPro: boolean;
   onClose: () => void;
 }) {
   const editing =
@@ -141,6 +144,7 @@ export function EntrySourceDialog({
             key={editing?.id ?? "new"}
             source={editing ?? undefined}
             total={total}
+            isPro={isPro}
           />
 
           {state?.error ? (

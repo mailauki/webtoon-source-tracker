@@ -99,7 +99,7 @@ afterEach(cleanup);
 describe.each(["grid", "row"] as const)("%s layout", (layout) => {
   describe("a library row", () => {
     it("shows the status, the progress and the way to read it", () => {
-      render(<EntryCard entry={row()} layout={layout} />);
+      render(<EntryCard entry={row()} layout={layout} isPro />);
 
       expect(screen.getByRole("heading", { name: NAME })).toBeInTheDocument();
       expect(screen.getByText("Reading")).toBeInTheDocument();
@@ -110,7 +110,7 @@ describe.each(["grid", "row"] as const)("%s layout", (layout) => {
     });
 
     it("links to its entry page", () => {
-      render(<EntryCard entry={row()} layout={layout} />);
+      render(<EntryCard entry={row()} layout={layout} isPro />);
 
       expect(screen.getByRole("link", { name: NAME })).toHaveAttribute(
         "href",
@@ -121,7 +121,7 @@ describe.each(["grid", "row"] as const)("%s layout", (layout) => {
     // The Add button is the untracked card's one action. Offering it for a
     // title already on the shelf would add a second copy of it.
     it("does not offer to add a title already tracked", () => {
-      render(<EntryCard entry={row()} layout={layout} />);
+      render(<EntryCard entry={row()} layout={layout} isPro />);
 
       expect(
         screen.queryByRole("button", { name: /add/i }),
@@ -131,7 +131,7 @@ describe.each(["grid", "row"] as const)("%s layout", (layout) => {
 
   describe("an untracked catalog title", () => {
     it("offers to add it, and links nowhere", () => {
-      render(<EntryCard view={collectionView(item(null))} layout={layout} />);
+      render(<EntryCard view={collectionView(item(null))} layout={layout} isPro />);
 
       expect(screen.getByRole("heading", { name: NAME })).toBeInTheDocument();
       expect(
@@ -149,7 +149,7 @@ describe.each(["grid", "row"] as const)("%s layout", (layout) => {
      * would be the card reporting data the query never fetched.
      */
     it("shows no status, progress or read button", () => {
-      render(<EntryCard view={collectionView(item(null))} layout={layout} />);
+      render(<EntryCard view={collectionView(item(null))} layout={layout} isPro />);
 
       expect(screen.queryByText("Reading")).not.toBeInTheDocument();
       expect(screen.queryByText(/\d+ \/ \d+/)).not.toBeInTheDocument();
@@ -163,6 +163,7 @@ describe.each(["grid", "row"] as const)("%s layout", (layout) => {
         <EntryCard
           view={collectionView(item(null, "Where every webtoon reader starts."))}
           layout={layout}
+          isPro
         />,
       );
 
@@ -180,7 +181,7 @@ describe.each(["grid", "row"] as const)("%s layout", (layout) => {
    */
   describe("a collection item already in the library", () => {
     it("links to the entry and drops the Add button", () => {
-      render(<EntryCard view={collectionView(item(12))} layout={layout} />);
+      render(<EntryCard view={collectionView(item(12))} layout={layout} isPro />);
 
       expect(screen.getByRole("link", { name: NAME })).toHaveAttribute(
         "href",
@@ -192,7 +193,7 @@ describe.each(["grid", "row"] as const)("%s layout", (layout) => {
     });
 
     it("says it is already on the shelf", () => {
-      render(<EntryCard view={collectionView(item(12))} layout={layout} />);
+      render(<EntryCard view={collectionView(item(12))} layout={layout} isPro />);
 
       expect(screen.getByText("In library")).toBeInTheDocument();
     });
@@ -202,7 +203,7 @@ describe.each(["grid", "row"] as const)("%s layout", (layout) => {
   describe("removable", () => {
     it("offers removal only when the caller asks for it", () => {
       const { rerender } = render(
-        <EntryCard view={collectionView(item(null))} layout={layout} />,
+        <EntryCard view={collectionView(item(null))} layout={layout} isPro />,
       );
       expect(
         screen.queryByRole("button", { name: /Remove/ }),
@@ -213,6 +214,7 @@ describe.each(["grid", "row"] as const)("%s layout", (layout) => {
           view={collectionView(item(null))}
           layout={layout}
           removable={{ collectionId: 4, itemId: 99 }}
+          isPro
         />,
       );
       expect(
@@ -231,6 +233,7 @@ describe.each(["grid", "row"] as const)("%s layout", (layout) => {
           view={collectionView(item(null))}
           layout={layout}
           removable={{ collectionId: 4, itemId: 99 }}
+          isPro
         />,
       );
 

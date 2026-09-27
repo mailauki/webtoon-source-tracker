@@ -50,6 +50,7 @@ function setup(sort: Sort = DEFAULT_SORT) {
         entries={ROWS}
         emptyFiltered={<p>No titles match</p>}
         emptyUnfiltered={<p>Nothing synced yet</p>}
+        isPro
       />
     </LibraryFilters>,
   );

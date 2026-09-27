@@ -49,10 +49,7 @@ export function SourceFields({
   source,
   total = null,
   suggestedUrl = null,
-  // Defaults to true (unchanged behavior) for callers that don't gate this
-  // yet, e.g. the library card's quick-edit dialog — see Task 3's brief,
-  // which scopes the Pro gate to the entry page's editor only.
-  isPro = true,
+  isPro,
 }: {
   source?: EntrySource;
   /**
@@ -66,8 +63,20 @@ export function SourceFields({
    * form works without it — it only powers the fill-it-in shortcut.
    */
   total?: ChapterTotal | null;
-  /** Owned chapters are Pro-only; a free account sees a teaser instead. */
-  isPro?: boolean;
+  /**
+   * Owned chapters are Pro-only; a free account sees a teaser instead of the
+   * checkbox and range input. Required, deliberately with no default: every
+   * caller has to say which this account is, so none can silently fall back
+   * to showing (or hiding) controls it never decided about.
+   *
+   * A free account still submits the source's existing `is_owned` and
+   * `chapters_owned` as hidden inputs — see below — so an edit to an
+   * unrelated field (the URL, a note) cannot silently un-own a source a free
+   * account can no longer see the controls for. The trigger allows an
+   * unchanged value through; only a *change* to these two columns raises
+   * PT402.
+   */
+  isPro: boolean;
 }) {
   // Drives only whether the count below is *shown*. The checkbox stays
   // uncontrolled (defaultChecked), like every other field here, so this is a
@@ -262,7 +271,30 @@ export function SourceFields({
           </p>
         </div>
       ) : (
-        <ProTeaser feature="owned" />
+        <>
+          {/* A free account cannot see or change these two — the controls
+              above are the only way in, and they are gone. So this edit must
+              resubmit exactly what is already stored, or an unrelated change
+              (a note, the URL) would silently un-own the source and wipe its
+              count on Save: the trigger allows an unchanged value through,
+              and only a *change* to is_owned/chapters_owned raises PT402.
+
+              `formData.get("is_owned") === "on"` is how the action reads the
+              checkbox (see readFlags in app/actions/entry-sources.ts), so an
+              absent field there already means "false" — a hidden input is
+              only needed when the stored value is true. chapters_owned always
+              needs one: the action parses whatever string arrives, and an
+              absent field would parse as "", wiping a count that was there. */}
+          {source?.is_owned ? (
+            <input type="hidden" name="is_owned" value="on" />
+          ) : null}
+          <input
+            type="hidden"
+            name="chapters_owned"
+            value={formatRangesForInput(fromMultirange(source?.chapters_owned))}
+          />
+          <ProTeaser feature="owned" />
+        </>
       )}
 
       <div className="grid gap-2">

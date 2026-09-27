@@ -24,6 +24,7 @@ import {
   resolveLayout,
   resolveSort,
 } from "@/lib/data/library-prefs";
+import { getIsPro } from "@/lib/data/pro";
 import { getSources, getTopSources } from "@/lib/data/sources";
 import { formatLastSynced, isStale } from "@/lib/sync/staleness";
 
@@ -109,11 +110,12 @@ export default async function LibraryPage() {
   const canSeeNsfw = await isAgeConfirmedAdult();
   const hideNsfw = canSeeNsfw && (prefs?.hide_nsfw ?? false);
 
-  const [entries, statusCounts, sources, topSources] = await Promise.all([
+  const [entries, statusCounts, sources, topSources, isPro] = await Promise.all([
     getLibrary(),
     getStatusCounts(),
     getSources(),
     getTopSources(),
+    getIsPro(),
   ]);
   // Whichever sites are linked, the shelf is stale when ANY of them is due —
   // one button syncs them all, so it should light up if there is anything for
@@ -255,6 +257,7 @@ export default async function LibraryPage() {
             entries={entries}
             topSources={topSources}
             catalog={sources}
+            isPro={isPro}
             emptyFiltered={
               <EmptyState
                 title="No titles match"
