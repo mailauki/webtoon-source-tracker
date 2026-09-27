@@ -6,7 +6,16 @@ const { verifyTransaction, grantPro, userClientFromBearer } = vi.hoisted(() => (
   userClientFromBearer: vi.fn(async () => ({ supabase: {}, userId: "3f1c6a52-0000-4000-8000-000000000001" })),
 }));
 
-vi.mock("@/lib/apple/verify-transaction", () => ({ verifyTransaction }));
+// The route imports VerificationException/VerificationStatus from
+// lib/apple/verify-transaction (which re-exports the library's real ones) to
+// tell a transient Apple-side failure apart from a permanently bad
+// transaction. Keep those real here via importOriginal so the route's
+// `instanceof VerificationException` / `status === ...` checks still work
+// against the mocked module.
+vi.mock("@/lib/apple/verify-transaction", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/apple/verify-transaction")>()),
+  verifyTransaction,
+}));
 vi.mock("@/lib/data/grant-pro", () => ({
   grantPro,
   PRO_ALREADY_LINKED_ERROR: "This purchase already unlocked Pro on another account.",
@@ -15,6 +24,8 @@ vi.mock("@/lib/auth/app-link", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/app-link")>()),
   userClientFromBearer,
 }));
+
+import { VerificationException, VerificationStatus } from "@apple/app-store-server-library";
 
 import { POST } from "@/app/api/purchases/app-store/route";
 
@@ -36,7 +47,10 @@ const tx = (over: object = {}) => ({
 });
 
 describe("POST /api/purchases/app-store", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.APPLE_BUNDLE_ID = "com.julieevanspersonalteam.WebtoonSourceTracker";
+  });
 
   it("needs a signed-in user", async () => {
     userClientFromBearer.mockResolvedValueOnce(null as never);
@@ -82,5 +96,27 @@ describe("POST /api/purchases/app-store", () => {
     grantPro.mockResolvedValueOnce({ error: "some transient database error" });
     const response = await call({ signedTransaction: "jws" });
     expect(response.status).toBe(500);
+  });
+
+  it("returns 503 (not a permanent 400) when Apple's own verification service is unreachable", async () => {
+    verifyTransaction.mockRejectedValueOnce(new VerificationException(VerificationStatus.RETRYABLE_VERIFICATION_FAILURE));
+    const response = await call({ signedTransaction: "jws" });
+    expect(response.status).toBe(503);
+    expect(grantPro).not.toHaveBeenCalled();
+  });
+
+  it("returns 500 when APPLE_BUNDLE_ID isn't configured, without attempting verification", async () => {
+    delete process.env.APPLE_BUNDLE_ID;
+    const response = await call({ signedTransaction: "jws" });
+    expect(response.status).toBe(500);
+    expect(verifyTransaction).not.toHaveBeenCalled();
+    expect(grantPro).not.toHaveBeenCalled();
+  });
+
+  it("rejects a transaction with no originalTransactionId before calling grantPro", async () => {
+    verifyTransaction.mockResolvedValueOnce(tx({ originalTransactionId: "" }));
+    const response = await call({ signedTransaction: "jws" });
+    expect(response.status).toBe(400);
+    expect(grantPro).not.toHaveBeenCalled();
   });
 });
