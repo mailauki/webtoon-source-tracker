@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 
-import { appCodeVerifier, createAppState, userIdFromBearer } from "@/lib/auth/app-link";
+import { appCodeVerifier, createAppState, userClientFromBearer } from "@/lib/auth/app-link";
 import { verifySession } from "@/lib/auth/dal";
+import { canLinkService } from "@/lib/data/pro";
+import { PRO_MESSAGES } from "@/lib/pro";
 import {
   MAL_COOKIE_PATH,
   PKCE_COOKIE,
@@ -10,6 +12,7 @@ import {
   createCodeVerifier,
   createState,
 } from "@/lib/mal/oauth";
+import { createClient } from "@/lib/supabase/server";
 
 /**
  * Starts the MyAnimeList link flow.
@@ -17,9 +20,13 @@ import {
  * This is linking, not signing in: the user must already have an account, and
  * the resulting connection is attached to it.
  */
-export async function GET() {
+export async function GET(request: Request) {
   // Route handlers are reachable directly, so this check is load-bearing.
   const { userId } = await verifySession();
+
+  if (!(await canLinkService(await createClient(), userId, "mal"))) {
+    return NextResponse.redirect(new URL("/pro?need=sync", request.url));
+  }
 
   const codeVerifier = createCodeVerifier();
   const state = createState(userId);
@@ -55,9 +62,12 @@ export async function GET() {
  * PKCE verifier is derived from the state when the app finishes the link.
  */
 export async function POST(request: Request) {
-  const userId = await userIdFromBearer(request);
-  if (!userId) return Response.json({ error: "Not signed in" }, { status: 401 });
+  const user = await userClientFromBearer(request);
+  if (!user) return Response.json({ error: "Not signed in" }, { status: 401 });
+  if (!(await canLinkService(user.supabase, user.userId, "mal"))) {
+    return Response.json({ error: PRO_MESSAGES.sync }, { status: 402 });
+  }
 
-  const state = createAppState(userId);
+  const state = createAppState(user.userId);
   return Response.json({ url: buildAuthorizeUrl(appCodeVerifier(state), state) });
 }

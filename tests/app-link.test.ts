@@ -17,6 +17,7 @@ const { getClaims, verifySession, exchangeCodeForTokens, exchangeCodeForToken } 
 
 vi.mock("@supabase/supabase-js", () => ({ createClient: () => ({ auth: { getClaims } }) }));
 vi.mock("@/lib/auth/dal", () => ({ verifySession }));
+vi.mock("@/lib/data/pro", () => ({ canLinkService: async () => true }));
 vi.mock("@/lib/mal/oauth", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/mal/oauth")>()),
   exchangeCodeForTokens,

@@ -16,6 +16,7 @@ import {
   verifyState,
 } from "@/lib/mal/oauth";
 import { saveTokens } from "@/lib/mal/token-store";
+import { isProRequired, PRO_MESSAGES } from "@/lib/pro";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 function fail(origin: string, reason: string) {
@@ -129,6 +130,8 @@ async function link(userId: string, code: string, codeVerifier: string): Promise
   );
 
   if (upsertError) {
+    // Backstop for a race between the connect-time check and this callback.
+    if (isProRequired(upsertError)) return PRO_MESSAGES.sync;
     return `Could not save the connection: ${upsertError.message}`;
   }
 

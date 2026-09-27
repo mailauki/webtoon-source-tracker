@@ -10,6 +10,7 @@ import { LinkedLogins } from "@/components/settings/linked-logins";
 import { MatureContent } from "@/components/settings/mature-content";
 import { SetPasswordForm } from "@/components/settings/set-password-form";
 import { Button } from "@/components/ui/button";
+import { ProTeaser } from "@/components/pro-teaser";
 import {
   getAniListConnection,
   getMalConnection,
@@ -20,6 +21,7 @@ import {
   verifySession,
 } from "@/lib/auth/dal";
 import { getSources } from "@/lib/data/sources";
+import { getIsPro } from "@/lib/data/pro";
 import { formatLastSynced } from "@/lib/sync/staleness";
 
 export const metadata = { title: "Settings" };
@@ -36,7 +38,7 @@ export default async function SettingsPage({
   const params = await searchParams;
   const error = typeof params.error === "string" ? params.error : undefined;
 
-  const [profile, identities, connection, anilist, catalog, hideMature, isAdult] =
+  const [profile, identities, connection, anilist, catalog, hideMature, isAdult, isPro] =
     await Promise.all([
       getProfile(),
       getUserIdentities(),
@@ -45,6 +47,7 @@ export default async function SettingsPage({
       getSources(),
       hidesMatureTitles(),
       isAgeConfirmedAdult(),
+      getIsPro(),
     ]);
 
   const malLinked = connection !== null && connection.status !== "disconnected";
@@ -107,16 +110,20 @@ export default async function SettingsPage({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              asChild
-              variant="outline"
-              size="sm"
-              className="rounded-pill"
-            >
-              <Link href="/api/mal/connect">
-                {malLinked ? "Reconnect" : "Connect MyAnimeList"}
-              </Link>
-            </Button>
+            {!malLinked && anilistLinked && !isPro ? (
+              <ProTeaser feature="sync" />
+            ) : (
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="rounded-pill"
+              >
+                <Link href="/api/mal/connect">
+                  {malLinked ? "Reconnect" : "Connect MyAnimeList"}
+                </Link>
+              </Button>
+            )}
             {malLinked ? <MalDisconnect /> : null}
           </div>
         </section>
@@ -133,16 +140,20 @@ export default async function SettingsPage({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              asChild
-              variant="outline"
-              size="sm"
-              className="rounded-pill"
-            >
-              <Link href="/api/anilist/connect">
-                {anilistLinked ? "Reconnect" : "Connect AniList"}
-              </Link>
-            </Button>
+            {!anilistLinked && malLinked && !isPro ? (
+              <ProTeaser feature="sync" />
+            ) : (
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="rounded-pill"
+              >
+                <Link href="/api/anilist/connect">
+                  {anilistLinked ? "Reconnect" : "Connect AniList"}
+                </Link>
+              </Button>
+            )}
             {anilistLinked ? <AniListDisconnect /> : null}
           </div>
         </section>
