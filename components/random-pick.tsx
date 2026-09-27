@@ -5,6 +5,7 @@ import { Dices, ExternalLink } from "lucide-react";
 import { useState } from "react";
 
 import { CoverImage } from "@/components/cover-image";
+import { ProTeaser } from "@/components/pro-teaser";
 import { useLibraryFilters } from "@/components/library-grid";
 import { SourceBadge } from "@/components/source-badge";
 import { Button } from "@/components/ui/button";
@@ -57,7 +58,7 @@ const MODES: { mode: PickMode; label: string; drawnFrom: string }[] = [
  * `selectCandidates` the grid narrows with, so the shelf and the dice can
  * never disagree about what "Reading + Webtoon" covers.
  */
-export function RandomPick() {
+function RandomPicker() {
   const { entries, status, source, hideHiatus, ownedOnly } =
     useLibraryFilters();
 
@@ -208,6 +209,10 @@ export function RandomPick() {
       </Dialog>
     </>
   );
+}
+
+export function RandomPick({ isPro }: { isPro: boolean }) {
+  return isPro ? <RandomPicker /> : <ProTeaser feature="pick" />;
 }
 
 /** The reveal: cover, title, where it is on the shelf, and where to read it. */

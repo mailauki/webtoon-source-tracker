@@ -218,7 +218,7 @@ export default async function LibraryPage() {
           {/* Above the shelf rather than in the filter row: two of its three
               questions reach past the filters, so it is not a filter control
               and sitting beside the menu would suggest it was. */}
-          <RandomPick />
+          <RandomPick isPro={isPro} />
 
           {connection?.status === "needs_reauth" ? (
             <p className="rounded-md bg-alert/10 px-3 py-2 text-sm text-alert">

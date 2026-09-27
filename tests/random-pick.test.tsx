@@ -84,13 +84,14 @@ function setup({
   status = "",
   source = "",
   hideHiatus = false,
+  isPro = true,
 } = {}) {
   return render(
     <LibraryFilters
       initial={{ status, source, hideHiatus, sort: DEFAULT_SORT }}
       entries={entries}
     >
-      <RandomPick />
+      <RandomPick isPro={isPro} />
     </LibraryFilters>,
   );
 }
@@ -106,6 +107,13 @@ const dialogTitle = () =>
 afterEach(cleanup);
 
 describe("RandomPick", () => {
+  it("offers Pro instead of the dice to a free account", () => {
+    setup({ isPro: false });
+
+    expect(screen.queryByRole("button", { name: /surprise me|haven't read|from plan/i })).toBeNull();
+    expect(screen.getByRole("link", { name: /get pro/i })).toHaveAttribute("href", "/pro");
+  });
+
   it("reveals a title from the shelf when rolled", async () => {
     const user = userEvent.setup();
     setup();
