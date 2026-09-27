@@ -8580,6 +8580,18 @@ __metadata:
   languageName: node
   linkType: hard
 
+"stripe@npm:^22.6.2":
+  version: 22.6.2
+  resolution: "stripe@npm:22.6.2"
+  peerDependencies:
+    "@types/node": ">=18"
+  peerDependenciesMeta:
+    "@types/node":
+      optional: true
+  checksum: 10c0/ffc2f74903cc7a95d001b5487c78c1d820af0487ca5283dca0b4215c9771370aa39e43ba264dfb71ad496318f1300dc72b0ca6be576f07e30add3ed099cccd7d
+  languageName: node
+  linkType: hard
+
 "styled-jsx@npm:5.1.6":
   version: 5.1.6
   resolution: "styled-jsx@npm:5.1.6"
@@ -9308,6 +9320,7 @@ __metadata:
     server-only: "npm:^0.0.1"
     shadcn: "npm:^4.18.0"
     sonner: "npm:^2.0.8"
+    stripe: "npm:^22.6.2"
     tailwind-merge: "npm:^3.6.0"
     tailwindcss: "npm:^4"
     tw-animate-css: "npm:^1.4.0"
