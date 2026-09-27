@@ -7,11 +7,13 @@ import { AniListClient } from "@/lib/anilist/client";
 import { getMediaById, saveListEntry } from "@/lib/anilist/endpoints";
 import { AniListAuthError, AniListRateLimitError } from "@/lib/anilist/errors";
 import { anilistAltTitles, upsertAniListTitle } from "@/lib/anilist/catalog";
+import { malGenresFor } from "@/lib/anilist/genres";
 import { toAniListStatus } from "@/lib/anilist/mapping";
 import { verifySession } from "@/lib/auth/dal";
 import { MAL_LIST_STATUSES } from "@/lib/mal/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { syncGenres } from "@/lib/sync/sync-list";
 
 export type AddAniListEntryState =
   | { ok: true; message: string; entryId: number }
@@ -187,6 +189,23 @@ export async function addAniListEntry(
       ok: false,
       error: "Added to AniList, but the local copy didn't save. Sync to catch up.",
     };
+  }
+
+  // Its genres, onto the same tags MAL titles use, so the title shows up in
+  // Discover's categories from the moment it is added. Logged rather than
+  // returned: the title is already on AniList and in the catalog, and the
+  // next AniList pull links any genre this missed.
+  try {
+    const genres = malGenresFor(media.genres);
+    if (genres.length > 0) {
+      await syncGenres(
+        admin,
+        [{ id: anilistMediaId, genres }],
+        new Map([[anilistMediaId, titleId]]),
+      );
+    }
+  } catch (cause) {
+    console.error("[add-anilist-entry] genre link failed:", cause);
   }
 
   const supabase = await createClient();
