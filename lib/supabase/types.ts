@@ -371,6 +371,7 @@ export type Database = {
       }
       media_titles: {
         Row: {
+          alt_titles: string[]
           anilist_media_id: number | null
           created_at: string
           id: number
@@ -388,6 +389,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          alt_titles?: string[]
           anilist_media_id?: number | null
           created_at?: string
           id?: never
@@ -405,6 +407,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          alt_titles?: string[]
           anilist_media_id?: number | null
           created_at?: string
           id?: never
@@ -706,6 +709,7 @@ export type Database = {
       }
       media_titles_upsert_anilist: {
         Args: {
+          p_alt_titles?: string[]
           p_anilist_media_id: number
           p_main_picture_url?: string
           p_mal_status?: string

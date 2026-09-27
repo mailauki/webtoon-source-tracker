@@ -69,9 +69,10 @@ export function AddTitlesDialog({
     return library.filter((row) => {
       if (present.has(row.media_titles.id)) return false;
       if (!term) return true;
-      // Both names, not just the shown one: the list displays the English
-      // title, and someone who knows a series by its romanised name should
-      // still find it. Same bar as lib/data/search.ts's matchesTitle.
+      // Every name, not just the shown one: the list displays the English
+      // title, and someone who knows a series by its romanised name or a
+      // synonym should still find it. Same bar as the search page — see
+      // lib/data/search.ts's titleMatchScore.
       return matchesTitle(row.media_titles, term);
     });
   }, [library, present, query]);

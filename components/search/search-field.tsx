@@ -3,7 +3,7 @@
 import { useId, useRef } from "react";
 import { Search, X } from "lucide-react";
 
-import { useSearchFilters } from "@/components/search/search-filters";
+import { useSearchQuery } from "@/components/search/search-filters";
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
 import {
@@ -31,7 +31,7 @@ import {
  * unmounted the focused input, which on iOS takes the keyboard down with it.
  */
 export function SearchField() {
-  const { query, setQuery } = useSearchFilters();
+  const { query, setQuery } = useSearchQuery();
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
 

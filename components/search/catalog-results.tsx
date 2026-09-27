@@ -332,6 +332,13 @@ function CatalogResultCard({
               ? "bg-black/70 text-white/90"
               : "bg-accent/90 text-accent-foreground"
           }`}
+          // A name match is the app's inference, not AniList's own link, so
+          // it says so on hover rather than reading exactly like one.
+          title={
+            result.matched_on === "title"
+              ? "Matched by name: AniList lists no MyAnimeList entry for this title"
+              : undefined
+          }
         >
           {SOURCE_LABELS[result.source]}
         </span>

@@ -114,17 +114,15 @@ describe("mergeResults", () => {
     expect(row.mal_media_id).toBeNull();
   });
 
-  it("never merges two titles on name alone", () => {
-    // Same title text, no shared idMal: a spin-off and its parent series look
-    // exactly like this, and fusing them would hide one of the two entirely.
-    const merged = mergeResults(
-      [mal({ mal_media_id: 1, title: "Solo Leveling" })],
-      [anilist({ anilist_media_id: 100, mal_media_id: null, title: "Solo Leveling" })],
-    );
-    expect(merged).toHaveLength(2);
-    expect(merged.map((r) => r.source)).toEqual(["mal", "anilist"]);
+  it("records that an idMal match came from AniList's own link", () => {
+    const [row] = mergeResults([mal()], [anilist()]);
+    expect(row.matched_on).toBe("mal_id");
   });
 
+  it("leaves matched_on empty on a row only one site had", () => {
+    const merged = mergeResults([mal()], [anilist({ mal_media_id: null, anilist_media_id: 5, title: "Other Title" })]);
+    expect(merged.map((r) => r.matched_on)).toEqual([null, null]);
+  });
   it("carries the mismatch onto a merged row", () => {
     const [row] = mergeResults([mal({ num_volumes: 14 })], [anilist({ num_volumes: 15 })]);
     expect(row.mismatches).toEqual([{ field: "volumes", mal: 14, anilist: 15 }]);
@@ -161,6 +159,125 @@ describe("mergeResults", () => {
     expect(merged[0].anilist_media_id).toBe(100);
     expect(merged).toHaveLength(2);
     expect(merged[1].source).toBe("anilist");
+  });
+});
+
+describe("mergeResults, lining up a missing idMal by name", () => {
+  // The case that prompted the fallback: a manhwa AniList records no MAL id
+  // for, known by a different English name on each site but by one Korean
+  // title on both.
+  const malHit = mal({
+    mal_media_id: 7,
+    title: "Seobeu Namjunim, Gyeyak Gyeolhon-iramyeonseoyo?",
+    title_en: "Contract Marriage with the Second Lead",
+    alt_titles: ["서브 남주님, 계약 결혼이라면서요?"],
+    media_kind: "manhwa",
+  });
+  const anilistHit = anilist({
+    anilist_media_id: 700,
+    mal_media_id: null,
+    title: "Seobeu Namjunim, Gyeyak Gyeolhon-iramyeonseoyo?",
+    title_en: "Second Male Lead, You Said It Was a Contract Marriage?",
+    alt_titles: ["서브 남주님, 계약 결혼이라면서요?"],
+    media_kind: "manhwa",
+  });
+
+  it("merges when a name matches exactly and the kinds agree", () => {
+    const merged = mergeResults([malHit], [anilistHit]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({
+      source: "both",
+      mal_media_id: 7,
+      anilist_media_id: 700,
+      matched_on: "title",
+    });
+  });
+
+  it("matches on the native-script title alone", () => {
+    const merged = mergeResults(
+      [malHit],
+      [anilistHit].map((h) => ({ ...h, title: "Something Else Entirely" })),
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0].matched_on).toBe("title");
+  });
+
+  it("ignores case and punctuation, but not typos", () => {
+    const loose = mergeResults(
+      [mal({ mal_media_id: 1, title: "Re:Zero Kara", title_en: null, media_kind: "manga" })],
+      [anilist({ mal_media_id: null, title: "RE ZERO KARA", title_en: null, media_kind: "manga" })],
+    );
+    expect(loose).toHaveLength(1);
+
+    const typo = mergeResults(
+      [mal({ mal_media_id: 1, title: "Re:Zero Kara", title_en: null, media_kind: "manga" })],
+      [anilist({ mal_media_id: null, title: "Re:Zero Kra", title_en: null, media_kind: "manga" })],
+    );
+    expect(typo).toHaveLength(2);
+  });
+
+  it("never merges a novel with its adaptation", () => {
+    const merged = mergeResults(
+      [malHit],
+      [{ ...anilistHit, media_kind: "novel" }],
+    );
+    expect(merged.map((r) => r.source)).toEqual(["mal", "anilist"]);
+  });
+
+  it("lets MAL's two prose kinds match AniList's one", () => {
+    const merged = mergeResults(
+      [{ ...malHit, media_kind: "light_novel" }],
+      [{ ...anilistHit, media_kind: "novel" }],
+    );
+    expect(merged).toHaveLength(1);
+  });
+
+  it("refuses when either side has no kind", () => {
+    const merged = mergeResults([malHit], [{ ...anilistHit, media_kind: null }]);
+    expect(merged).toHaveLength(2);
+  });
+
+  it("refuses when the name fits more than one MAL row", () => {
+    const merged = mergeResults(
+      [malHit, { ...malHit, mal_media_id: 8 }],
+      [anilistHit],
+    );
+    expect(merged.map((r) => r.source)).toEqual(["mal", "mal", "anilist"]);
+  });
+
+  it("ignores names too short to identify a title", () => {
+    const merged = mergeResults(
+      [mal({ mal_media_id: 1, title: "Oz", title_en: null, media_kind: "manga" })],
+      [anilist({ mal_media_id: null, title: "Oz", title_en: null, media_kind: "manga" })],
+    );
+    expect(merged).toHaveLength(2);
+  });
+
+  it("never takes a MAL row AniList already linked by id", () => {
+    const linked = anilist({ anilist_media_id: 701, mal_media_id: 7 });
+    const merged = mergeResults([malHit], [linked, anilistHit]);
+    expect(merged).toHaveLength(2);
+    expect(merged[0]).toMatchObject({ anilist_media_id: 701, matched_on: "mal_id" });
+    expect(merged[1]).toMatchObject({ anilist_media_id: 700, source: "anilist" });
+  });
+
+  it("gives a MAL row to the first of two AniList hits claiming it by name", () => {
+    const merged = mergeResults(
+      [malHit],
+      [anilistHit, { ...anilistHit, anilist_media_id: 702 }],
+    );
+    expect(merged.map((r) => r.anilist_media_id)).toEqual([700, 702]);
+    expect(merged.map((r) => r.source)).toEqual(["both", "anilist"]);
+  });
+
+  it("does not second-guess an idMal that points elsewhere", () => {
+    // AniList linked this hit to MAL 99, which is not in the results; the
+    // shared name with MAL 7 does not override that.
+    const merged = mergeResults(
+      [malHit],
+      [{ ...anilistHit, mal_media_id: 99 }],
+    );
+    expect(merged.map((r) => r.source)).toEqual(["mal", "anilist"]);
   });
 });
 

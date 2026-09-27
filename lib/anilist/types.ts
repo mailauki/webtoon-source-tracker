@@ -55,8 +55,10 @@ export const anilistListEntrySchema = z.object({
       .object({
         romaji: z.string().nullable(),
         english: z.string().nullable(),
+        native: z.string().nullable().optional(),
       })
       .optional(),
+    synonyms: z.array(z.string()).nullable().optional(),
     format: z.string().nullable().optional(),
     countryOfOrigin: z.string().nullable().optional(),
     chapters: z.number().nullable().optional(),
@@ -112,7 +114,10 @@ export const anilistSearchMediaSchema = z.object({
   title: z.object({
     romaji: z.string().nullable(),
     english: z.string().nullable(),
+    // Optional, like countryOfOrigin: added to the queries later.
+    native: z.string().nullable().optional(),
   }),
+  synonyms: z.array(z.string()).nullable().optional(),
   format: z.string().nullable(),
   // Optional: it was added to the queries after the rest of this shape.
   countryOfOrigin: z.string().nullable().optional(),

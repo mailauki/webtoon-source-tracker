@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { AniListRateLimitError } from "@/lib/anilist/errors";
+import { anilistAltTitles } from "@/lib/anilist/catalog";
 import { toMalMediaKind } from "@/lib/anilist/mapping";
 import {
   isAniListNovel,
@@ -18,6 +19,7 @@ import {
   resolveMediaKind,
   type MediaKind,
 } from "@/lib/data/search";
+import { malAltTitles } from "@/lib/mal/alt-titles";
 import { MalClient } from "@/lib/mal/client";
 import { searchManga as searchMal } from "@/lib/mal/endpoints";
 import { MalApiError, MalAuthError, MalRateLimitError } from "@/lib/mal/errors";
@@ -151,6 +153,9 @@ async function fetchMal(
         mal_media_id: node.id,
         title: node.title,
         title_en: node.alternative_titles?.en || null,
+        // Only for lining up an AniList hit that has no idMal — see
+        // mergeResults. Already on the node: LIST_FIELDS asks for them.
+        alt_titles: malAltTitles(node),
         main_picture_url:
           node.main_picture?.large ?? node.main_picture?.medium ?? null,
         media_kind: node.media_type ?? null,
@@ -227,21 +232,30 @@ async function fetchAniList(
           ? isAniListNovel(item.format)
           : !isAniListNovel(item.format),
       )
-      .map((item): AniListHit => ({
-        anilist_media_id: item.id,
-        mal_media_id: item.idMal,
+      .map((item): AniListHit => {
         // AniList has no single canonical title. Romaji matches what MAL
         // calls `title`, which keeps the two halves reading alike.
-        title: item.title.romaji ?? item.title.english ?? "Untitled",
-        title_en: item.title.english,
-        main_picture_url:
-          item.coverImage?.large ?? item.coverImage?.medium ?? null,
-        // MAL's vocabulary, so a hit reads "manhwa" in either half.
-        media_kind: toMalMediaKind(item.format, item.countryOfOrigin),
-        num_chapters: item.chapters,
-        num_volumes: item.volumes,
-        anilist_status: item.status,
-      }));
+        const title = item.title.romaji ?? item.title.english ?? "Untitled";
+        return {
+          anilist_media_id: item.id,
+          mal_media_id: item.idMal,
+          title,
+          title_en: item.title.english,
+          // The native-script title and synonyms, which are what let a hit
+          // with no idMal still be lined up with MAL's — see mergeResults.
+          alt_titles: anilistAltTitles(
+            { title, titleEn: item.title.english },
+            item,
+          ),
+          main_picture_url:
+            item.coverImage?.large ?? item.coverImage?.medium ?? null,
+          // MAL's vocabulary, so a hit reads "manhwa" in either half.
+          media_kind: toMalMediaKind(item.format, item.countryOfOrigin),
+          num_chapters: item.chapters,
+          num_volumes: item.volumes,
+          anilist_status: item.status,
+        };
+      });
 
     return { hits };
   } catch (cause) {
