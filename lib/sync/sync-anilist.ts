@@ -2,7 +2,7 @@ import "server-only";
 
 import { AniListClient } from "@/lib/anilist/client";
 import { getMangaList } from "@/lib/anilist/endpoints";
-import { upsertAniListTitle } from "@/lib/anilist/catalog";
+import { anilistAltTitles, upsertAniListTitle } from "@/lib/anilist/catalog";
 import { toMalScore, toMalStatus } from "@/lib/anilist/mapping";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isStale } from "./staleness";
@@ -189,11 +189,14 @@ export async function syncAniListList(
   // per-row call is the cost of that, and it is paid only for titles nothing
   // in the app has seen before, which is a small set after the first sync.
   for (const entry of newTitles) {
+    const title =
+      entry.media.title?.romaji ?? entry.media.title?.english ?? "Untitled";
+    const titleEn = entry.media.title?.english ?? null;
     const id = await upsertAniListTitle(admin, {
       anilistMediaId: entry.mediaId,
-      title:
-        entry.media.title?.romaji ?? entry.media.title?.english ?? "Untitled",
-      titleEn: entry.media.title?.english ?? null,
+      title,
+      titleEn,
+      altTitles: anilistAltTitles({ title, titleEn }, entry.media),
       coverUrl:
         entry.media.coverImage?.large ?? entry.media.coverImage?.medium ?? null,
       format: entry.media.format ?? null,

@@ -3,6 +3,7 @@ import "server-only";
 import { kindForMalGenre } from "@/lib/data/mal-taxonomy";
 import { slugify } from "@/lib/data/tag-items";
 import { MalClient } from "@/lib/mal/client";
+import { malAltTitles } from "@/lib/mal/alt-titles";
 import { getMangaList } from "@/lib/mal/endpoints";
 import type { MalListEntry } from "@/lib/mal/types";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -282,6 +283,9 @@ export async function syncMalList(
     mal_media_id: number;
     title: string;
     title_en: string | null;
+    // Every other name MAL knows the title by, so the search page can find
+    // it by any of them. See collectAltTitles.
+    alt_titles: string[];
     main_picture_url: string | null;
     mal_media_kind: string | null;
     num_chapters: number | null;
@@ -304,6 +308,7 @@ export async function syncMalList(
       mal_media_id: node.id,
       title: node.title,
       title_en: node.alternative_titles?.en || null,
+      alt_titles: malAltTitles(node),
       main_picture_url: node.main_picture?.large ?? node.main_picture?.medium ?? null,
       mal_media_kind: node.media_type ?? null,
       num_chapters: node.num_chapters ?? null,

@@ -6,7 +6,7 @@ import { z } from "zod";
 import { AniListClient } from "@/lib/anilist/client";
 import { getMediaById, saveListEntry } from "@/lib/anilist/endpoints";
 import { AniListAuthError, AniListRateLimitError } from "@/lib/anilist/errors";
-import { upsertAniListTitle } from "@/lib/anilist/catalog";
+import { anilistAltTitles, upsertAniListTitle } from "@/lib/anilist/catalog";
 import { toAniListStatus } from "@/lib/anilist/mapping";
 import { verifySession } from "@/lib/auth/dal";
 import { MAL_LIST_STATUSES } from "@/lib/mal/types";
@@ -164,10 +164,15 @@ export async function addAniListEntry(
   // predicate for ON CONFLICT. See lib/anilist/catalog.ts.
   let titleId: number;
   try {
+    const title = media.title.romaji ?? media.title.english ?? "Untitled";
     titleId = await upsertAniListTitle(admin, {
       anilistMediaId,
-      title: media.title.romaji ?? media.title.english ?? "Untitled",
+      title,
       titleEn: media.title.english,
+      altTitles: anilistAltTitles(
+        { title, titleEn: media.title.english },
+        media,
+      ),
       coverUrl: media.coverImage?.large ?? media.coverImage?.medium ?? null,
       format: media.format,
       countryOfOrigin: media.countryOfOrigin ?? null,

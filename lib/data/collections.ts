@@ -314,7 +314,7 @@ export async function getLibraryTitles() {
       supabase
         .from("user_entries")
         .select(
-          `id, media_titles!inner ( id, title, title_en, main_picture_url, nsfw )`,
+          `id, media_titles!inner ( id, title, title_en, alt_titles, main_picture_url, nsfw )`,
           {
             count: "exact",
           },
@@ -334,6 +334,7 @@ export async function getLibraryTitles() {
       id: number;
       title: string;
       title_en: string | null;
+      alt_titles: string[];
       main_picture_url: string | null;
       nsfw: string | null;
     };

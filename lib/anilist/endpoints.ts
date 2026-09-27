@@ -61,7 +61,9 @@ const LIST_QUERY = /* GraphQL */ `
             title {
               romaji
               english
+              native
             }
+            synonyms
             format
             countryOfOrigin
             chapters
@@ -288,7 +290,9 @@ const SEARCH_QUERY = /* GraphQL */ `
         title {
           romaji
           english
+          native
         }
+        synonyms
         format
         countryOfOrigin
         chapters
@@ -344,7 +348,9 @@ const MEDIA_BY_ID_QUERY = /* GraphQL */ `
       title {
         romaji
         english
+        native
       }
+      synonyms
       format
       countryOfOrigin
       chapters

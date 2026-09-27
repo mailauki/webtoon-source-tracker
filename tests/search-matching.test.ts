@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  collectAltTitles,
   DEFAULT_MEDIA_KIND,
   isNovel,
   matchesMediaKind,
   matchesTitle,
+  normalizeTitle,
   resolveMediaKind,
+  titleMatchScore,
 } from "@/lib/data/search";
 
 /**
@@ -41,6 +44,97 @@ describe("matchesTitle", () => {
   it("survives a row with no titles at all", () => {
     expect(matchesTitle(null, "solo")).toBe(false);
     expect(matchesTitle({ title: null, title_en: null }, "solo")).toBe(false);
+  });
+});
+
+describe("matching alternate titles", () => {
+  const titles = {
+    title: "Ore dake Level Up na Ken",
+    title_en: "Solo Leveling",
+    alt_titles: ["Na Honjaman Level Up", "나 혼자만 레벨업"],
+  };
+
+  it("finds a title by a synonym", () => {
+    expect(matchesTitle(titles, "honjaman")).toBe(true);
+  });
+
+  it("finds a title by its native-script name", () => {
+    expect(matchesTitle(titles, "혼자만")).toBe(true);
+  });
+
+  it("still works for a row with no alternate titles", () => {
+    expect(matchesTitle({ title: "Omniscient Reader" }, "reader")).toBe(true);
+    expect(
+      matchesTitle({ title: "Omniscient Reader", alt_titles: null }, "reader"),
+    ).toBe(true);
+  });
+});
+
+describe("loosened matching", () => {
+  it("ignores case, accents and punctuation", () => {
+    expect(normalizeTitle("Re:ZERO — Starting Life")).toBe(
+      "re zero starting life",
+    );
+    expect(matchesTitle({ title: "Re:Zero" }, "re zero")).toBe(true);
+    expect(matchesTitle({ title: "Pokémon Adventures" }, "pokemon")).toBe(true);
+    expect(matchesTitle({ title: "Kaguya-sama" }, "KAGUYA SAMA")).toBe(true);
+  });
+
+  it("ignores spacing", () => {
+    expect(matchesTitle({ title: "Re:Zero" }, "rezero")).toBe(true);
+    expect(matchesTitle({ title: "OnePunch-Man" }, "one punch")).toBe(true);
+  });
+
+  it("tolerates a typo in a longer term", () => {
+    expect(matchesTitle({ title: "Solo Leveling" }, "solo leveing")).toBe(true);
+    // A swapped pair of letters counts as one edit, not two.
+    expect(matchesTitle({ title: "Solo Leveling" }, "levleing")).toBe(true);
+  });
+
+  it("tolerates two typos only in a long term", () => {
+    expect(matchesTitle({ title: "Omniscient Reader" }, "omnisient readr")).toBe(
+      true,
+    );
+    expect(matchesTitle({ title: "Solo Leveling" }, "slo lveling")).toBe(true);
+    expect(matchesTitle({ title: "Tower of God" }, "twr f")).toBe(false);
+  });
+
+  it("does not guess at short terms", () => {
+    // One edit from "tower" is one edit from far too much.
+    expect(matchesTitle({ title: "Tower of God" }, "towr")).toBe(false);
+    expect(matchesTitle({ title: "Tower of God" }, "towe")).toBe(true);
+  });
+
+  it("does not match something merely similar in length", () => {
+    expect(matchesTitle({ title: "Solo Leveling" }, "tower of god")).toBe(false);
+  });
+
+  it("ranks exact over spacing over typo", () => {
+    expect(titleMatchScore({ title: "Re:Zero" }, "re zero")).toBe(0);
+    expect(titleMatchScore({ title: "Re:Zero" }, "rezero")).toBe(1);
+    expect(titleMatchScore({ title: "Solo Leveling" }, "solo leveing")).toBe(3);
+    expect(titleMatchScore({ title: "Solo Leveling" }, "tower")).toBeNull();
+  });
+
+  it("matches nothing for a term that is only punctuation", () => {
+    expect(matchesTitle({ title: "Re:Zero" }, " : ")).toBe(false);
+  });
+});
+
+describe("collectAltTitles", () => {
+  it("keeps names that are not already displayed, once each", () => {
+    expect(
+      collectAltTitles(
+        ["Solo Leveling", null],
+        ["solo leveling!", "Na Honjaman Level Up", "", null, "Na Honjaman Level Up"],
+      ),
+    ).toEqual(["Na Honjaman Level Up"]);
+  });
+
+  it("trims what it keeps", () => {
+    expect(collectAltTitles(["A"], ["  나 혼자만 레벨업 "])).toEqual([
+      "나 혼자만 레벨업",
+    ]);
   });
 });
 

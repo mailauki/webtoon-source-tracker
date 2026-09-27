@@ -64,8 +64,9 @@ export async function getLibrary() {
       sync_to_mal,
       sync_to_anilist,
       media_titles!inner (
-        id, mal_media_id, anilist_media_id, title, title_en, main_picture_url,
-        mal_media_kind, num_chapters, num_volumes, mal_status, nsfw
+        id, mal_media_id, anilist_media_id, title, title_en, alt_titles,
+        main_picture_url, mal_media_kind, num_chapters, num_volumes, mal_status,
+        nsfw
       ),
       entry_sources (
         id, url, chapters_read, chapters_owned,
@@ -189,8 +190,8 @@ export async function getEntry(entryId: number) {
       sync_to_mal,
       sync_to_anilist,
       media_titles!inner (
-        id, mal_media_id, anilist_media_id, title, title_en, main_picture_url,
-        mal_media_kind, num_chapters, num_volumes, mal_status
+        id, mal_media_id, anilist_media_id, title, title_en, alt_titles,
+        main_picture_url, mal_media_kind, num_chapters, num_volumes, mal_status
       ),
       entry_sources (
         id, url, chapters_read, chapters_owned,
