@@ -91,7 +91,7 @@ export type MalLiveDetails = {
  * app's client id, in one request.
  *
  * The stored values are only as fresh as the last sync; the entry page's
- * chapter check and genre comparison want today's. Null when MAL cannot be
+ * chapter check and tags want today's. Null when MAL cannot be
  * reached — the caller falls back to what it has stored.
  */
 export async function getMalLiveDetails(

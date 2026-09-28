@@ -38,16 +38,6 @@ const MAL_GENRE_BY_ANILIST: Record<string, { id: number; name: string }> = {
 };
 
 /**
- * The MAL genre ids AniList has a genre for. Only these can be compared
- * between the two sites: MAL's list also carries themes and demographics
- * (Isekai, Villainess, Shoujo) that AniList files as community tags instead,
- * so one of those being "MAL only" would say nothing about disagreement.
- */
-export const COMPARABLE_MAL_GENRE_IDS: ReadonlySet<number> = new Set(
-  Object.values(MAL_GENRE_BY_ANILIST).map((genre) => genre.id),
-);
-
-/**
  * The MAL genres for a title's AniList genres, in the `{ id, name }` shape
  * syncGenres takes. A genre AniList adds later with no entry above is dropped
  * rather than guessed at: a missing tag costs one category, a wrong one files

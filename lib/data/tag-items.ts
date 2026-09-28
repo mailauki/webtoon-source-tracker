@@ -93,6 +93,22 @@ export function sortTags(tags: Tag[]): Tag[] {
   );
 }
 
+/**
+ * Several tag lists as one: each tag once, in display order.
+ *
+ * The entry page shows a title's saved tags — MyAnimeList's and AniList's
+ * genres from the syncs, and any added by hand — together with the genres
+ * both sites give it right now, so a genre either site has added since the
+ * last sync shows without waiting for one.
+ */
+export function mergeTags(...lists: readonly Tag[][]): Tag[] {
+  const byId = new Map<number, Tag>();
+  for (const list of lists) {
+    for (const tag of list) byId.set(tag.id, tag);
+  }
+  return sortTags([...byId.values()]);
+}
+
 /** One kind's tags, as a surface that groups them renders them. */
 export type TagGroup = { kind: TagKind; tags: Tag[] };
 
