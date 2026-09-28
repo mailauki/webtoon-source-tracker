@@ -205,6 +205,54 @@ describe("typo matching never misses a real match", () => {
   });
 });
 
+describe("keyword matching", () => {
+  const hourglass = { title: "The Villainess Reverses the Hourglass" };
+
+  it("finds a title from some of its words, with others skipped", () => {
+    expect(matchesTitle(hourglass, "villainess hourglass")).toBe(true);
+    expect(matchesTitle(hourglass, "villainess reverses hourglass")).toBe(true);
+  });
+
+  it("finds a title from its words in any order", () => {
+    expect(matchesTitle(hourglass, "hourglass villainess")).toBe(true);
+  });
+
+  it("does not require the common words", () => {
+    // "the" is not in "Villainess Level 99", and needn't be.
+    expect(matchesTitle({ title: "Villainess Level 99" }, "the villainess 99")).toBe(true);
+  });
+
+  it("needs every keyword", () => {
+    expect(matchesTitle(hourglass, "villainess tower")).toBe(false);
+  });
+
+  // Pieced together across a row's names, a romanised word and an English
+  // one could match titles that are neither.
+  it("takes every keyword from one of the row's names", () => {
+    const row = { title: "Akuyaku Reijou", title_en: "The Villainess Reverses the Hourglass" };
+    expect(matchesTitle(row, "akuyaku hourglass")).toBe(false);
+    expect(matchesTitle(row, "reijou akuyaku")).toBe(true);
+  });
+
+  it("ranks keyword matches below every closer match", () => {
+    expect(titleMatchScore(hourglass, "villainess reverses")).toBe(0);
+    expect(titleMatchScore(hourglass, "villainess hourglass")).toBe(5);
+    // A typo match of the whole phrase is closer than a keyword match.
+    expect(
+      titleMatchScore(hourglass, "villainess reverss the hourglass"),
+    ).toBe(3);
+  });
+
+  it("matches a term made only of common words as a phrase alone", () => {
+    expect(matchesTitle(hourglass, "the the")).toBe(false);
+    expect(matchesTitle(hourglass, "reverses the")).toBe(true);
+  });
+
+  it("counts a keyword typed without its space", () => {
+    expect(matchesTitle({ title: "Re:Zero Starting Life" }, "life rezero")).toBe(true);
+  });
+});
+
 describe("collectAltTitles", () => {
   it("keeps names that are not already displayed, once each", () => {
     expect(

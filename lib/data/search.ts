@@ -108,11 +108,48 @@ function sharesEnoughPairs(
  * The last term prepared, so matching one term against a whole shelf
  * normalizes it once rather than once per row.
  */
-let lastQuery: { term: string; prepared: Prepared } | null = null;
+let lastQuery: {
+  term: string;
+  prepared: Prepared;
+  keywords: string[] | null;
+} | null = null;
 
-function prepareQuery(term: string): Prepared {
-  if (lastQuery?.term !== term) lastQuery = { term, prepared: prepare(term) };
-  return lastQuery.prepared;
+function prepareQuery(term: string): {
+  prepared: Prepared;
+  keywords: string[] | null;
+} {
+  if (lastQuery?.term !== term) {
+    const prepared = prepare(term);
+    lastQuery = { term, prepared, keywords: keywordsOf(prepared) };
+  }
+  return lastQuery;
+}
+
+/**
+ * Words too common in titles to narrow anything on their own: nearly every
+ * title has a "the" or an "of", so requiring one would only turn away titles
+ * that happen not to.
+ */
+const STOP_WORDS = new Set([
+  "a", "an", "and", "for", "in", "of", "on", "the", "to", "with",
+]);
+
+/**
+ * The words a term is matched on as keywords, or null when keyword matching
+ * adds nothing.
+ *
+ * Only for a term of two or more words — a single word is already found
+ * anywhere in a title by the phrase match. Stop words and single letters are
+ * dropped, since they appear in almost every title; a term made only of
+ * them has no keywords and is matched as a phrase alone.
+ */
+function keywordsOf(query: Prepared): string[] | null {
+  const words = query.spaced.split(" ").filter(Boolean);
+  if (words.length < 2) return null;
+  const kept = words.filter(
+    (word) => !STOP_WORDS.has(word) && Array.from(word).length > 1,
+  );
+  return kept.length > 0 ? [...new Set(kept)] : null;
 }
 
 /**
@@ -209,8 +246,14 @@ function typoDistance(term: string, text: string, limit: number): number {
  *   punctuation. "re zero" finds "Re:Zero".
  * - `1` — it appears once spaces are ignored too. "rezero" finds "Re:Zero",
  *   and "solo leveling" finds a title written "SoloLeveling".
- * - `2` and up — it appears with a typo or two; `2 + edits`. Only for terms
+ * - `2` to `4` — it appears with a typo or two; `2 + edits`. Only for terms
  *   long enough to carry one — see allowedTypos.
+ * - `5` — every keyword in it appears in one of the row's names, in any
+ *   order and with any words between: "villainess hourglass" and "hourglass
+ *   villainess" both find "The Villainess Reverses the Hourglass". Stop words
+ *   like "the" are not required — see keywordsOf. Each keyword must appear
+ *   as typed (spacing aside), so a keyword search is exact word by word
+ *   rather than typo-tolerant, and all of them must be in the same name.
  *
  * Every title the row has is checked — the romanised one, the English one and
  * every alternate — because the card shows one and the user may know the
@@ -220,7 +263,7 @@ function typoDistance(term: string, text: string, limit: number): number {
  */
 export function titleMatchScore(titles: Titles, term: string): number | null {
   if (!titles) return null;
-  const query = prepareQuery(term);
+  const { prepared: query, keywords } = prepareQuery(term);
   if (query.compact === "") return null;
 
   const candidates = titlesOf(titles);
@@ -229,10 +272,8 @@ export function titleMatchScore(titles: Titles, term: string): number | null {
   if (candidates.some((c) => c.compact.includes(query.compact))) return 1;
 
   const limit = allowedTypos(query.compact.length);
-  if (limit === 0) return null;
-
   let best = limit + 1;
-  for (const candidate of candidates) {
+  for (const candidate of limit > 0 ? candidates : []) {
     // The edit-distance pass is the expensive part of a search — it is what
     // made typing lag on a large shelf — so a title that cannot be within
     // the limit never reaches it. See sharesEnoughPairs.
@@ -240,7 +281,22 @@ export function titleMatchScore(titles: Titles, term: string): number | null {
     best = Math.min(best, typoDistance(query.compact, candidate.compact, limit));
     if (best === 1) break;
   }
-  return best <= limit ? 2 + best : null;
+  if (best <= limit) return 2 + best;
+
+  // Last, and ranked last: a keyword match is the loosest reading of what was
+  // typed, so the closer matches above always sort ahead of it. Checked per
+  // name, so the words have to come from one title rather than being pieced
+  // together across a row's English and romanised names. Compact form, so a
+  // keyword typed without its internal space ("rezero") still counts.
+  if (
+    keywords &&
+    candidates.some((c) =>
+      keywords.every((word) => c.compact.includes(word)),
+    )
+  ) {
+    return 5;
+  }
+  return null;
 }
 
 /** Whether any of a row's titles matches the term. See titleMatchScore. */
