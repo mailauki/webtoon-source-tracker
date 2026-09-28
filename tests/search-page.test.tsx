@@ -584,4 +584,27 @@ describe("the catalog half", () => {
     // that `refresh` itself causes must not fire it again.
     await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
   });
+
+  // An AniList-only row has no MAL id, so it is tracked by its AniList id. The
+  // card used to record it that way while the panel only ever looked up the
+  // MAL id, so the add succeeded and the button kept saying "Add".
+  it("marks an AniList-only title added too", async () => {
+    addAniListEntry.mockResolvedValue({ ok: true, message: "Added", entryId: 8 });
+    mockSearch([
+      {
+        ...RESULT,
+        key: "anilist:4321",
+        source: "anilist",
+        mal_media_id: null,
+        anilist_media_id: 4321,
+      },
+    ]);
+    setup();
+    await userEvent.type(field(), "solo");
+
+    await userEvent.click(await screen.findByRole("button", { name: /^add$/i }));
+
+    expect(await screen.findByText("Added")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^add$/i })).not.toBeInTheDocument();
+  });
 });
