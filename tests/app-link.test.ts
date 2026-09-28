@@ -1,6 +1,9 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { AniListTokenResponse } from "@/lib/anilist/oauth";
+import type { MalTokenResponse } from "@/lib/mal/oauth";
+
 const {
   getClaims,
   verifySession,
@@ -16,10 +19,10 @@ const {
   verifySession: vi.fn(async () => {
     throw new Error("the app flow must not read the browser session");
   }),
-  exchangeCodeForTokens: vi.fn(async () => {
+  exchangeCodeForTokens: vi.fn(async (): Promise<MalTokenResponse> => {
     throw new Error("stop after the exchange");
   }),
-  exchangeCodeForToken: vi.fn(async () => {
+  exchangeCodeForToken: vi.fn(async (): Promise<AniListTokenResponse> => {
     throw new Error("stop after the exchange");
   }),
   anilistRequest: vi.fn(),

@@ -58,8 +58,18 @@ describe("POST /api/purchases/app-store", () => {
   });
 
   it("rejects a transaction Apple's signature doesn't verify", async () => {
-    verifyTransaction.mockRejectedValueOnce(new Error("bad jws"));
+    verifyTransaction.mockRejectedValueOnce(new VerificationException(VerificationStatus.VERIFICATION_FAILURE));
     expect((await call({ signedTransaction: "jws" })).status).toBe(400);
+    expect(grantPro).not.toHaveBeenCalled();
+  });
+
+  it("returns 500, not 400, when verifyTransaction throws something other than a VerificationException", async () => {
+    // e.g. the SignedDataVerifier constructor throwing a plain Error over an
+    // unset/unparseable APPLE_APP_APPLE_ID — a server problem, not a verdict
+    // on this transaction, so the app must retry rather than finish it.
+    verifyTransaction.mockRejectedValueOnce(new Error("APPLE_APP_APPLE_ID is not a valid app Apple ID"));
+    const response = await call({ signedTransaction: "jws" });
+    expect(response.status).toBe(500);
     expect(grantPro).not.toHaveBeenCalled();
   });
 

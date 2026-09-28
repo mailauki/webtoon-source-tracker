@@ -51,12 +51,21 @@ export async function POST(request: Request) {
   } catch (cause) {
     // Never log the JWS itself — just that verification failed and why.
     console.error("Apple purchase verification failed", cause);
-    if (cause instanceof VerificationException && cause.status === VerificationStatus.RETRYABLE_VERIFICATION_FAILURE) {
-      // Apple's OCSP responder was unreachable — not this transaction's
-      // fault, and retrying later can succeed once it's back.
-      return Response.json({ error: "Couldn't verify this purchase with Apple. Try again shortly." }, { status: 503 });
+    if (cause instanceof VerificationException) {
+      if (cause.status === VerificationStatus.RETRYABLE_VERIFICATION_FAILURE) {
+        // Apple's OCSP responder was unreachable — not this transaction's
+        // fault, and retrying later can succeed once it's back.
+        return Response.json({ error: "Couldn't verify this purchase with Apple. Try again shortly." }, { status: 503 });
+      }
+      // Every other VerificationException is a permanent verdict on this
+      // transaction (bad signature, wrong app, revoked, etc.) — 400.
+      return Response.json({ error: "Couldn't verify this purchase with Apple." }, { status: 400 });
     }
-    return Response.json({ error: "Couldn't verify this purchase with Apple." }, { status: 400 });
+    // Not a verdict on the transaction at all — e.g. the SignedDataVerifier
+    // constructor throwing over a missing/unparseable APPLE_APP_APPLE_ID.
+    // Server misconfiguration or some other unexpected failure: 500, so the
+    // app retries instead of finishing a transaction that might be fine.
+    return Response.json({ error: "Couldn't verify this purchase with Apple. Try again shortly." }, { status: 500 });
   }
   if (tx.productId !== "pro_unlock" || tx.revoked) {
     return Response.json({ error: "This purchase isn't an active Pro unlock." }, { status: 400 });

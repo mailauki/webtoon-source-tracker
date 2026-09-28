@@ -24,9 +24,11 @@ export default async function ProPage({ searchParams }: PageProps<"/pro">) {
         {isPro ? (
           <p className="font-medium">You have Pro. Thank you!</p>
         ) : purchased ? (
-          // The webhook can land a moment after this redirect.
+          // The webhook can land a moment after this redirect — and with an
+          // async payment method (granted on async_payment_succeeded), the
+          // payment itself may still be pending, not just unconfirmed here.
           <p className="font-medium">
-            Payment received — Pro turns on in a moment. Refresh if it hasn&apos;t.
+            Payment submitted — Pro turns on once it&apos;s confirmed. Refresh if it hasn&apos;t.
           </p>
         ) : (
           <form action={startProCheckout}>
