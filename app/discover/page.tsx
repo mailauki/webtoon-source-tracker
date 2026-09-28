@@ -7,6 +7,7 @@ import { NewCollection } from "@/components/collections/new-collection";
 import { Button } from "@/components/ui/button";
 import { verifySession } from "@/lib/auth/dal";
 import { getCuratedShelves, getMyShelves } from "@/lib/data/collections";
+import { getIsPro } from "@/lib/data/pro";
 
 export const metadata = { title: "Discover" };
 
@@ -39,9 +40,10 @@ export const metadata = { title: "Discover" };
 export default async function DiscoverPage() {
   await verifySession();
 
-  const [mine, shelves] = await Promise.all([
+  const [mine, shelves, isPro] = await Promise.all([
     getMyShelves(),
     getCuratedShelves(),
+    getIsPro(),
   ]);
 
   return (
@@ -106,7 +108,11 @@ export default async function DiscoverPage() {
             </p>
           ) : (
             mine.map((collection) => (
-              <CollectionShelf key={collection.id} collection={collection} />
+              <CollectionShelf
+                key={collection.id}
+                collection={collection}
+                isPro={isPro}
+              />
             ))
           )}
         </section>
@@ -145,7 +151,11 @@ export default async function DiscoverPage() {
             </div>
           ) : (
             shelves.map((collection) => (
-              <CollectionShelf key={collection.id} collection={collection} />
+              <CollectionShelf
+                key={collection.id}
+                collection={collection}
+                isPro={isPro}
+              />
             ))
           )}
         </section>

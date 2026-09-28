@@ -78,7 +78,7 @@ describe("when the viewer tracks nothing here", () => {
    * usefully change what is on screen is a dead control.
    */
   it("offers no filters at all", () => {
-    render(<CollectionFilters items={[item(1), item(2)]} />);
+    render(<CollectionFilters items={[item(1), item(2)]} isPro />);
 
     expect(
       screen.queryByRole("button", { name: /^Filters:/ }),
@@ -86,7 +86,7 @@ describe("when the viewer tracks nothing here", () => {
   });
 
   it("still shows the titles", () => {
-    render(<CollectionFilters items={[item(1), item(2)]} />);
+    render(<CollectionFilters items={[item(1), item(2)]} isPro />);
 
     expect(screen.getByRole("heading", { name: "Title 1" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Title 2" })).toBeInTheDocument();
@@ -98,6 +98,7 @@ describe("chips are derived from the titles on the page", () => {
     render(
       <CollectionFilters
         items={[item(1), item(2, { listStatus: "reading", sourceSlugs: [] })]}
+        isPro
       />,
     );
 
@@ -118,6 +119,7 @@ describe("chips are derived from the titles on the page", () => {
           item(2, { listStatus: "reading", sourceSlugs: ["tapas"] }),
           item(3, { listStatus: "reading", sourceSlugs: ["tapas"] }),
         ]}
+        isPro
       />,
     );
     await openMenu();
@@ -135,6 +137,7 @@ describe("chips are derived from the titles on the page", () => {
           item(2, { listStatus: "reading", sourceSlugs: [] }),
           item(3, { listStatus: "completed", sourceSlugs: [] }),
         ]}
+        isPro
       />,
     );
     await openMenu();
@@ -156,6 +159,7 @@ describe("chips are derived from the titles on the page", () => {
           item(2, { listStatus: "reading", sourceSlugs: ["tapas"] }),
           item(3, { listStatus: "completed", sourceSlugs: [] }),
         ]}
+        isPro
       />,
     );
     await openMenu();
@@ -182,7 +186,7 @@ describe("filtering the grid", () => {
   ];
 
   it("narrows the cards and says how many are left", async () => {
-    render(<CollectionFilters items={SHELF} />);
+    render(<CollectionFilters items={SHELF} isPro />);
 
     await choose(/Library/, "Not in my library");
 
@@ -195,7 +199,7 @@ describe("filtering the grid", () => {
   });
 
   it("shows no count while nothing is narrowed", () => {
-    render(<CollectionFilters items={SHELF} />);
+    render(<CollectionFilters items={SHELF} isPro />);
 
     expect(screen.queryByText(/ of 3$/)).not.toBeInTheDocument();
   });
@@ -212,6 +216,7 @@ describe("filtering the grid", () => {
           item(1, { listStatus: "reading", sourceSlugs: [] }),
           item(2, { listStatus: "completed", sourceSlugs: [] }),
         ]}
+        isPro
       />,
     );
 

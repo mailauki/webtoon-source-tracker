@@ -109,7 +109,7 @@ function setup({
       <SearchField />
       <SearchSwitches />
       <SearchPrompt />
-      <LibraryResults />
+      <LibraryResults isPro />
       <CatalogResults anilistConnected={anilistConnected} />
     </SearchFilters>,
   );

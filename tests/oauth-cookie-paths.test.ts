@@ -3,6 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/auth/dal", () => ({
   verifySession: async () => ({ userId: "user-1" }),
 }));
+vi.mock("@/lib/data/pro", () => ({
+  canLinkService: async () => true,
+}));
+vi.mock("@/lib/supabase/server", () => ({
+  createClient: async () => ({}),
+}));
 
 import { GET as connectAniList } from "@/app/api/anilist/connect/route";
 import { GET as connectMal } from "@/app/api/mal/connect/route";
@@ -35,7 +41,7 @@ afterEach(() => {
 
 describe("OAuth cookie paths", () => {
   it("MAL's cookies reach its callback", async () => {
-    const response = await connectMal();
+    const response = await connectMal(new Request("https://example.com/api/mal/connect"));
     const cookies = response.cookies.getAll();
 
     expect(cookies.map((c) => c.name).sort()).toEqual([
@@ -50,7 +56,7 @@ describe("OAuth cookie paths", () => {
   });
 
   it("AniList's cookie reaches its callback", async () => {
-    const response = await connectAniList();
+    const response = await connectAniList(new Request("https://example.com/api/anilist/connect"));
     const [cookie] = response.cookies.getAll();
 
     expect(cookie.name).toBe("anilist_oauth_state");

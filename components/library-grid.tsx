@@ -244,6 +244,7 @@ export function LibraryGrid({
   catalog = [],
   emptyUnfiltered,
   emptyFiltered,
+  isPro,
 }: {
   entries: LibraryRow[];
   topSources?: RankedSource[];
@@ -252,6 +253,8 @@ export function LibraryGrid({
   emptyUnfiltered: React.ReactNode;
   /** Chips hid everything. */
   emptyFiltered: React.ReactNode;
+  /** Owned chapters are Pro-only; passed straight through to each card. */
+  isPro: boolean;
 }) {
   const {
     status,
@@ -308,6 +311,7 @@ export function LibraryGrid({
             layout={layout}
             topSources={topSources}
             catalog={catalog}
+            isPro={isPro}
             selection={
               selected
                 ? {

@@ -8,6 +8,7 @@ import { CollectionFilters } from "@/components/collection-filters";
 import { verifySession } from "@/lib/auth/dal";
 import type { CollectionItem } from "@/lib/data/collection-items";
 import { getTrackedEntries } from "@/lib/data/collections";
+import { getIsPro } from "@/lib/data/pro";
 import { getSources } from "@/lib/data/sources";
 import { getTagBySlug, getTitlesForTag } from "@/lib/data/tags";
 
@@ -37,10 +38,11 @@ export default async function TagPage({
 
   if (!tag) notFound();
 
-  const [titles, tracked, sources] = await Promise.all([
+  const [titles, tracked, sources, isPro] = await Promise.all([
     getTitlesForTag(tag.id),
     getTrackedEntries(),
     getSources(),
+    getIsPro(),
   ]);
 
   // There is no collection_items row here — a tag link is not a shelf
@@ -82,7 +84,7 @@ export default async function TagPage({
           </p>
         </div>
 
-        <CollectionFilters items={items} catalog={sources} />
+        <CollectionFilters items={items} catalog={sources} isPro={isPro} />
       </div>
     </AppShell>
   );

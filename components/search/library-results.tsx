@@ -39,9 +39,12 @@ import { matchesMediaKind, titleMatchScore } from "@/lib/data/search";
 export function LibraryResults({
   topSources = [],
   catalog = [],
+  isPro,
 }: {
   topSources?: RankedSource[];
   catalog?: Source[];
+  /** Owned chapters are Pro-only; passed straight through to each card. */
+  isPro: boolean;
 }) {
   const { deferredQuery, mediaKind, entries } = useSearchFilters();
   const term = deferredQuery.trim();
@@ -95,6 +98,7 @@ export function LibraryResults({
               entry={entry}
               topSources={topSources}
               catalog={catalog}
+              isPro={isPro}
             />
           ))}
         </div>

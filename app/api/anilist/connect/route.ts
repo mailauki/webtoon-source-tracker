@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 
-import { createAppState, userIdFromBearer } from "@/lib/auth/app-link";
+import { createAppState, userClientFromBearer } from "@/lib/auth/app-link";
 import { verifySession } from "@/lib/auth/dal";
+import { canLinkService } from "@/lib/data/pro";
+import { PRO_MESSAGES } from "@/lib/pro";
 import { STATE_COOKIE, buildAuthorizeUrl } from "@/lib/anilist/oauth";
 import { createState } from "@/lib/mal/oauth";
+import { createClient } from "@/lib/supabase/server";
 
 /**
  * Starts the AniList link flow.
@@ -12,9 +15,13 @@ import { createState } from "@/lib/mal/oauth";
  * no PKCE verifier to stash (AniList's code grant does not use one), so the
  * state is the only cookie.
  */
-export async function GET() {
+export async function GET(request: Request) {
   // Route handlers are reachable directly, so this check is load-bearing.
   const { userId } = await verifySession();
+
+  if (!(await canLinkService(await createClient(), userId, "anilist"))) {
+    return NextResponse.redirect(new URL("/pro?need=sync", request.url));
+  }
 
   const state = createState(userId);
   const response = NextResponse.redirect(buildAuthorizeUrl(state));
@@ -35,8 +42,11 @@ export async function GET() {
 
 /** Leg 1 of an app link — see lib/auth/app-link.ts. */
 export async function POST(request: Request) {
-  const userId = await userIdFromBearer(request);
-  if (!userId) return Response.json({ error: "Not signed in" }, { status: 401 });
+  const user = await userClientFromBearer(request);
+  if (!user) return Response.json({ error: "Not signed in" }, { status: 401 });
+  if (!(await canLinkService(user.supabase, user.userId, "anilist"))) {
+    return Response.json({ error: PRO_MESSAGES.sync }, { status: 402 });
+  }
 
-  return Response.json({ url: buildAuthorizeUrl(createAppState(userId)) });
+  return Response.json({ url: buildAuthorizeUrl(createAppState(user.userId)) });
 }

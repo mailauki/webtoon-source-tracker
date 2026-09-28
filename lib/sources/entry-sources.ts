@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { canonicalUrl } from "@/lib/data/canonical-url";
 import { parseRanges, toMultirange } from "@/lib/data/chapter-ranges";
+import { isProRequired, PRO_MESSAGES } from "@/lib/pro";
 import type { Database } from "@/lib/supabase/types";
 
 export type EntrySourceState = { error?: string; message?: string } | null;
@@ -148,6 +149,7 @@ export async function insertEntrySource(
     if (error.code === "23505") {
       return { error: "That source is already attached to this title." };
     }
+    if (isProRequired(error)) return { error: PRO_MESSAGES.owned };
     return { error: error.message };
   }
 
@@ -174,7 +176,10 @@ export async function writeEntrySource(
     // land on one title while demoting another's primary.
     .eq("entry_id", input.entryId);
 
-  if (error) return { error: error.message };
+  if (error) {
+    if (isProRequired(error)) return { error: PRO_MESSAGES.owned };
+    return { error: error.message };
+  }
 
   revalidateEntry(input.entryId);
   return { message: "Source updated." };
@@ -211,9 +216,11 @@ export async function readSourceBody(request: Request): Promise<Record<string, u
   );
 }
 
-/** An endpoint's reply: 200 with a message, or 400 with the error. */
+/**
+ * An endpoint's reply: 200 with a message, or the error — 402 when the write
+ * needs Pro (owned chapters), 400 otherwise.
+ */
 export function sourceReply(state: EntrySourceState): Response {
-  return state?.error
-    ? Response.json(state, { status: 400 })
-    : Response.json(state ?? {});
+  if (!state?.error) return Response.json(state ?? {});
+  return Response.json(state, { status: state.error === PRO_MESSAGES.owned ? 402 : 400 });
 }

@@ -76,6 +76,7 @@ function setup(initial = { status: "", source: "" }) {
         entries={ROWS}
         emptyFiltered={<p>No titles match</p>}
         emptyUnfiltered={<p>Nothing synced yet</p>}
+        isPro
       />
     </LibraryFilters>,
   );
@@ -205,6 +206,7 @@ describe("empty states", () => {
           entries={[]}
           emptyFiltered={<p>No titles match</p>}
           emptyUnfiltered={<p>Nothing synced yet</p>}
+          isPro
         />
       </LibraryFilters>,
     );
@@ -289,6 +291,7 @@ describe("hide hiatus toggle", () => {
           entries={SHELF}
           emptyFiltered={<p>No titles match</p>}
           emptyUnfiltered={<p>Nothing synced yet</p>}
+          isPro
         />
       </LibraryFilters>,
     );
@@ -339,6 +342,7 @@ describe("hide hiatus toggle", () => {
           entries={SHELF}
           emptyFiltered={<p>No titles match</p>}
           emptyUnfiltered={<p>Nothing synced yet</p>}
+          isPro
         />
       </LibraryFilters>,
     );
@@ -362,6 +366,7 @@ describe("hide hiatus toggle", () => {
           entries={[row(9, "reading", ["webtoon"], "Title 9", null, [true])]}
           emptyFiltered={<p>No titles match</p>}
           emptyUnfiltered={<p>Nothing synced yet</p>}
+          isPro
         />
       </LibraryFilters>,
     );
@@ -392,6 +397,7 @@ describe("owned only toggle", () => {
           entries={SHELF}
           emptyFiltered={<p>No titles match</p>}
           emptyUnfiltered={<p>Nothing synced yet</p>}
+          isPro
         />
       </LibraryFilters>,
     );
@@ -442,6 +448,7 @@ describe("owned only toggle", () => {
           entries={SHELF}
           emptyFiltered={<p>No titles match</p>}
           emptyUnfiltered={<p>Nothing synced yet</p>}
+          isPro
         />
       </LibraryFilters>,
     );
@@ -465,6 +472,7 @@ describe("owned only toggle", () => {
           entries={[row(1, "reading", ["webtoon"])]}
           emptyFiltered={<p>No titles match</p>}
           emptyUnfiltered={<p>Nothing synced yet</p>}
+          isPro
         />
       </LibraryFilters>,
     );
@@ -493,6 +501,7 @@ describe("the hide-adult-titles toggle", () => {
           entries={ROWS}
           emptyFiltered={<p>No titles match</p>}
           emptyUnfiltered={<p>Nothing synced yet</p>}
+          isPro
         />
       </LibraryFilters>,
     );

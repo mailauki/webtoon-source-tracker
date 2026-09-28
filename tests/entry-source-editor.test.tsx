@@ -1,11 +1,30 @@
 import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+type ActionFn = (
+  prev: unknown,
+  formData: FormData,
+) => Promise<{ error?: string; message?: string } | null>;
+
 // The editor imports the server actions its forms submit; none is called here.
+// Hoisted so the data-preservation test below can import and inspect the same
+// spy the component calls, the way tests/entry-source-dialog.test.tsx does.
+const { addEntrySource, updateEntrySource, removeEntrySource } = vi.hoisted(
+  () => ({
+    addEntrySource: vi.fn<ActionFn>(async () => ({ message: "Source added." })),
+    updateEntrySource: vi.fn<ActionFn>(async () => ({
+      message: "Source updated.",
+    })),
+    removeEntrySource: vi.fn<ActionFn>(async () => ({
+      message: "Source removed.",
+    })),
+  }),
+);
 vi.mock("@/app/actions/entry-sources", () => ({
-  addEntrySource: vi.fn(async () => ({ message: "Source added." })),
-  updateEntrySource: vi.fn(async () => ({ message: "Source updated." })),
-  removeEntrySource: vi.fn(async () => ({ message: "Source removed." })),
+  addEntrySource,
+  updateEntrySource,
+  removeEntrySource,
 }));
 vi.mock("@/app/actions/custom-sources", () => ({
   createCustomSource: vi.fn(async () => ({ message: "Source created." })),
@@ -14,6 +33,7 @@ vi.mock("@/app/actions/custom-sources", () => ({
 import { EntrySourceEditor } from "@/components/entry-source-editor";
 import type { EntrySource } from "@/components/source-fields";
 import type { ChapterTotal } from "@/lib/data/chapter-totals";
+import type { Source } from "@/lib/data/rank-sources";
 
 function source(overrides: Partial<EntrySource> = {}): EntrySource {
   return {
@@ -32,18 +52,45 @@ function source(overrides: Partial<EntrySource> = {}): EntrySource {
   };
 }
 
-function setup(sources: EntrySource[], total: ChapterTotal | null = null) {
+const catalog: Source[] = [
+  {
+    id: 1,
+    slug: "tapas",
+    name: "Tapas",
+    base_url: null,
+    logo_url: null,
+    owner_id: null,
+    parent_slug: null,
+    sort_order: null,
+  },
+];
+
+function setup(
+  sources: EntrySource[],
+  total: ChapterTotal | null = null,
+  isPro = true,
+) {
   render(
     <EntrySourceEditor
       entryId={7}
       sources={sources}
       catalog={[]}
       total={total}
+      isPro={isPro}
     />,
   );
 }
 
-afterEach(cleanup);
+/** Opens the add-source form the same way a user would: the Add source button. */
+async function openAddForm() {
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: /add source/i }));
+}
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 
 /**
  * What the attached-source row says about ownership.
@@ -199,5 +246,68 @@ describe("owned across sources", () => {
       other({ is_owned: true, chapters_owned: null }),
     ]);
     expect(summary()).not.toBeInTheDocument();
+  });
+});
+
+describe("owned chapters, gated on Pro", () => {
+  it("offers Pro instead of the owned fields to a free account", async () => {
+    render(
+      <EntrySourceEditor entryId={1} sources={[]} catalog={catalog} isPro={false} />,
+    );
+    await openAddForm();
+
+    expect(screen.queryByLabelText(/owned/i)).toBeNull();
+    expect(screen.getByRole("link", { name: /get pro/i })).toHaveAttribute(
+      "href",
+      "/pro",
+    );
+  });
+
+  it("shows the owned fields to a Pro account", async () => {
+    render(
+      <EntrySourceEditor entryId={1} sources={[]} catalog={catalog} isPro />,
+    );
+    await openAddForm();
+
+    expect(screen.getByLabelText("Owned")).toBeInTheDocument();
+    expect(screen.getByLabelText("Chapters owned")).toBeInTheDocument();
+  });
+
+  /**
+   * The critical case: a free account editing an already-owned source must
+   * not silently un-own it.
+   *
+   * With isPro=false the checkbox and range input are gone from the DOM —
+   * the account cannot see or change them — so an edit to an unrelated field
+   * (here, just clicking Save with nothing changed) must still resubmit
+   * exactly what is already stored. Without this, updateEntrySource always
+   * writes `is_owned: isOwned ?? false` and `chapters_owned` from whatever
+   * the form submitted, so an absent field would silently wipe both on Save.
+   */
+  it("keeps an already-owned source's flag and count when a free account saves an edit", async () => {
+    const user = userEvent.setup();
+    render(
+      <EntrySourceEditor
+        entryId={1}
+        sources={[
+          source({ is_owned: true, chapters_owned: "{[1,41)}" }),
+        ]}
+        catalog={catalog}
+        isPro={false}
+      />,
+    );
+
+    // The owned controls are gone for a free account — confirms the form
+    // really cannot see or change these two fields before proving it still
+    // preserves them.
+    expect(screen.queryByLabelText(/owned/i)).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /^Edit Tapas$/i }));
+    await user.click(screen.getByRole("button", { name: /^Save$/i }));
+
+    await vi.waitFor(() => expect(updateEntrySource).toHaveBeenCalledOnce());
+    const formData = updateEntrySource.mock.calls[0][1];
+    expect(formData.get("is_owned")).toBe("on");
+    expect(formData.get("chapters_owned")).toBe("1-40");
   });
 });

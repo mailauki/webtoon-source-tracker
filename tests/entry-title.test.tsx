@@ -65,7 +65,7 @@ describe.each<[string, EntryLayout]>([
   ["row", "row"],
 ])("EntryCard (%s layout)", (_name, layout) => {
   const Component = (props: { entry: LibraryRow }) => (
-    <EntryCard {...props} layout={layout} />
+    <EntryCard {...props} layout={layout} isPro />
   );
   it("shows the English title when MAL has one", () => {
     render(<Component entry={row(ENGLISH)} />);

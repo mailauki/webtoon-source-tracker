@@ -57,6 +57,7 @@ function renderShelf() {
         entries={ROWS}
         emptyFiltered={null}
         emptyUnfiltered={null}
+        isPro
       />
     </LibraryFilters>,
   );
@@ -100,6 +101,7 @@ it("applies one status to the picks and keeps the failures picked", async () => 
         entries={ROWS}
         emptyFiltered={null}
         emptyUnfiltered={null}
+        isPro
       />
     </LibraryFilters>,
   );

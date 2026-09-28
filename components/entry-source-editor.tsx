@@ -40,6 +40,7 @@ export function EntrySourceEditor({
   catalog,
   total = null,
   anilistLinks = {},
+  isPro,
 }: {
   entryId: number;
   sources: EntrySource[];
@@ -48,6 +49,8 @@ export function EntrySourceEditor({
   total?: ChapterTotal | null;
   /** AniList's reading link per source id — see catalogLinks. */
   anilistLinks?: Record<number, string>;
+  /** Owned chapters are Pro-only; a free account sees a teaser instead. */
+  isPro: boolean;
 }) {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -90,6 +93,7 @@ export function EntrySourceEditor({
           available={available}
           total={total}
           anilistLinks={anilistLinks}
+          isPro={isPro}
           onDone={() => setAdding(false)}
         />
       ) : null}
@@ -108,6 +112,7 @@ export function EntrySourceEditor({
                 entryId={entryId}
                 source={source}
                 total={total}
+                isPro={isPro}
                 onDone={() => setEditingId(null)}
               />
             </li>
@@ -297,12 +302,14 @@ function AddSourceForm({
   available,
   total,
   anilistLinks,
+  isPro,
   onDone,
 }: {
   entryId: number;
   available: Source[];
   total: ChapterTotal | null;
   anilistLinks: Record<number, string>;
+  isPro: boolean;
   onDone: () => void;
 }) {
   const [state, action] = useActionState<EntrySourceState, FormData>(
@@ -415,6 +422,7 @@ function AddSourceForm({
         <SourceFields
           total={total}
           suggestedUrl={selected ? anilistLinks[Number(selected)] : null}
+          isPro={isPro}
         />
 
         {state?.error ? (
@@ -504,11 +512,13 @@ function EditSourceForm({
   entryId,
   source,
   total,
+  isPro,
   onDone,
 }: {
   entryId: number;
   source: EntrySource;
   total: ChapterTotal | null;
+  isPro: boolean;
   onDone: () => void;
 }) {
   const [state, action] = useActionState<EntrySourceState, FormData>(
@@ -542,7 +552,7 @@ function EditSourceForm({
         </Button>
       </div>
 
-      <SourceFields source={source} total={total} />
+      <SourceFields source={source} total={total} isPro={isPro} />
 
       {state?.error ? (
         <p role="alert" className="text-sm text-alert">

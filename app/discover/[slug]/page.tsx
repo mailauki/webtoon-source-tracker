@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { CollectionFilters } from "@/components/collection-filters";
 import { verifySession } from "@/lib/auth/dal";
 import { getCuratedCollection } from "@/lib/data/collections";
+import { getIsPro } from "@/lib/data/pro";
 import { getSources } from "@/lib/data/sources";
 
 export async function generateMetadata({
@@ -29,9 +30,10 @@ export default async function CollectionPage({
   await verifySession();
 
   const { slug } = await params;
-  const [collection, sources] = await Promise.all([
+  const [collection, sources, isPro] = await Promise.all([
     getCuratedCollection(slug),
     getSources(),
+    getIsPro(),
   ]);
 
   // Covers three cases that should be indistinguishable from outside: no such
@@ -71,7 +73,7 @@ export default async function CollectionPage({
           </p>
         </div>
 
-        <CollectionFilters items={collection.items} catalog={sources} />
+        <CollectionFilters items={collection.items} catalog={sources} isPro={isPro} />
       </div>
     </AppShell>
   );

@@ -28,6 +28,7 @@ import { chapterTotal } from "@/lib/data/chapter-totals";
 import { displayTitle } from "@/lib/data/display-title";
 import { getCollectionTargets } from "@/lib/data/collections";
 import { getEntry, type EntryDetail } from "@/lib/data/entries";
+import { getIsPro } from "@/lib/data/pro";
 import { getSources } from "@/lib/data/sources";
 import { mergeTags, type Tag } from "@/lib/data/tag-items";
 import {
@@ -54,13 +55,14 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
   // isAdmin() is called here and only here: the spec deliberately avoids an
   // admin check on every page render (AppShell included), so this is the one
   // place — the reader's own entry page — that asks.
-  const [entry, catalog, collections, admin] = await Promise.all([
+  const [entry, catalog, collections, admin, isPro] = await Promise.all([
     getEntry(entryId),
     getSources(),
     // withItemIds: this page can take a title back out of a collection, and
     // removing needs the collection_items id.
     getCollectionTargets({ withItemIds: true }),
     isAdmin(),
+    getIsPro(),
   ]);
 
   // RLS makes "does not exist" and "belongs to someone else" indistinguishable
@@ -181,6 +183,7 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
               sources={entry.entry_sources}
               catalog={catalog}
               total={chapterTotal(title)}
+              isPro={isPro}
             />
           }
         >
@@ -190,6 +193,7 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
             sources={entry.entry_sources}
             catalog={catalog}
             total={chapterTotal(title)}
+            isPro={isPro}
           />
         </Suspense>
 

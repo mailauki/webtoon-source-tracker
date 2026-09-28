@@ -70,6 +70,7 @@ export function EntryCard({
   catalog = [],
   removable,
   selection,
+  isPro,
 }: {
   /**
    * A library row, for the shelf and the search page. Normalised here rather
@@ -98,6 +99,14 @@ export function EntryCard({
    * would both pick the title and open it.
    */
   selection?: { checked: boolean; onToggle: () => void };
+  /**
+   * Owned chapters are Pro-only. Threaded down to the quick-edit dialog's
+   * SourceFields, which shows a Get Pro link instead of the checkbox and
+   * range input for a free account. Required, not optional: every one of
+   * this card's five page-level callers reads this from getIsPro() and
+   * passes it, so none can render the dialog without deciding.
+   */
+  isPro: boolean;
 }) {
   // Both live outside <ContextMenuContent> — Radix unmounts menu content on
   // close and would take them with it.
@@ -192,6 +201,7 @@ export function EntryCard({
         // The row already carries MAL's count, so the quick-edit dialog can
         // offer the same "own all" shortcut the entry page does.
         total={view.malTotal}
+        isPro={isPro}
         onClose={() => setDialog(null)}
       />
     </ContextMenu>

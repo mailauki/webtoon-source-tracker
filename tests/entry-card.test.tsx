@@ -75,7 +75,7 @@ afterEach(cleanup);
 
 describe("card read button", () => {
   it("puts the reading link on the card, beside the menu trigger", () => {
-    render(<EntryCard entry={row([source({ is_primary: true })])} />);
+    render(<EntryCard entry={row([source({ is_primary: true })])} isPro />);
 
     // The cover links to the entry page and opens the quick menu; the corner
     // link goes straight to the source. Two anchors, neither nested in the
@@ -89,7 +89,7 @@ describe("card read button", () => {
   });
 
   it("opens the reading link away from the app", () => {
-    render(<EntryCard entry={row([source()])} />);
+    render(<EntryCard entry={row([source()])} isPro />);
 
     const link = screen.getByRole("link", { name: /^Read / });
     expect(link).toHaveAttribute("target", "_blank");
@@ -97,7 +97,7 @@ describe("card read button", () => {
   });
 
   it("offers no read button when nothing is linkable", () => {
-    render(<EntryCard entry={row([source({ url: null })])} />);
+    render(<EntryCard entry={row([source({ url: null })])} isPro />);
 
     expect(screen.queryByRole("link", { name: /^Read / })).not.toBeInTheDocument();
     // The card itself still opens the menu, which is where the URL gets
@@ -108,7 +108,7 @@ describe("card read button", () => {
   });
 
   it("offers no read button when the entry has no sources at all", () => {
-    render(<EntryCard entry={row()} />);
+    render(<EntryCard entry={row()} isPro />);
     expect(screen.queryByRole("link", { name: /^Read / })).not.toBeInTheDocument();
   });
 
@@ -117,7 +117,7 @@ describe("card read button", () => {
   // open the menu underneath.
   it("does not open the menu when the read link is tapped", async () => {
     const user = userEvent.setup();
-    render(<EntryCard entry={row([source({ is_primary: true })])} />);
+    render(<EntryCard entry={row([source({ is_primary: true })])} isPro />);
 
     await user.click(screen.getByRole("link", { name: /^Read / }));
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
@@ -186,6 +186,7 @@ describe("card owned badge", () => {
           [source({ is_owned: true, chapters_owned: upTo(179) })],
           FINISHED,
         )}
+        isPro
       />,
     );
     expect(ownedBadge()).toBeInTheDocument();
@@ -202,6 +203,7 @@ describe("card owned badge", () => {
           [source({ is_owned: true, chapters_owned: upTo(40) })],
           FINISHED,
         )}
+        isPro
       />,
     );
 
@@ -226,6 +228,7 @@ describe("card owned badge", () => {
           ],
           FINISHED,
         )}
+        isPro
       />,
     );
     expect(ownedBadge()).toBeInTheDocument();
@@ -238,6 +241,7 @@ describe("card owned badge", () => {
           [source({ is_owned: false, chapters_owned: upTo(179) })],
           FINISHED,
         )}
+        isPro
       />,
     );
     expect(ownedBadge()).not.toBeInTheDocument();
@@ -252,6 +256,7 @@ describe("card owned badge", () => {
           num_chapters: 179,
           mal_status: "currently_publishing",
         })}
+        isPro
       />,
     );
     expect(ownedBadge()).not.toBeInTheDocument();
@@ -264,6 +269,7 @@ describe("card owned badge", () => {
           num_chapters: null,
           mal_status: "finished",
         })}
+        isPro
       />,
     );
     expect(ownedBadge()).not.toBeInTheDocument();
@@ -278,6 +284,7 @@ describe("card owned badge", () => {
           num_chapters: 179,
           mal_status: "finished",
         })}
+        isPro
       />,
     );
     expect(ownedBadge()).toBeInTheDocument();
@@ -285,7 +292,7 @@ describe("card owned badge", () => {
 
   it("does not badge a title with no sources", () => {
     // Ownership hangs off a source, so there is nothing to have been bought.
-    render(<EntryCard entry={row([], FINISHED)} />);
+    render(<EntryCard entry={row([], FINISHED)} isPro />);
     expect(ownedBadge()).not.toBeInTheDocument();
   });
 
@@ -295,6 +302,7 @@ describe("card owned badge", () => {
     render(
       <EntryCard
         entry={row([source({ is_owned: true, chapters_owned: null })], FINISHED)}
+        isPro
       />,
     );
 
@@ -317,6 +325,7 @@ describe("card owned badge", () => {
           ],
           FINISHED,
         )}
+        isPro
       />,
     );
 
@@ -328,13 +337,13 @@ describe("card owned badge", () => {
   // The pill's tooltip is what keeps the two readable on the card.
   it("names both paid and owned on the source pill", () => {
     render(
-      <EntryCard entry={row([source({ is_paid: true, is_owned: true })])} />,
+      <EntryCard entry={row([source({ is_paid: true, is_owned: true })])} isPro />,
     );
     expect(screen.getByTitle("Tapas · paid · owned")).toBeInTheDocument();
   });
 
   it("names paid alone on a source the user has not bought from", () => {
-    render(<EntryCard entry={row([source({ is_paid: true })])} />);
+    render(<EntryCard entry={row([source({ is_paid: true })])} isPro />);
     expect(screen.getByTitle("Tapas · paid")).toBeInTheDocument();
   });
 });
@@ -344,19 +353,19 @@ describe("the adult-content badge", () => {
   // the title at all, so this says what a cover is, it does not hide it.
 
   it("marks a title MyAnimeList rates as adult", () => {
-    render(<EntryCard entry={row([], { nsfw: "gray" })} />);
+    render(<EntryCard entry={row([], { nsfw: "gray" })} isPro />);
 
     expect(screen.getByText("18+")).toBeInTheDocument();
   });
 
   it("marks an explicit title too", () => {
-    render(<EntryCard entry={row([], { nsfw: "black" })} />);
+    render(<EntryCard entry={row([], { nsfw: "black" })} isPro />);
 
     expect(screen.getByText("18+")).toBeInTheDocument();
   });
 
   it("leaves a safe title unmarked", () => {
-    render(<EntryCard entry={row([], { nsfw: "white" })} />);
+    render(<EntryCard entry={row([], { nsfw: "white" })} isPro />);
 
     expect(screen.queryByText("18+")).toBeNull();
   });
@@ -364,7 +373,7 @@ describe("the adult-content badge", () => {
   it("leaves an unrated title unmarked rather than guessing", () => {
     // Null is "never fetched", not "adult" — the same direction isMature
     // takes everywhere else.
-    render(<EntryCard entry={row([], { nsfw: null })} />);
+    render(<EntryCard entry={row([], { nsfw: null })} isPro />);
 
     expect(screen.queryByText("18+")).toBeNull();
   });

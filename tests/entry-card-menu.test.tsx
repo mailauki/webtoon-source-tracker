@@ -94,7 +94,7 @@ function sheetButton() {
  */
 async function openMenu(entry: LibraryRow = row()) {
   const user = userEvent.setup();
-  render(<EntryCard entry={entry} topSources={TOP_SOURCES} />);
+  render(<EntryCard entry={entry} topSources={TOP_SOURCES} isPro />);
   await user.pointer({ keys: "[MouseRight]", target: cardTrigger() });
   return user;
 }
@@ -102,7 +102,7 @@ async function openMenu(entry: LibraryRow = row()) {
 /** The same actions, reached the way a phone reaches them. */
 async function openSheet(entry: LibraryRow = row()) {
   const user = userEvent.setup();
-  render(<EntryCard entry={entry} topSources={TOP_SOURCES} />);
+  render(<EntryCard entry={entry} topSources={TOP_SOURCES} isPro />);
   await user.click(sheetButton());
   return user;
 }
@@ -116,7 +116,7 @@ afterEach(() => {
 
 describe("entry card quick-access menu", () => {
   it("stays closed until the card is tapped", () => {
-    render(<EntryCard entry={row()} />);
+    render(<EntryCard entry={row()} isPro />);
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
@@ -136,7 +136,7 @@ describe("entry card quick-access menu", () => {
    * produces. A bare pointer-down must therefore leave the menu shut.
    */
   it("stays shut on pointer-down alone, so a swipe can scroll past", () => {
-    render(<EntryCard entry={row()} topSources={TOP_SOURCES} />);
+    render(<EntryCard entry={row()} topSources={TOP_SOURCES} isPro />);
 
     fireEvent.pointerDown(cardTrigger(), { button: 0, ctrlKey: false });
 
@@ -147,7 +147,7 @@ describe("entry card quick-access menu", () => {
   // is produced, so nothing opens.
   it("stays shut when a press on a card is dragged away and released", async () => {
     const user = userEvent.setup();
-    render(<EntryCard entry={row()} topSources={TOP_SOURCES} />);
+    render(<EntryCard entry={row()} topSources={TOP_SOURCES} isPro />);
 
     await user.pointer([
       { keys: "[MouseLeft>]", target: cardTrigger() },
@@ -170,7 +170,7 @@ describe("entry card quick-access menu", () => {
    */
   it("reaches the actions from the keyboard, through the overflow button", async () => {
     const user = userEvent.setup();
-    render(<EntryCard entry={row()} topSources={TOP_SOURCES} />);
+    render(<EntryCard entry={row()} topSources={TOP_SOURCES} isPro />);
 
     sheetButton().focus();
     expect(sheetButton()).toHaveFocus();
@@ -180,7 +180,7 @@ describe("entry card quick-access menu", () => {
   });
 
   it("is a plain link to the entry page", () => {
-    render(<EntryCard entry={row()} />);
+    render(<EntryCard entry={row()} isPro />);
 
     // Nothing is intercepted: the card navigates, and the menu is the
     // secondary gesture on top of it.
@@ -211,7 +211,7 @@ describe("entry card quick-access menu", () => {
   // not raise a menu on the way.
   it("navigates on a plain click, without opening a menu", async () => {
     const user = userEvent.setup();
-    render(<EntryCard entry={row()} />);
+    render(<EntryCard entry={row()} isPro />);
     const nav = watchNavigation();
 
     await user.click(cardTrigger());
@@ -228,7 +228,7 @@ describe("entry card quick-access menu", () => {
     ["shift", "{Shift>}", "{/Shift}"],
   ])("leaves a %s-click to the browser", async (_name, down, up) => {
     const user = userEvent.setup();
-    render(<EntryCard entry={row()} />);
+    render(<EntryCard entry={row()} isPro />);
     const nav = watchNavigation();
 
     await user.keyboard(down);
@@ -478,7 +478,7 @@ describe("nextStatus", () => {
  */
 describe("the actions sheet", () => {
   it("does not exist until the overflow button is pressed", () => {
-    render(<EntryCard entry={row()} topSources={TOP_SOURCES} />);
+    render(<EntryCard entry={row()} topSources={TOP_SOURCES} isPro />);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -701,7 +701,7 @@ describe("AniList links in the card's actions", () => {
   it("does not ask AniList until the sheet is opened", async () => {
     const fetchMock = stubAniList({ add: [], fill: [] });
     const user = userEvent.setup();
-    render(<EntryCard entry={row({ id: 103 })} topSources={TOP_SOURCES} />);
+    render(<EntryCard entry={row({ id: 103 })} topSources={TOP_SOURCES} isPro />);
 
     expect(fetchMock).not.toHaveBeenCalled();
     await user.click(sheetButton());
@@ -719,7 +719,7 @@ describe("AniList links in the card's actions", () => {
       fill: [],
     });
     const user = userEvent.setup();
-    render(<EntryCard entry={row({ id: 107 })} topSources={TOP_SOURCES} />);
+    render(<EntryCard entry={row({ id: 107 })} topSources={TOP_SOURCES} isPro />);
 
     expect(fetchMock).not.toHaveBeenCalled();
     await user.pointer({ keys: "[MouseRight]", target: cardTrigger() });

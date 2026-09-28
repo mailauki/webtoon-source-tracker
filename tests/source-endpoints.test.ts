@@ -7,14 +7,16 @@ type Call = {
   filters: [string, string, unknown][];
 };
 
-const { calls, createClient } = vi.hoisted(() => {
+const { calls, createClient, failNext } = vi.hoisted(() => {
   const calls: Call[] = [];
+  // The error the next write resolves with; every other query resolves clean.
+  const failNext: { error: { code: string; message: string } | null } = { error: null };
   const getClaims = async (token: string) =>
     token === "good"
       ? { data: { claims: { sub: "user-1" } }, error: null }
       : { data: null, error: new Error("invalid JWT") };
 
-  // Records each write and its filters; every query resolves without error.
+  // Records each write and its filters.
   function from(table: string) {
     const call: Call = { table, op: "", filters: [] };
     const chain = {
@@ -41,14 +43,16 @@ const { calls, createClient } = vi.hoisted(() => {
         call.filters.push(["neq", column, value]);
         return chain;
       },
-      then(resolve: (value: { error: null }) => unknown) {
-        return Promise.resolve({ error: null }).then(resolve);
+      then(resolve: (value: { error: { code: string; message: string } | null }) => unknown) {
+        const error = call.op ? failNext.error : null;
+        if (call.op) failNext.error = null;
+        return Promise.resolve({ error }).then(resolve);
       },
     };
     return chain;
   }
 
-  return { calls, createClient: vi.fn(() => ({ from, auth: { getClaims } })) };
+  return { calls, failNext, createClient: vi.fn(() => ({ from, auth: { getClaims } })) };
 });
 
 vi.mock("@supabase/supabase-js", () => ({ createClient }));
@@ -73,6 +77,20 @@ const row = (id: string, entrySourceId: string) => ({
 describe("iOS source endpoints", () => {
   beforeEach(() => {
     calls.length = 0;
+    failNext.error = null;
+  });
+
+  it("answer 402 with the Pro message when the database refuses owned chapters", async () => {
+    const proRequired = { code: "PT402", message: "Owned chapters are part of Pro." };
+
+    failNext.error = proRequired;
+    const added = await POST(request("POST", { sourceId: 3, isOwned: true }), entry("7"));
+    expect(added.status).toBe(402);
+    expect(await added.json()).toEqual({ error: "Owned chapters are part of Pro." });
+
+    failNext.error = proRequired;
+    const edited = await PATCH(request("PATCH", { isOwned: true }), row("7", "5"));
+    expect(edited.status).toBe(402);
   });
 
   it("need a valid app token", async () => {

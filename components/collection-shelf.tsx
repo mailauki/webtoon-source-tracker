@@ -31,7 +31,14 @@ export function collectionHref(collection: Pick<Collection, "id" | "slug">) {
  * A Server Component: the cards below are client-side for their add button,
  * but nothing here is, and the shelf is the part that renders per collection.
  */
-export function CollectionShelf({ collection }: { collection: Collection }) {
+export function CollectionShelf({
+  collection,
+  isPro,
+}: {
+  collection: Collection;
+  /** Owned chapters are Pro-only; passed straight through to each card. */
+  isPro: boolean;
+}) {
   const href = collectionHref(collection);
 
   const heading = (
@@ -83,7 +90,7 @@ export function CollectionShelf({ collection }: { collection: Collection }) {
         <ul className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2">
           {collection.items.map((item) => (
             <li key={item.id} className="w-[130px] shrink-0 snap-start">
-              <EntryCard view={collectionView(item)} />
+              <EntryCard view={collectionView(item)} isPro={isPro} />
             </li>
           ))}
         </ul>
