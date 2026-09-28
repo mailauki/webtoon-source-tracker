@@ -1,23 +1,29 @@
 "use client";
 
-import { useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import {
   BookOpen,
   Check,
   ExternalLink,
+  Link2,
+  Loader2,
   Pencil,
   Plus,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { addEntrySource } from "@/app/actions/entry-sources";
+import {
+  addEntrySource,
+  setEntrySourceUrl,
+} from "@/app/actions/entry-sources";
 import { updateProgress } from "@/app/actions/progress";
 import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
 } from "@/components/ui/context-menu";
+import type { LinkSuggestion } from "@/lib/data/anilist-links";
 import type { LibraryRow } from "@/lib/data/entries";
 import type { RankedSource } from "@/lib/data/rank-sources";
 import { linkableSources } from "@/lib/data/source-links";
@@ -42,19 +48,98 @@ function submitStatus(entry: Pick<LibraryRow, "id">, status: string) {
 }
 
 /**
- * Attaches a source with nothing but the link between them.
+ * Attaches a source in one press.
  *
- * The URL is left empty on purpose: this is the one-click path, and the dialog
- * is where the details get filled in.
+ * With AniList's reading link for it when there is one, so the source is
+ * ready to open straight away; otherwise with no URL, and the dialog is where
+ * the details get filled in.
  */
 export function quickAddSource(
   entry: Pick<LibraryRow, "id">,
   sourceId: number,
+  url?: string,
 ) {
   const formData = new FormData();
   formData.set("entry_id", String(entry.id));
   formData.set("source_id", String(sourceId));
+  if (url) formData.set("url", url);
   return addEntrySource(null, formData);
+}
+
+/** Gives an attached source AniList's link for it. */
+function applyAniListLink(
+  entry: Pick<LibraryRow, "id">,
+  suggestion: LinkSuggestion,
+) {
+  const formData = new FormData();
+  formData.set("entry_id", String(entry.id));
+  formData.set("id", String(suggestion.attachedId));
+  formData.set("url", suggestion.url);
+  return setEntrySourceUrl(null, formData);
+}
+
+/** What /api/entries/[id]/anilist-links answers with. */
+export type AniListCardLinks = {
+  /** Sources AniList has a reading link for that the entry does not have. */
+  add: { sourceId: number; name: string; url: string }[];
+  /** Attached sources with no URL that AniList has one for. */
+  fill: LinkSuggestion[];
+};
+
+/**
+ * One lookup per entry for the life of the page.
+ *
+ * Shared by the context menu and the sheet, and kept across openings: the
+ * menu's content unmounts every time it closes, and AniList's links do not
+ * change between two right-clicks. What has since been attached is filtered
+ * out at render (see useEntryCardActions), so a cached answer never offers a
+ * source twice. A failed lookup is dropped from the cache so the next opening
+ * can try again.
+ */
+const anilistLinkCache = new Map<number, Promise<AniListCardLinks | null>>();
+
+function fetchAniListLinks(entryId: number): Promise<AniListCardLinks | null> {
+  let pending = anilistLinkCache.get(entryId);
+  if (!pending) {
+    pending = fetch(`/api/entries/${entryId}/anilist-links`)
+      .then((response) => (response.ok ? response.json() : null))
+      .catch(() => null)
+      .then((body: AniListCardLinks | null) => {
+        if (!body) anilistLinkCache.delete(entryId);
+        return body;
+      });
+    anilistLinkCache.set(entryId, pending);
+  }
+  return pending;
+}
+
+/**
+ * AniList's links for one entry, fetched the first time `enabled` is true.
+ *
+ * Undefined while the lookup is in flight, null when it failed or AniList
+ * had nothing, so the list can say "checking" rather than flash its fallback
+ * shortcuts and then swap them out.
+ */
+export function useAniListCardLinks(
+  entryId: number,
+  enabled: boolean,
+): AniListCardLinks | null | undefined {
+  const [links, setLinks] = useState<AniListCardLinks | null | undefined>(
+    undefined,
+  );
+
+  useEffect(() => {
+    if (!enabled) return;
+    let current = true;
+    fetchAniListLinks(entryId).then((result) => {
+      if (current) setLinks(result);
+    });
+    return () => {
+      current = false;
+    };
+  }, [entryId, enabled]);
+
+  return links;
 }
 
 /**
@@ -145,10 +230,17 @@ export function useEntryCardActions({
   entry,
   topSources,
   onOpenDialog,
+  open,
 }: {
   entry: LibraryRow;
   topSources: RankedSource[];
   onOpenDialog: (request: SourceDialogRequest) => void;
+  /**
+   * Whether the surface is showing. AniList is only asked once it is: the
+   * sheet stays mounted while closed, and a shelf of cards asking up front
+   * would be one AniList request per title.
+   */
+  open: boolean;
 }): CardAction[] {
   const [isPending, startTransition] = useTransition();
   const total = entry.media_titles.num_chapters;
@@ -168,6 +260,18 @@ export function useEntryCardActions({
   const linkable = linkableSources(attached);
   const addable = addableSources(attached, topSources);
   const status = nextStatus(entry.list_status);
+
+  // AniList's links, filtered against what the entry has now rather than when
+  // they were fetched: a source added a moment ago must not be offered again.
+  const anilist = useAniListCardLinks(entry.id, open);
+  const attachedIds = new Set(attached.map((es) => es.sources?.id));
+  const missingUrl = new Set(attached.filter((es) => !es.url).map((es) => es.id));
+  const anilistAdds = (anilist?.add ?? []).filter(
+    (link) => !attachedIds.has(link.sourceId),
+  );
+  const anilistFills = (anilist?.fill ?? []).filter((suggestion) =>
+    missingUrl.has(suggestion.attachedId),
+  );
 
   function run(action: () => Promise<ActionResult>) {
     startTransition(async () => {
@@ -230,9 +334,49 @@ export function useEntryCardActions({
     { kind: "separator", key: "sep-sources" },
   );
 
-  // With nothing attached, the shortcuts are the whole point of the list; once
-  // something is, editing it matters more than attaching another.
-  if (attached.length === 0) {
+  // AniList's links first: the same quick adds the entry page offers, and
+  // unlike the plain shortcuts below they arrive with a URL, so the source is
+  // ready to open. Shown whatever is already attached, like the entry page.
+  actions.push(
+    ...anilistFills.map(
+      (suggestion): CardAction => ({
+        kind: "run",
+        key: `fill-${suggestion.attachedId}`,
+        Icon: Link2,
+        label: `Use AniList link for ${suggestion.sourceName}`,
+        disabled: isPending,
+        run: () => run(() => applyAniListLink(entry, suggestion)),
+      }),
+    ),
+    ...anilistAdds.map(
+      (link): CardAction => ({
+        kind: "run",
+        key: `anilist-add-${link.sourceId}`,
+        Icon: Plus,
+        label: `Add ${link.name} from AniList`,
+        disabled: isPending,
+        run: () => run(() => quickAddSource(entry, link.sourceId, link.url)),
+      }),
+    ),
+  );
+
+  if (anilist === undefined && open) {
+    // A row rather than nothing, so the list does not grow under the pointer
+    // without warning when the answer lands.
+    actions.push({
+      kind: "run",
+      key: "anilist-loading",
+      Icon: Loader2,
+      label: "Checking AniList for links…",
+      disabled: true,
+      run: () => {},
+    });
+  }
+
+  // With nothing attached and nothing from AniList, the usual shortcuts are
+  // the whole point of the list; once something is attached, editing it
+  // matters more than attaching another.
+  if (attached.length === 0 && anilist !== undefined && anilistAdds.length === 0) {
     actions.push(
       ...addable.map(
         (source): CardAction => ({
@@ -289,12 +433,24 @@ export function EntryCardMenu({
   entry,
   topSources,
   onOpenDialog,
+  open,
 }: {
   entry: LibraryRow;
   topSources: RankedSource[];
   onOpenDialog: (request: SourceDialogRequest) => void;
+  /**
+   * Whether the menu is showing. This component stays mounted while the menu
+   * is closed — Radix unmounts only the content below — so AniList is asked
+   * only once this turns true.
+   */
+  open: boolean;
 }) {
-  const actions = useEntryCardActions({ entry, topSources, onOpenDialog });
+  const actions = useEntryCardActions({
+    entry,
+    topSources,
+    onOpenDialog,
+    open,
+  });
 
   return (
     <ContextMenuContent className="w-56">

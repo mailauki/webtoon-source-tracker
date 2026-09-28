@@ -103,6 +103,10 @@ export function EntryCard({
   // close and would take them with it.
   const [dialog, setDialog] = useState<SourceDialogRequest | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  // Tracked so the menu only asks AniList for links once it is actually open:
+  // the menu component stays mounted (Radix only unmounts its content), and a
+  // shelf of cards asking up front would be one AniList request per title.
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // Exactly one of the two is always passed. Not modelled as a union of two
   // prop shapes: that costs every call site its inference to catch a mistake
@@ -158,13 +162,14 @@ export function EntryCard({
   if (!entry) return body;
 
   return (
-    <ContextMenu>
+    <ContextMenu onOpenChange={setMenuOpen}>
       <ContextMenuTrigger asChild>{body}</ContextMenuTrigger>
 
       <EntryCardMenu
         entry={entry.row}
         topSources={topSources}
         onOpenDialog={setDialog}
+        open={menuOpen}
       />
 
       {/* Both sit outside <ContextMenuContent>: Radix unmounts menu content on
