@@ -16,8 +16,9 @@ import { matchesMediaKind, titleMatchScore } from "@/lib/data/search";
  * dropped it from its results for that reason.
  *
  * Matching is forgiving — case, accents, punctuation and spacing are ignored,
- * a longer term may carry a typo, and every title a row is known by counts,
- * not only the one on its card. See titleMatchScore in lib/data/search.ts.
+ * a longer term may carry a typo, several words match in any order with
+ * others skipped, and every title a row is known by counts, not only the one
+ * on its card. See titleMatchScore in lib/data/search.ts.
  *
  * The rows are the ones the page fetched, so this narrows in the browser with
  * no round-trip — a keystroke moves the grid in the same render, which is what
