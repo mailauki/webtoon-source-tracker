@@ -213,20 +213,21 @@ export async function syncAniListList(
     titlesAdded++;
   }
 
-  // --- 2b. Genres for AniList-only titles ----------------------------------
+  // --- 2b. AniList's genres --------------------------------------------------
   //
   // Mapped onto the MAL genres the tag vocabulary is keyed on, so these titles
-  // join the same Discover categories as everything else. Every AniList-only
-  // row in this list, not just the ones created above: that is what tags the
-  // rows added before genres were read at all. syncGenres only inserts links
-  // that are missing, so a title already tagged costs one read.
+  // join the same Discover categories as everything else. Every row in this
+  // list, not just the ones created above: that is what tags the rows added
+  // before genres were read at all. syncGenres only inserts links that are
+  // missing, so a title already tagged costs one read.
   //
-  // MAL-backed rows are skipped: their genres come from MAL's own sync, and
-  // adding AniList's on top would give one title two sites' opinions.
+  // MAL-backed rows included: a title is filed under every genre either site
+  // gives it, alongside the MAL sync's own. Where the two sites disagree is
+  // shown on the entry page, not settled here.
   const genreIdMap = new Map<number, number>();
   const genreNodes = entries.flatMap((e) => {
     const row = known.get(e.mediaId);
-    if (!row || row.malBacked) return [];
+    if (!row) return [];
     const genres = malGenresFor(e.media.genres);
     if (genres.length === 0) return [];
     genreIdMap.set(e.mediaId, row.id);
