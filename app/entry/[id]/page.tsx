@@ -15,7 +15,7 @@ import { EntryTags } from "@/components/entry-tags";
 import { ProgressEditor } from "@/components/progress-editor";
 import { getMediaExtras } from "@/lib/anilist/endpoints";
 import type { AniListMediaExtras } from "@/lib/anilist/types";
-import { getChapterCount } from "@/lib/mal/endpoints";
+import { getMalLiveDetails, type MalLiveDetails } from "@/lib/mal/endpoints";
 import { isAdmin, verifySession } from "@/lib/auth/dal";
 import {
   catalogLinks,
@@ -25,6 +25,7 @@ import {
 } from "@/lib/data/anilist-links";
 import { chapterTotal } from "@/lib/data/chapter-totals";
 import { displayTitle } from "@/lib/data/display-title";
+import { compareGenres } from "@/lib/data/genre-compare";
 import { getCollectionTargets } from "@/lib/data/collections";
 import { getEntry, type EntryDetail } from "@/lib/data/entries";
 import { getSources } from "@/lib/data/sources";
@@ -72,14 +73,17 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
     anilistMediaId: title.anilist_media_id,
     malMediaId: title.mal_media_id,
   });
-  // Live from MAL, falling back to the synced count if MAL is unreachable.
-  // Null for an AniList-only title, which has no MAL count to read.
+  // Live from MAL in one request: the chapter count, falling back to the
+  // synced one if MAL is unreachable, and the genres for the comparison below.
+  // Null for an AniList-only title, which has nothing on MAL to read.
+  const malLive =
+    title.mal_media_id === null
+      ? Promise.resolve(null)
+      : getMalLiveDetails(title.mal_media_id);
   const malChapters =
     title.mal_media_id === null
       ? Promise.resolve(null)
-      : getChapterCount(title.mal_media_id).then(
-          (live) => live ?? title.num_chapters,
-        );
+      : malLive.then((live) => live?.numChapters ?? title.num_chapters);
 
   // allTags is only fetched for an admin — a reader never sees the picker, so
   // there is nothing for the full tag vocabulary to do on their render.
@@ -134,6 +138,14 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
         {title.mal_media_id !== null ? (
           <Suspense fallback={null}>
             <ChapterCheck extras={anilist} malChapters={malChapters} />
+          </Suspense>
+        ) : null}
+
+        {/* The same, for genres. The tags above already carry both sites'
+            genres; this says which of them only one site gives. */}
+        {title.mal_media_id !== null ? (
+          <Suspense fallback={null}>
+            <GenreCheck extras={anilist} malLive={malLive} />
           </Suspense>
         ) : null}
 
@@ -211,6 +223,52 @@ async function ChapterCheck({
     <div role="status" className="grid gap-1 rounded-xl border border-alert/40 p-3">
       <h2 className="text-sm font-semibold">Chapter counts differ</h2>
       <p className="text-sm text-muted-foreground">{difference}</p>
+    </div>
+  );
+}
+
+/**
+ * Where MyAnimeList's genres and AniList's disagree.
+ *
+ * Quiet unless they do: agreement is the normal case and needs no box. When
+ * they differ it names every side, including what they share, so the
+ * difference reads in context rather than as a bare list of odd ones out.
+ */
+async function GenreCheck({
+  extras,
+  malLive,
+}: {
+  extras: Promise<AniListMediaExtras | null>;
+  malLive: Promise<MalLiveDetails | null>;
+}) {
+  const [media, mal] = await Promise.all([extras, malLive]);
+  const comparison = compareGenres(mal?.genres, media?.genres);
+  if (
+    !comparison ||
+    (comparison.malOnly.length === 0 && comparison.anilistOnly.length === 0)
+  ) {
+    return null;
+  }
+
+  const rows: [string, string[]][] = [
+    ["Both", comparison.both],
+    ["MyAnimeList only", comparison.malOnly],
+    ["AniList only", comparison.anilistOnly],
+  ];
+
+  return (
+    <div role="status" className="grid gap-1 rounded-xl border border-border p-3">
+      <h2 className="text-sm font-semibold">Genres differ between sites</h2>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-sm">
+        {rows
+          .filter(([, names]) => names.length > 0)
+          .map(([label, names]) => (
+            <div key={label} className="contents">
+              <dt className="text-muted-foreground">{label}</dt>
+              <dd>{names.join(", ")}</dd>
+            </div>
+          ))}
+      </dl>
     </div>
   );
 }

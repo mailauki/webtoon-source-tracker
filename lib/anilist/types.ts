@@ -99,6 +99,18 @@ export const anilistMediaIdPageSchema = z.object({
   }),
 });
 
+export const anilistGenresByMalPageSchema = z.object({
+  Page: z.object({
+    pageInfo: z.object({ hasNextPage: z.boolean().nullable() }),
+    media: z.array(
+      z.object({
+        idMal: z.number().nullable(),
+        genres: z.array(z.string()).nullable(),
+      }),
+    ),
+  }),
+});
+
 /**
  * A catalog search hit.
  *
@@ -155,6 +167,9 @@ export const anilistMediaExtrasSchema = z.object({
   id: z.number(),
   chapters: z.number().nullable(),
   status: z.string().nullable(),
+  // Optional: added after the rest, and a cached response without it should
+  // still parse. Compared against MAL's on the entry page.
+  genres: z.array(z.string()).nullable().optional(),
   externalLinks: z
     .array(
       z.object({

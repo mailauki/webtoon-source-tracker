@@ -80,22 +80,31 @@ export async function getManga(client: MalClient, mangaId: number) {
   return malMangaNodeSchema.parse(raw);
 }
 
+/** What the entry page reads live from MAL for one title. */
+export type MalLiveDetails = {
+  numChapters: number | null;
+  genres: { id: number; name: string }[];
+};
+
 /**
- * MAL's current chapter count for a title, read live with the app's client id.
+ * MAL's current chapter count and genres for a title, read live with the
+ * app's client id, in one request.
  *
- * The stored `num_chapters` is only as fresh as the last sync; the entry
- * page's chapter check wants today's number. Null when MAL has none or cannot
- * be reached — the caller falls back to the stored count.
+ * The stored values are only as fresh as the last sync; the entry page's
+ * chapter check and genre comparison want today's. Null when MAL cannot be
+ * reached — the caller falls back to what it has stored.
  */
-export async function getChapterCount(mangaId: number): Promise<number | null> {
+export async function getMalLiveDetails(
+  mangaId: number,
+): Promise<MalLiveDetails | null> {
   try {
-    const raw = await malPublicRequest<{ num_chapters?: number | null }>(
-      `/manga/${mangaId}`,
-      { fields: "num_chapters" },
-    );
-    return raw.num_chapters ?? null;
+    const raw = await malPublicRequest<{
+      num_chapters?: number | null;
+      genres?: { id: number; name: string }[];
+    }>(`/manga/${mangaId}`, { fields: "num_chapters,genres" });
+    return { numChapters: raw.num_chapters ?? null, genres: raw.genres ?? [] };
   } catch (cause) {
-    console.error("[mal/chapters] failed:", cause);
+    console.error("[mal/live] failed:", cause);
     return null;
   }
 }
