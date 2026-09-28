@@ -46,6 +46,8 @@ export function EntryCardSheet({
   const actions = useEntryCardActions({
     entry,
     topSources,
+    // The sheet stays mounted while closed; AniList is asked on first open.
+    open,
     // Opening the source dialog replaces this sheet rather than stacking on
     // it — two modals deep on a phone is a trap with no visible way back.
     onOpenDialog: (request) => {
