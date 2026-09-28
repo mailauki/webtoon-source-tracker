@@ -121,6 +121,90 @@ describe("loosened matching", () => {
   });
 });
 
+// The typo pass skips titles that cannot be within the limit, judged by
+// shared character pairs (see sharesEnoughPairs). That shortcut is only
+// allowed to save work, never to change an answer, so this throws a few
+// hundred random typos — swaps, insertions, deletions, substitutions — at
+// terms cut from real-looking titles and checks each is still found.
+describe("typo matching never misses a real match", () => {
+  const TITLES = [
+    "Contract Marriage with the Second Lead",
+    "The Villainess Reverses the Hourglass",
+    "Omniscient Reader's Viewpoint",
+    "Seobeu Namjunim, Gyeyak Gyeolhon-iramyeonseoyo?",
+    "나 혼자만 레벨업",
+    "I Became the Tyrant's Secretary",
+  ];
+
+  // Seeded, so a failure reproduces.
+  let seed = 7;
+  const random = () => {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+    return seed / 2147483648;
+  };
+  const int = (n: number) => Math.floor(random() * n);
+
+  /** One typo at a position in [from, to) of `chars`. */
+  function applyTypo(chars: string[], from = 0, to = chars.length): string[] {
+    const next = [...chars];
+    const i = from + int(Math.max(1, to - from));
+    const letter = "abcdefghijklmnopqrstuvwxyz"[int(26)];
+    switch (int(4)) {
+      case 0:
+        next[i] = letter;
+        break;
+      case 1:
+        next.splice(i, 0, letter);
+        break;
+      case 2:
+        if (next.length > 1) next.splice(i, 1);
+        break;
+      default:
+        if (i + 1 < next.length) [next[i], next[i + 1]] = [next[i + 1], next[i]];
+    }
+    return next;
+  }
+
+  it("finds every term within its typo limit", () => {
+    let checked = 0;
+    for (let run = 0; run < 400; run++) {
+      const title = TITLES[int(TITLES.length)];
+      const compact = Array.from(normalizeTitle(title).replaceAll(" ", ""));
+      const length = Math.min(compact.length, 5 + int(20));
+      const start = int(compact.length - length + 1);
+      let term = compact.slice(start, start + length);
+
+      // The matcher allows one typo from five characters and two from nine,
+      // counted on the term as typed — after the typos, which can shorten
+      // it. A case whose typos took it below its own allowance is one the
+      // matcher is right not to find, so it is skipped rather than asserted.
+      // Two typos go in separate halves of the term, as real typos do. Two
+      // stacked on one spot — a letter deleted and its new neighbours then
+      // swapped — count as three edits to the optimal-string-alignment
+      // distance the matcher uses, a known limit it accepts rather than the
+      // cost of full Damerau-Levenshtein on every keystroke.
+      const typos = term.length >= 9 ? 2 : 1;
+      if (typos === 1) {
+        term = applyTypo(term);
+      } else {
+        const half = Math.floor(term.length / 2);
+        term = applyTypo(term, 0, half - 2);
+        term = applyTypo(term, half + 1, term.length);
+      }
+      const allowed = term.length >= 9 ? 2 : term.length >= 5 ? 1 : 0;
+      if (typos > allowed) continue;
+      checked++;
+
+      expect(
+        matchesTitle({ title }, term.join("")),
+        `${JSON.stringify(term.join(""))} in ${JSON.stringify(title)}`,
+      ).toBe(true);
+    }
+    // Most cases must actually be checked, or the skip above hides a bug.
+    expect(checked).toBeGreaterThan(300);
+  });
+});
+
 describe("collectAltTitles", () => {
   it("keeps names that are not already displayed, once each", () => {
     expect(

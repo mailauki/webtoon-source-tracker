@@ -47,11 +47,72 @@ export function normalizeTitle(value: string): string {
 }
 
 /** A normalized title with its spaces removed as well. */
-type Prepared = { spaced: string; compact: string };
+type Prepared = {
+  spaced: string;
+  compact: string;
+  /** Distinct adjacent-character pairs of `compact`, built on first use. */
+  pairs?: Set<string>;
+};
 
 function prepare(value: string): Prepared {
   const spaced = normalizeTitle(value);
   return { spaced, compact: spaced.replaceAll(" ", "") };
+}
+
+/**
+ * The distinct adjacent-character pairs of a prepared string, by code point
+ * so a Korean or Japanese title pairs syllable to syllable. Cached on the
+ * prepared value, which is itself cached per row, so each title's pairs are
+ * built once per page rather than once per keystroke.
+ */
+function pairsOf(prepared: Prepared): Set<string> {
+  if (!prepared.pairs) {
+    const chars = Array.from(prepared.compact);
+    const pairs = new Set<string>();
+    for (let i = 1; i < chars.length; i++) pairs.add(chars[i - 1] + chars[i]);
+    prepared.pairs = pairs;
+  }
+  return prepared.pairs;
+}
+
+/**
+ * Whether `text` could hold `term` within `limit` typos, judged by shared
+ * character pairs — a cheap test that lets the edit-distance pass skip
+ * almost every title on the shelf.
+ *
+ * One edit destroys at most three of the term's pairs: a substitution or an
+ * insertion touches two, a deletion two, and a swap of neighbours ("ab" →
+ * "ba") the pair itself and the one on each side. So a stretch of `text`
+ * within `limit` edits of the term still carries every distinct term pair
+ * except at most 3 × limit of them. A title sharing fewer cannot match, and
+ * skipping it changes no result — this only saves the work.
+ */
+function sharesEnoughPairs(
+  term: Prepared,
+  text: Prepared,
+  limit: number,
+): boolean {
+  const termPairs = pairsOf(term);
+  const needed = termPairs.size - 3 * limit;
+  if (needed <= 0) return true;
+
+  const textPairs = pairsOf(text);
+  let shared = 0;
+  for (const pair of termPairs) {
+    if (textPairs.has(pair) && ++shared >= needed) return true;
+  }
+  return false;
+}
+
+/**
+ * The last term prepared, so matching one term against a whole shelf
+ * normalizes it once rather than once per row.
+ */
+let lastQuery: { term: string; prepared: Prepared } | null = null;
+
+function prepareQuery(term: string): Prepared {
+  if (lastQuery?.term !== term) lastQuery = { term, prepared: prepare(term) };
+  return lastQuery.prepared;
 }
 
 /**
@@ -159,7 +220,7 @@ function typoDistance(term: string, text: string, limit: number): number {
  */
 export function titleMatchScore(titles: Titles, term: string): number | null {
   if (!titles) return null;
-  const query = prepare(term);
+  const query = prepareQuery(term);
   if (query.compact === "") return null;
 
   const candidates = titlesOf(titles);
@@ -172,6 +233,10 @@ export function titleMatchScore(titles: Titles, term: string): number | null {
 
   let best = limit + 1;
   for (const candidate of candidates) {
+    // The edit-distance pass is the expensive part of a search — it is what
+    // made typing lag on a large shelf — so a title that cannot be within
+    // the limit never reaches it. See sharesEnoughPairs.
+    if (!sharesEnoughPairs(query, candidate, limit)) continue;
     best = Math.min(best, typoDistance(query.compact, candidate.compact, limit));
     if (best === 1) break;
   }
