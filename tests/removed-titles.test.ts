@@ -17,8 +17,11 @@ import { describe, expect, it } from "vitest";
 describe("removed titles", () => {
   it("are not counted as owned by the catalog search", async () => {
     const route = await readFile("app/api/catalog/search/route.ts", "utf8");
-    const owned = route.slice(route.indexOf("async function ownedMalIds"));
-    expect(owned).toContain('.is("archived_at", null)');
+    const start = route.indexOf("async function ownedIds");
+    expect(start).toBeGreaterThan(-1);
+    const owned = route.slice(start);
+    // Both lookups — by MAL id and by AniList id — skip archived entries.
+    expect(owned.split('.is("archived_at", null)')).toHaveLength(3);
   });
 
   it("are restored when added again, from either site", async () => {

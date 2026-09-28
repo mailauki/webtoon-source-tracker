@@ -103,13 +103,19 @@ export async function GET(request: Request) {
     );
   }
 
-  const owned = await ownedMalIds(malOutcome.hits, anilistOutcome.hits);
+  const owned = await ownedIds(malOutcome.hits, anilistOutcome.hits);
 
   const merged = mergeResults(malOutcome.hits, anilistOutcome.hits)
     // Dropped rather than flagged: everything left is something the user can
     // actually act on. A row matched only on AniList still counts as owned
-    // when AniList gave it a MAL id the library already holds.
-    .filter((row) => row.mal_media_id === null || !owned.has(row.mal_media_id))
+    // when AniList gave it a MAL id the library already holds, and a row with
+    // no MAL id at all is checked by its AniList id instead.
+    .filter((row) =>
+      row.mal_media_id !== null
+        ? !owned.mal.has(row.mal_media_id)
+        : row.anilist_media_id === null ||
+          !owned.anilist.has(row.anilist_media_id),
+    )
     .slice(0, LIMIT);
 
   return NextResponse.json({
@@ -277,39 +283,67 @@ async function fetchAniList(
 }
 
 /**
- * Which of these titles the user already has.
+ * Which of these titles the user already has, by MAL id and by AniList id.
  *
  * RLS scopes this to the caller, so a hit really is *their* entry. Both sides
  * contribute ids: an AniList-matched row carries a MAL id too, and missing it
  * would offer to add a title that is already on the shelf above.
+ *
+ * The AniList half is for rows with no MAL id. Those used to pass the filter
+ * unchecked, so an AniList-only title the user already tracked came back
+ * offering "Add" on every search. It matches the catalog's `anilist_media_id`,
+ * which an AniList-only row always has and a MAL-backed row carries once the
+ * id has been resolved — either way, the title is on the shelf.
+ *
+ * Archived entries are left out of both: a removed title is no longer on the
+ * shelf, and counting it would hide it with no way to find it again.
  */
-async function ownedMalIds(
+async function ownedIds(
   malHits: MalHit[],
   anilistHits: AniListHit[],
-): Promise<Set<number>> {
-  const ids = [
+): Promise<{ mal: Set<number>; anilist: Set<number> }> {
+  const malIds = [
     ...malHits.map((h) => h.mal_media_id),
     ...anilistHits.flatMap((h) =>
       h.mal_media_id === null ? [] : [h.mal_media_id],
     ),
   ];
+  const anilistIds = anilistHits.flatMap((h) =>
+    h.mal_media_id === null ? [h.anilist_media_id] : [],
+  );
 
-  const owned = new Set<number>();
-  if (ids.length === 0) return owned;
+  const owned = { mal: new Set<number>(), anilist: new Set<number>() };
+  if (malIds.length === 0 && anilistIds.length === 0) return owned;
 
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("user_entries")
-    .select("media_titles!inner (mal_media_id)")
-    .in("media_titles.mal_media_id", [...new Set(ids)])
-    // A removed title is archived, not deleted, and is no longer on the
-    // shelf: counting it as owned would hide it here too, leaving no way to
-    // find it again from search.
-    .is("archived_at", null);
+  const [malRows, anilistRows] = await Promise.all([
+    malIds.length === 0
+      ? { data: [] }
+      : supabase
+          .from("user_entries")
+          .select("media_titles!inner (mal_media_id)")
+          .in("media_titles.mal_media_id", [...new Set(malIds)])
+          .is("archived_at", null),
+    anilistIds.length === 0
+      ? { data: [] }
+      : supabase
+          .from("user_entries")
+          .select("media_titles!inner (anilist_media_id)")
+          .in("media_titles.anilist_media_id", [...new Set(anilistIds)])
+          .is("archived_at", null),
+  ]);
 
-  for (const row of data ?? []) {
-    const title = row.media_titles as unknown as { mal_media_id: number };
-    if (title) owned.add(title.mal_media_id);
+  for (const row of malRows.data ?? []) {
+    const title = row.media_titles as unknown as { mal_media_id: number | null };
+    if (title?.mal_media_id != null) owned.mal.add(title.mal_media_id);
+  }
+  for (const row of anilistRows.data ?? []) {
+    const title = row.media_titles as unknown as {
+      anilist_media_id: number | null;
+    };
+    if (title?.anilist_media_id != null) {
+      owned.anilist.add(title.anilist_media_id);
+    }
   }
 
   return owned;
