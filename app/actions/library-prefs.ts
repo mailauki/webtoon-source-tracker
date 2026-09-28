@@ -34,6 +34,10 @@ const prefsSchema = z.object({
   // only two meaningful states, so there is no "never chose" to preserve.
   hideHiatus: z.boolean().optional(),
   ownedOnly: z.boolean().optional(),
+  // The Series filter. Text with the `all` sentinel, like status and source:
+  // it is a one-of-three choice, and resolvePublication reads anything it
+  // does not know as All.
+  publication: prefSchema.optional(),
   // The search page's two switches. Boolean for NSFW, which is off unless
   // asked for; text for the novels/webtoons side, which — like `sort` — is
   // stored as written and resolved leniently on read, so a value this version
@@ -71,6 +75,7 @@ export async function saveLibraryPrefs(patch: LibraryPrefsPatch) {
     sort?: string | null;
     hide_hiatus?: boolean;
     owned_only?: boolean;
+    publication?: string;
     search_include_nsfw?: boolean;
     search_media_kind?: string | null;
     hide_nsfw?: boolean;
@@ -98,6 +103,10 @@ export async function saveLibraryPrefs(patch: LibraryPrefsPatch) {
   // as deliberate a choice as narrowing to what the user owns.
   if (parsed.data.ownedOnly !== undefined) {
     row.owned_only = parsed.data.ownedOnly;
+  }
+  // "" is the All choice, normalised to the sentinel like the chips above.
+  if (parsed.data.publication !== undefined) {
+    row.publication = parsed.data.publication || ALL;
   }
   // Also written straight through: false is "hide them again", which is as
   // deliberate a choice as asking for them.

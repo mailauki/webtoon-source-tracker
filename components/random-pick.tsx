@@ -59,7 +59,7 @@ const MODES: { mode: PickMode; label: string; drawnFrom: string }[] = [
  * never disagree about what "Reading + Webtoon" covers.
  */
 function RandomPicker() {
-  const { entries, status, source, hideHiatus, ownedOnly } =
+  const { entries, status, source, hideHiatus, ownedOnly, publication } =
     useLibraryFilters();
 
   const [picked, setPicked] = useState<LibraryRow | null>(null);
@@ -75,7 +75,10 @@ function RandomPicker() {
   // own — as true of a recommendation as it is of the shelf. Unlike the chips,
   // these still apply in the two modes that reach past them (see
   // selectByMode), because they rule titles out rather than choosing a view.
-  const filters = { status, source, hideHiatus, ownedOnly };
+  //
+  // The Series filter rides along too: "only completed series" is a standing
+  // choice about what to read next, not just about what to look at.
+  const filters = { status, source, hideHiatus, ownedOnly, publication };
   const pools = MODES.map((m) => ({
     ...m,
     candidates: selectByMode(entries, m.mode, filters),

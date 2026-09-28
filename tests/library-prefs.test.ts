@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { ALL, resolveActiveChip } from "@/lib/data/library-prefs";
+import {
+  ALL,
+  resolveActiveChip,
+  resolvePublication,
+} from "@/lib/data/library-prefs";
 
 /**
  * The stored value has three states that must not collapse into each other:
@@ -24,5 +28,21 @@ describe("resolveActiveChip", () => {
   // never be mistaken for "no preference".
   it("passes the 'none' source through rather than clearing it", () => {
     expect(resolveActiveChip("none")).toBe("none");
+  });
+});
+
+describe("resolvePublication", () => {
+  it("keeps a stored side", () => {
+    expect(resolvePublication("ongoing")).toBe("ongoing");
+    expect(resolvePublication("completed")).toBe("completed");
+  });
+
+  // Never chose, chose All, and a value some other version wrote all show the
+  // whole shelf rather than an unexplained empty one.
+  it("reads anything else as All", () => {
+    expect(resolvePublication(null)).toBe("");
+    expect(resolvePublication(undefined)).toBe("");
+    expect(resolvePublication("all")).toBe("");
+    expect(resolvePublication("upcoming")).toBe("");
   });
 });

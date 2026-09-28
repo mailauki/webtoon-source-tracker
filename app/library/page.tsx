@@ -22,6 +22,7 @@ import { getLibrary, getStatusCounts } from "@/lib/data/entries";
 import {
   resolveActiveChip,
   resolveLayout,
+  resolvePublication,
   resolveSort,
 } from "@/lib/data/library-prefs";
 import { getIsPro } from "@/lib/data/pro";
@@ -104,6 +105,9 @@ export default async function LibraryPage() {
   // which would otherwise empty the shelf of anyone who has marked nothing.
   const hideHiatus = prefs?.hide_hiatus ?? false;
   const ownedOnly = prefs?.owned_only ?? false;
+  // Both series by default, like the toggles: nothing disappears on a visit
+  // where the user did not ask for it.
+  const publication = resolvePublication(prefs?.publication);
   // The stored preference matters only for a viewer who may see adult titles
   // at all; getLibrary() has already removed them for everyone else, so the
   // toggle would filter an empty set and the menu hides it.
@@ -177,6 +181,7 @@ export default async function LibraryPage() {
         source: activeSource,
         hideHiatus,
         ownedOnly,
+        publication,
         hideNsfw,
         sort: activeSort,
         layout: activeLayout,

@@ -25,6 +25,25 @@ export function resolveActiveChip(saved: string | null | undefined): string {
 }
 
 /* ------------------------------------------------------------------------ */
+/* Publication                                                              */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * Whether the series itself is still publishing — not the reader's own
+ * status, which the status chips cover. "" is All, like the other chips.
+ */
+export type Publication = "" | "ongoing" | "completed";
+
+/**
+ * Parse a stored publication filter. `all`, null and anything this version
+ * does not know all resolve to All, so a stale preference shows the whole
+ * shelf rather than an unexplained empty one.
+ */
+export function resolvePublication(saved: string | null | undefined): Publication {
+  return saved === "ongoing" || saved === "completed" ? saved : "";
+}
+
+/* ------------------------------------------------------------------------ */
 /* Layout                                                                   */
 /* ------------------------------------------------------------------------ */
 

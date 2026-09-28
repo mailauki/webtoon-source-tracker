@@ -40,6 +40,20 @@ export type ChapterTotal = {
 const SETTLED = new Set(["finished", "discontinued"]);
 
 /**
+ * Whether a series has stopped publishing, by MAL's status: true for finished
+ * or discontinued, false for anything still running (including a series on
+ * hiatus upstream, which can resume), and null when there is no status to go
+ * on. The library's Completed/Ongoing filter reads this, so "completed" means
+ * the same thing there as "final" does to the chapter total.
+ */
+export function isSeriesFinished(
+  malStatus: string | null | undefined,
+): boolean | null {
+  if (!malStatus) return null;
+  return SETTLED.has(malStatus);
+}
+
+/**
  * MAL's chapter count for a title, or null when it has none to offer.
  *
  * `num_chapters` is 0 or null for anything MAL has not counted, which is most
