@@ -4,6 +4,7 @@ import {
   createContext,
   useContext,
   useDeferredValue,
+  useMemo,
   useState,
   useTransition,
 } from "react";
@@ -41,15 +42,11 @@ type SearchFilterContext = SearchState & {
   setIncludeNsfw: (value: boolean) => void;
   setMediaKind: (value: MediaKind) => void;
   /**
-   * What the user has typed, verbatim. The field renders this so the caret
-   * never lags a keystroke behind.
-   */
-  query: string;
-  setQuery: (value: string) => void;
-  /**
-   * The same term, deferred. The results read this: React commits the
+   * The typed term, deferred. The results read this: React commits the
    * keystroke first and re-filters in a later interruptible pass, so a long
    * shelf cannot stutter the field.
+   *
+   * The live term is deliberately NOT on this context — see useSearchQuery.
    */
   deferredQuery: string;
   /** True while a switch is being saved; the switches dim rather than block. */
@@ -67,7 +64,37 @@ type SearchFilterContext = SearchState & {
   entries: LibraryRow[];
 };
 
+/**
+ * The live term, on a context of its own.
+ *
+ * It has to be separate for the deferral above to do anything. Every consumer
+ * of a context re-renders when its value changes, so when the live term sat on
+ * the same context as `deferredQuery`, each keystroke re-rendered both result
+ * sections synchronously — with the OLD deferred term, so repeating the whole
+ * filter and every card for nothing — before React ever reached the deferred
+ * pass. That blocking render is what made the field lag. Only the field and
+ * the empty-state prompt, both cheap, read this one.
+ */
+type SearchQueryContext = {
+  /**
+   * What the user has typed, verbatim. The field renders this so the caret
+   * never lags a keystroke behind.
+   */
+  query: string;
+  setQuery: (value: string) => void;
+};
+
 const SearchContext = createContext<SearchFilterContext | null>(null);
+const QueryContext = createContext<SearchQueryContext | null>(null);
+
+/** Read the live term. Must be inside <SearchFilters>. */
+export function useSearchQuery(): SearchQueryContext {
+  const ctx = useContext(QueryContext);
+  if (!ctx) {
+    throw new Error("useSearchQuery must be used within <SearchFilters>");
+  }
+  return ctx;
+}
 
 /** Read the search state. Must be inside <SearchFilters>. */
 export function useSearchFilters(): SearchFilterContext {
@@ -78,9 +105,12 @@ export function useSearchFilters(): SearchFilterContext {
   return ctx;
 }
 
+/** Shared, so a caller that passes no shelf does not bust the memo below. */
+const NO_ENTRIES: LibraryRow[] = [];
+
 export function SearchFilters({
   initial,
-  entries = [],
+  entries = NO_ENTRIES,
   matureLocked = false,
   children,
 }: {
@@ -109,46 +139,52 @@ export function SearchFilters({
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
 
-  function update(patch: Partial<SearchState>) {
-    setState((current) => ({ ...current, ...patch }));
+  // Memoized on the deferred term, never the live one, so the urgent render a
+  // keystroke causes hands every results consumer the same object and React
+  // skips them. They re-render only in the deferred pass, which a further
+  // keystroke can interrupt.
+  const filters = useMemo<SearchFilterContext>(() => {
+    function update(patch: Partial<SearchState>) {
+      setState((current) => ({ ...current, ...patch }));
 
-    // Fire-and-forget behind the change, like the chips: losing a remembered
-    // switch is not worth interrupting a click with an error, and the page has
-    // already moved by the time the write lands.
-    startTransition(async () => {
-      await saveLibraryPrefs({
-        ...(patch.includeNsfw !== undefined
-          ? { includeNsfw: patch.includeNsfw }
-          : {}),
-        ...(patch.mediaKind !== undefined
-          ? { mediaKind: patch.mediaKind }
-          : {}),
+      // Fire-and-forget behind the change, like the chips: losing a
+      // remembered switch is not worth interrupting a click with an error,
+      // and the page has already moved by the time the write lands.
+      startTransition(async () => {
+        await saveLibraryPrefs({
+          ...(patch.includeNsfw !== undefined
+            ? { includeNsfw: patch.includeNsfw }
+            : {}),
+          ...(patch.mediaKind !== undefined
+            ? { mediaKind: patch.mediaKind }
+            : {}),
+        });
       });
-    });
-  }
+    }
+
+    return {
+      ...state,
+      // The floor resolved once, here, rather than at each reader. The
+      // switch is hidden while it applies, but CatalogResults reads this
+      // value directly to build its request — so leaving the stored
+      // preference visible would have the client keep asking for `nsfw=1`
+      // with no control on screen to explain why. The route rejects it
+      // regardless; this stops it being sent at all.
+      includeNsfw: state.includeNsfw && !matureLocked,
+      setIncludeNsfw: (includeNsfw) => update({ includeNsfw }),
+      setMediaKind: (mediaKind) => update({ mediaKind }),
+      deferredQuery,
+      pending,
+      entries,
+      matureLocked,
+    };
+  }, [state, matureLocked, deferredQuery, pending, entries]);
+
+  const live = useMemo(() => ({ query, setQuery }), [query]);
 
   return (
-    <SearchContext
-      value={{
-        ...state,
-        // The floor resolved once, here, rather than at each reader. The
-        // switch is hidden while it applies, but CatalogResults reads this
-        // value directly to build its request — so leaving the stored
-        // preference visible would have the client keep asking for `nsfw=1`
-        // with no control on screen to explain why. The route rejects it
-        // regardless; this stops it being sent at all.
-        includeNsfw: state.includeNsfw && !matureLocked,
-        setIncludeNsfw: (includeNsfw) => update({ includeNsfw }),
-        setMediaKind: (mediaKind) => update({ mediaKind }),
-        query,
-        setQuery,
-        deferredQuery,
-        pending,
-        entries,
-        matureLocked,
-      }}
-    >
-      {children}
-    </SearchContext>
+    <QueryContext value={live}>
+      <SearchContext value={filters}>{children}</SearchContext>
+    </QueryContext>
   );
 }

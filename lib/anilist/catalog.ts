@@ -1,5 +1,6 @@
 import "server-only";
 
+import { collectAltTitles } from "@/lib/data/search";
 import type { createAdminClient } from "@/lib/supabase/admin";
 
 import { toMalMediaKind, toMalPublicationStatus } from "./mapping";
@@ -34,6 +35,11 @@ export type AniListTitleFields = {
   anilistMediaId: number;
   title: string;
   titleEn: string | null;
+  /**
+   * Every other name AniList has for it — see anilistAltTitles. Optional so a
+   * caller without them still writes a row, with an empty list.
+   */
+  altTitles?: string[];
   coverUrl: string | null;
   format: string | null;
   /** Where it is from — what tells manhwa and manhua apart from manga. */
@@ -55,6 +61,33 @@ export type AniListTitleFields = {
  */
 const orUndefined = <T>(value: T | null): T | undefined => value ?? undefined;
 
+/**
+ * The names AniList has for a title beyond the two the catalog displays: the
+ * native-script title, its synonyms, and whichever of romaji and English did
+ * not become `title` or `title_en`.
+ */
+export function anilistAltTitles(
+  displayed: { title: string; titleEn: string | null },
+  media: {
+    title?: {
+      romaji: string | null;
+      english: string | null;
+      native?: string | null;
+    };
+    synonyms?: string[] | null;
+  },
+): string[] {
+  return collectAltTitles(
+    [displayed.title, displayed.titleEn],
+    [
+      media.title?.romaji,
+      media.title?.english,
+      media.title?.native,
+      ...(media.synonyms ?? []),
+    ],
+  );
+}
+
 /** Upserts one AniList-only title and returns its catalog row id. */
 export async function upsertAniListTitle(
   admin: SupabaseAdmin,
@@ -64,6 +97,7 @@ export async function upsertAniListTitle(
     p_anilist_media_id: fields.anilistMediaId,
     p_title: fields.title,
     p_title_en: orUndefined(fields.titleEn),
+    p_alt_titles: fields.altTitles ?? [],
     p_main_picture_url: orUndefined(fields.coverUrl),
     p_media_kind: orUndefined(
       toMalMediaKind(fields.format, fields.countryOfOrigin),

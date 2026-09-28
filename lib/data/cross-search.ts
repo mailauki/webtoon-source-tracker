@@ -9,11 +9,15 @@
  * between the route handler and anything else that merges these later.
  */
 
+import { normalizeTitle as normalizeName } from "@/lib/data/search";
+
 /** A MyAnimeList hit, reduced to the fields a merge compares. */
 export type MalHit = {
   mal_media_id: number;
   title: string;
   title_en: string | null;
+  /** Every other name MAL has for it. Only read to line up a missing idMal. */
+  alt_titles?: string[];
   main_picture_url: string | null;
   media_kind: string | null;
   num_chapters: number | null;
@@ -28,6 +32,8 @@ export type AniListHit = {
   mal_media_id: number | null;
   title: string;
   title_en: string | null;
+  /** Native-script title and synonyms. See MalHit's. */
+  alt_titles?: string[];
   main_picture_url: string | null;
   media_kind: string | null;
   num_chapters: number | null;
@@ -59,6 +65,12 @@ export type MergedResult = {
   num_volumes: number | null;
   /** Empty unless `source` is "both" — one catalog cannot contradict itself. */
   mismatches: Mismatch[];
+  /**
+   * How a "both" row was lined up: AniList's own `idMal`, or — when AniList
+   * recorded none — an exact name match. See mergeResults. Null on a row only
+   * one catalog had.
+   */
+  matched_on: "mal_id" | "title" | null;
 };
 
 /**
@@ -134,14 +146,70 @@ export function findMismatches(mal: MalHit, anilist: AniListHit): Mismatch[] {
 }
 
 /**
+ * The name keys a hit can be lined up on: every title it has, normalized and
+ * with spaces removed. A key under four characters is dropped — "Love" or
+ * "Oz" are one title's name on one site and another's on the other, and a
+ * native-script title that short is rare enough not to be worth the risk.
+ */
+function nameKeys(hit: {
+  title: string;
+  title_en: string | null;
+  alt_titles?: string[];
+}): Set<string> {
+  const keys = new Set<string>();
+  for (const name of [hit.title, hit.title_en, ...(hit.alt_titles ?? [])]) {
+    if (!name) continue;
+    const key = normalizeName(name).replaceAll(" ", "");
+    if ([...key].length >= 4) keys.add(key);
+  }
+  return keys;
+}
+
+/**
+ * Whether two catalogs' kinds allow them to be one title.
+ *
+ * Both sides are already in MAL's vocabulary (the route maps AniList's
+ * format and country through toMalMediaKind), so this is equality — with the
+ * one exception that MAL splits prose into `novel` and `light_novel` where
+ * AniList has only NOVEL. A missing kind on either side is a refusal, not a
+ * pass: the kind check is what keeps a novel from fusing with its own
+ * adaptation, which share every name.
+ */
+function kindsCompatible(mal: string | null, anilist: string | null): boolean {
+  if (!mal || !anilist) return false;
+  const prose = (kind: string) => kind === "novel" || kind === "light_novel";
+  if (prose(mal) || prose(anilist)) return prose(mal) && prose(anilist);
+  return mal === anilist;
+}
+
+/**
  * Merges the two result sets into one ordered list.
  *
- * Titles are matched on AniList's `idMal` and nothing else. Fuzzy title
- * matching was considered and left out: the failure mode is silently merging
- * two different titles into one row — a spin-off with its parent series, a
- * novel with its adaptation — which is worse than showing them separately,
- * because a merged row hides that anything was conflated. An AniList hit with
- * no `idMal` is reported as AniList-only, which is honest and still useful.
+ * Titles are matched on AniList's `idMal` first. That link is AniList's own
+ * statement that the two entries are one title, so it is trusted whatever the
+ * names say.
+ *
+ * AniList often records no `idMal` at all, most of all for recent manhwa, and
+ * a title then showed twice — once per site. For those hits only, a name match
+ * is the fallback, and it is deliberately strict, because the failure mode is
+ * silently fusing two different titles into one row, which hides that anything
+ * was conflated (and would cache the wrong AniList id on add). A hit merges
+ * only when all of these hold:
+ *
+ * - some name is identical on both sides once case, accents, punctuation and
+ *   spacing are ignored — no typo tolerance. Every name counts, including the
+ *   native-script one, which is the most reliable: English names for the same
+ *   manhwa vary by translator, the Korean title does not;
+ * - the kinds agree — see kindsCompatible. A novel never merges with its
+ *   manhwa;
+ * - the name identifies exactly one eligible MAL hit. Two MAL rows sharing a
+ *   name is ambiguity, and ambiguity stays as separate rows;
+ * - that MAL hit is not already taken, by an idMal link or an earlier
+ *   AniList hit. AniList's relevance order decides between two claimants.
+ *
+ * A hit whose `idMal` points somewhere else is left alone: AniList said which
+ * title it is, and second-guessing it by name is how a spin-off fuses with
+ * its parent.
  *
  * Ordering follows MAL's relevance order first, then AniList-only hits in
  * theirs. Both sites sort by match quality, but their scores are not
@@ -156,20 +224,56 @@ export function mergeResults(
   malHits: MalHit[],
   anilistHits: AniListHit[],
 ): MergedResult[] {
-  const byMalId = new Map<number, AniListHit>();
+  const links = new Map<number, { hit: AniListHit; on: "mal_id" | "title" }>();
   for (const hit of anilistHits) {
     // First wins: AniList occasionally has two entries claiming one MAL id,
     // and its relevance order makes the first the better guess.
-    if (hit.mal_media_id !== null && !byMalId.has(hit.mal_media_id)) {
-      byMalId.set(hit.mal_media_id, hit);
+    if (hit.mal_media_id !== null && !links.has(hit.mal_media_id)) {
+      links.set(hit.mal_media_id, { hit, on: "mal_id" });
     }
+  }
+
+  // The name fallback, for hits AniList gave no idMal. Built only over MAL
+  // hits nothing has claimed by id, so a name can never pull a title away
+  // from the one AniList itself linked it to.
+  const malByKey = new Map<string, MalHit[]>();
+  for (const hit of malHits) {
+    if (links.has(hit.mal_media_id)) continue;
+    for (const key of nameKeys(hit)) {
+      const list = malByKey.get(key);
+      if (list) list.push(hit);
+      else malByKey.set(key, [hit]);
+    }
+  }
+
+  for (const hit of anilistHits) {
+    if (hit.mal_media_id !== null) continue;
+
+    const candidates = new Set<MalHit>();
+    let ambiguous = false;
+    for (const key of nameKeys(hit)) {
+      const compatible = (malByKey.get(key) ?? []).filter((m) =>
+        kindsCompatible(m.media_kind, hit.media_kind),
+      );
+      if (compatible.length > 1) ambiguous = true;
+      for (const m of compatible) candidates.add(m);
+    }
+
+    // One name pointing at two MAL rows, or two names at two different ones:
+    // either way this hit could be more than one title.
+    if (ambiguous || candidates.size !== 1) continue;
+    const [match] = candidates;
+    if (links.has(match.mal_media_id)) continue;
+
+    links.set(match.mal_media_id, { hit, on: "title" });
   }
 
   const matched = new Set<number>();
   const merged: MergedResult[] = [];
 
   for (const mal of malHits) {
-    const anilist = byMalId.get(mal.mal_media_id) ?? null;
+    const link = links.get(mal.mal_media_id) ?? null;
+    const anilist = link?.hit ?? null;
     if (anilist) matched.add(anilist.anilist_media_id);
 
     merged.push({
@@ -184,6 +288,7 @@ export function mergeResults(
       num_chapters: mal.num_chapters,
       num_volumes: mal.num_volumes,
       mismatches: anilist ? findMismatches(mal, anilist) : [],
+      matched_on: link?.on ?? null,
     });
   }
 
@@ -204,6 +309,7 @@ export function mergeResults(
       num_chapters: anilist.num_chapters,
       num_volumes: anilist.num_volumes,
       mismatches: [],
+      matched_on: null,
     });
   }
 

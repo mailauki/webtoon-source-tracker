@@ -44,7 +44,7 @@ Two repos: `web:` paths are in `webtoon-source-tracker` (Next.js), `ios:` paths 
 
 | File | Responsibility |
 |---|---|
-| `supabase/migrations/20260925000000_pro_entitlements.sql` | Table, `private.has_pro()`, grandfathering, the two enforcement triggers |
+| `supabase/migrations/20260928000000_pro_entitlements.sql` | Table, `private.has_pro()`, grandfathering, the two enforcement triggers |
 | `lib/pro.ts` | Client-safe: `PRO_REQUIRED_CODE`, `isProRequired()`, user-facing messages |
 | `lib/data/pro.ts` | `server-only`: `hasPro()`, `getIsPro()`, `canLinkService()` |
 | `lib/stripe.ts` | `server-only`: the Stripe client |
@@ -72,7 +72,7 @@ Two repos: `web:` paths are in `webtoon-source-tracker` (Next.js), `ios:` paths 
 ### Task 1: `pro_entitlements`, grandfathering, and the enforcement triggers
 
 **Files:**
-- Create: `web:supabase/migrations/20260925000000_pro_entitlements.sql`
+- Create: `web:supabase/migrations/20260928000000_pro_entitlements.sql`
 - Modify: `web:lib/supabase/types.ts`
 
 **Interfaces:**
@@ -275,7 +275,7 @@ Expected: (a) and (c) raise `PT402`; (b), (d), (e) succeed/true.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add supabase/migrations/20260925000000_pro_entitlements.sql lib/supabase/types.ts
+git add supabase/migrations/20260928000000_pro_entitlements.sql lib/supabase/types.ts
 git commit -m "Add Pro entitlements, grandfather existing accounts, and enforce Pro in the database"
 ```
 

@@ -286,4 +286,56 @@ describe("tags on the entry page", () => {
       "false",
     );
   });
+
+  // The header shows the format as its own badge, linking to the same tag
+  // page, so a chip here would say it twice.
+  it("leaves the format tag out of the chips", () => {
+    const manhwa = makeTag({ id: 9, slug: "manhwa", name: "Manhwa", kind: "format" });
+    render(
+      <EntryTags
+        titleId={TITLE_ID}
+        tags={[ROMANCE, manhwa]}
+        allTags={[]}
+        isAdmin={false}
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: "Romance" })).toBeInTheDocument();
+    expect(screen.queryByText("Manhwa")).not.toBeInTheDocument();
+  });
+
+  it("renders nothing for a reader when the format is the only tag", () => {
+    const manhwa = makeTag({ id: 9, slug: "manhwa", name: "Manhwa", kind: "format" });
+    const { container } = render(
+      <EntryTags titleId={TITLE_ID} tags={[manhwa]} allTags={[]} isAdmin={false} />,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  // A genre shown only because a site gives it live has no saved link, so
+  // there is nothing to remove. It shows to a reader, and drops out of edit
+  // mode rather than offering a remove button that would do nothing.
+  it("shows live genres, but only saved tags in edit mode", async () => {
+    const user = userEvent.setup();
+    render(
+      <EntryTags
+        titleId={TITLE_ID}
+        tags={[ROMANCE, ISEKAI]}
+        savedTagIds={new Set([ROMANCE.id])}
+        allTags={[]}
+        isAdmin
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: "Isekai" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^Edit$/ }));
+
+    expect(
+      screen.getByRole("button", { name: "Remove tag Romance" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Remove tag Isekai" }),
+    ).not.toBeInTheDocument();
+  });
 });

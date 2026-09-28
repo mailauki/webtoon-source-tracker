@@ -55,8 +55,12 @@ export const anilistListEntrySchema = z.object({
       .object({
         romaji: z.string().nullable(),
         english: z.string().nullable(),
+        native: z.string().nullable().optional(),
       })
       .optional(),
+    synonyms: z.array(z.string()).nullable().optional(),
+    /** AniList's fixed genre list — see lib/anilist/genres.ts. */
+    genres: z.array(z.string()).nullable().optional(),
     format: z.string().nullable().optional(),
     countryOfOrigin: z.string().nullable().optional(),
     chapters: z.number().nullable().optional(),
@@ -95,6 +99,18 @@ export const anilistMediaIdPageSchema = z.object({
   }),
 });
 
+export const anilistGenresByMalPageSchema = z.object({
+  Page: z.object({
+    pageInfo: z.object({ hasNextPage: z.boolean().nullable() }),
+    media: z.array(
+      z.object({
+        idMal: z.number().nullable(),
+        genres: z.array(z.string()).nullable(),
+      }),
+    ),
+  }),
+});
+
 /**
  * A catalog search hit.
  *
@@ -112,7 +128,13 @@ export const anilistSearchMediaSchema = z.object({
   title: z.object({
     romaji: z.string().nullable(),
     english: z.string().nullable(),
+    // Optional, like countryOfOrigin: added to the queries later.
+    native: z.string().nullable().optional(),
   }),
+  synonyms: z.array(z.string()).nullable().optional(),
+  // Only the single-title lookup asks for this; the search query does not,
+  // since nothing reads genres off a search hit.
+  genres: z.array(z.string()).nullable().optional(),
   format: z.string().nullable(),
   // Optional: it was added to the queries after the rest of this shape.
   countryOfOrigin: z.string().nullable().optional(),
@@ -145,6 +167,9 @@ export const anilistMediaExtrasSchema = z.object({
   id: z.number(),
   chapters: z.number().nullable(),
   status: z.string().nullable(),
+  // Optional: added after the rest, and a cached response without it should
+  // still parse. Merged into the entry page's tags.
+  genres: z.array(z.string()).nullable().optional(),
   externalLinks: z
     .array(
       z.object({

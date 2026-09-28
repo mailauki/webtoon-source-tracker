@@ -6,6 +6,7 @@ import { z } from "zod";
 import { describeMirror, mirrorToAniList } from "@/lib/anilist/mirror";
 import { verifySession } from "@/lib/auth/dal";
 import { anilistIdPatch } from "@/lib/data/cross-search";
+import { malAltTitles } from "@/lib/mal/alt-titles";
 import { MalClient } from "@/lib/mal/client";
 import { getManga, updateListStatus } from "@/lib/mal/endpoints";
 import { MalAuthError, MalRateLimitError } from "@/lib/mal/errors";
@@ -112,6 +113,7 @@ export async function addEntry(
         mal_media_id: node.id,
         title: node.title,
         title_en: node.alternative_titles?.en || null,
+        alt_titles: malAltTitles(node),
         main_picture_url:
           node.main_picture?.large ?? node.main_picture?.medium ?? null,
         mal_media_kind: node.media_type ?? null,
@@ -153,6 +155,10 @@ export async function addEntry(
         is_rereading: echoed.is_rereading,
         mal_updated_at: echoed.updated_at ?? now,
         synced_at: now,
+        // Re-adding a title the user removed lands on their archived row, and
+        // an upsert leaves columns it does not name alone — so without this
+        // the add would report success and the title would stay hidden.
+        archived_at: null,
       },
       { onConflict: "user_id,title_id" },
     )

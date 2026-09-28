@@ -2,10 +2,12 @@ import "server-only";
 
 import { AniListClient } from "@/lib/anilist/client";
 import { getMangaList } from "@/lib/anilist/endpoints";
-import { upsertAniListTitle } from "@/lib/anilist/catalog";
+import { anilistAltTitles, upsertAniListTitle } from "@/lib/anilist/catalog";
+import { malGenresFor } from "@/lib/anilist/genres";
 import { toMalScore, toMalStatus } from "@/lib/anilist/mapping";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isStale } from "./staleness";
+import { syncGenres } from "./sync-list";
 
 /**
  * Pulls a user's AniList manga list into Supabase.
@@ -189,11 +191,14 @@ export async function syncAniListList(
   // per-row call is the cost of that, and it is paid only for titles nothing
   // in the app has seen before, which is a small set after the first sync.
   for (const entry of newTitles) {
+    const title =
+      entry.media.title?.romaji ?? entry.media.title?.english ?? "Untitled";
+    const titleEn = entry.media.title?.english ?? null;
     const id = await upsertAniListTitle(admin, {
       anilistMediaId: entry.mediaId,
-      title:
-        entry.media.title?.romaji ?? entry.media.title?.english ?? "Untitled",
-      titleEn: entry.media.title?.english ?? null,
+      title,
+      titleEn,
+      altTitles: anilistAltTitles({ title, titleEn }, entry.media),
       coverUrl:
         entry.media.coverImage?.large ?? entry.media.coverImage?.medium ?? null,
       format: entry.media.format ?? null,
@@ -207,6 +212,27 @@ export async function syncAniListList(
     known.set(entry.mediaId, { id, malBacked: false });
     titlesAdded++;
   }
+
+  // --- 2b. AniList's genres --------------------------------------------------
+  //
+  // Mapped onto the MAL genres the tag vocabulary is keyed on, so these titles
+  // join the same Discover categories as everything else. Every row in this
+  // list, not just the ones created above: that is what tags the rows added
+  // before genres were read at all. syncGenres only inserts links that are
+  // missing, so a title already tagged costs one read.
+  //
+  // MAL-backed rows included: a title is filed under every genre either site
+  // gives it, merged with the MAL sync's own.
+  const genreIdMap = new Map<number, number>();
+  const genreNodes = entries.flatMap((e) => {
+    const row = known.get(e.mediaId);
+    if (!row) return [];
+    const genres = malGenresFor(e.media.genres);
+    if (genres.length === 0) return [];
+    genreIdMap.set(e.mediaId, row.id);
+    return [{ id: e.mediaId, genres }];
+  });
+  await syncGenres(admin, genreNodes, genreIdMap);
 
   // --- 3. Create the user's entries ----------------------------------------
   //

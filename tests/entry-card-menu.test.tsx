@@ -7,6 +7,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { waitFor } from "@testing-library/react";
 
 // vi.mock is hoisted above every const, so the spy has to be hoisted with it.
 const { updateProgress } = vi.hoisted(() => ({
@@ -25,8 +26,17 @@ const { addEntrySource } = vi.hoisted(() => ({
     ) => Promise<{ error?: string; message?: string } | null>
   >(async () => ({ message: "Source added." })),
 }));
+const { setEntrySourceUrl } = vi.hoisted(() => ({
+  setEntrySourceUrl: vi.fn<
+    (
+      prev: unknown,
+      formData: FormData,
+    ) => Promise<{ error?: string; message?: string } | null>
+  >(async () => ({ message: "Link saved." })),
+}));
 vi.mock("@/app/actions/entry-sources", () => ({
   addEntrySource,
+  setEntrySourceUrl,
   updateEntrySource: vi.fn(async () => ({ message: "Source updated." })),
   removeEntrySource: vi.fn(async () => ({ message: "Source removed." })),
 }));
@@ -620,5 +630,140 @@ describe("quick actions and sync exclusions", () => {
     expect(
       screen.getByRole("menuitem", { name: /Add 1 chapter/ }),
     ).not.toHaveAttribute("aria-disabled", "true");
+  });
+});
+
+/**
+ * AniList's reading links as quick actions, the way the entry page offers
+ * them. Each test uses its own entry id: the lookup is cached per entry for
+ * the life of the page, so a shared id would carry one test's answer into the
+ * next.
+ */
+describe("AniList links in the card's actions", () => {
+  function stubAniList(body: unknown, ok = true) {
+    const fetchMock = vi.fn(async (url: string) => ({
+      ok,
+      url,
+      json: async () => body,
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    addEntrySource.mockClear();
+    setEntrySourceUrl.mockClear();
+  });
+
+  it("adds a source AniList links, with AniList's URL", async () => {
+    stubAniList({
+      add: [{ sourceId: 3, name: "Tappytoon", url: "https://www.tappytoon.com/en/book/x" }],
+      fill: [],
+    });
+    const user = await openSheet(row({ id: 101 }));
+
+    await user.click(
+      await screen.findByRole("button", { name: "Add Tappytoon from AniList" }),
+    );
+
+    await waitFor(() => expect(addEntrySource).toHaveBeenCalled());
+    const submitted = addEntrySource.mock.calls.at(-1)?.[1] as FormData;
+    expect(submitted.get("source_id")).toBe("3");
+    expect(submitted.get("url")).toBe("https://www.tappytoon.com/en/book/x");
+  });
+
+  it("fills an attached source's missing URL from AniList", async () => {
+    stubAniList({
+      add: [],
+      fill: [{ attachedId: 55, sourceName: "Webtoon", url: "https://www.webtoons.com/en/x" }],
+    });
+    const entry = row({
+      id: 102,
+      entry_sources: [
+        { id: 55, url: null, sources: { id: 2, name: "Webtoon" } },
+      ] as unknown as LibraryRow["entry_sources"],
+    });
+    const user = await openSheet(entry);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Use AniList link for Webtoon" }),
+    );
+
+    await waitFor(() => expect(setEntrySourceUrl).toHaveBeenCalled());
+    const submitted = setEntrySourceUrl.mock.calls.at(-1)?.[1] as FormData;
+    expect(submitted.get("id")).toBe("55");
+    expect(submitted.get("url")).toBe("https://www.webtoons.com/en/x");
+  });
+
+  // The sheet stays mounted while closed, so without the open gate every card
+  // on the shelf would ask AniList as soon as the page rendered.
+  it("does not ask AniList until the sheet is opened", async () => {
+    const fetchMock = stubAniList({ add: [], fill: [] });
+    const user = userEvent.setup();
+    render(<EntryCard entry={row({ id: 103 })} topSources={TOP_SOURCES} isPro />);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    await user.click(sheetButton());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      "/api/entries/103/anilist-links",
+    );
+  });
+
+  // The context menu's component stays mounted too (Radix only unmounts its
+  // content), so it needs the same gate as the sheet.
+  it("does not ask AniList until the context menu is opened", async () => {
+    const fetchMock = stubAniList({
+      add: [{ sourceId: 3, name: "Tappytoon", url: "https://www.tappytoon.com/en/book/x" }],
+      fill: [],
+    });
+    const user = userEvent.setup();
+    render(<EntryCard entry={row({ id: 107 })} topSources={TOP_SOURCES} isPro />);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    await user.pointer({ keys: "[MouseRight]", target: cardTrigger() });
+    expect(
+      await screen.findByRole("menuitem", { name: "Add Tappytoon from AniList" }),
+    ).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to the usual shortcuts when AniList has nothing", async () => {
+    stubAniList({ add: [], fill: [] });
+    await openSheet(row({ id: 104 }));
+
+    expect(
+      await screen.findByRole("button", { name: "Add Tapas" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/from AniList/)).not.toBeInTheDocument();
+  });
+
+  it("says it is checking AniList while the answer is on its way", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+    await openSheet(row({ id: 105 }));
+
+    expect(
+      await screen.findByRole("button", { name: /Checking AniList/ }),
+    ).toBeDisabled();
+  });
+
+  it("does not offer a source the entry already has", async () => {
+    stubAniList({
+      add: [{ sourceId: 2, name: "Webtoon", url: "https://www.webtoons.com/en/x" }],
+      fill: [],
+    });
+    const entry = row({
+      id: 106,
+      entry_sources: [
+        { id: 60, url: "https://www.webtoons.com/en/x", sources: { id: 2, name: "Webtoon" } },
+      ] as unknown as LibraryRow["entry_sources"],
+    });
+    await openSheet(entry);
+
+    await waitFor(() =>
+      expect(screen.queryByText(/Checking AniList/)).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByText("Add Webtoon from AniList")).not.toBeInTheDocument();
   });
 });

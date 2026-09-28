@@ -3,6 +3,9 @@ import "server-only";
 import { kindForMalGenre } from "@/lib/data/mal-taxonomy";
 import { slugify } from "@/lib/data/tag-items";
 import { MalClient } from "@/lib/mal/client";
+import { findGenresByMalIds } from "@/lib/anilist/endpoints";
+import { malGenresFor } from "@/lib/anilist/genres";
+import { malAltTitles } from "@/lib/mal/alt-titles";
 import { getMangaList } from "@/lib/mal/endpoints";
 import type { MalListEntry } from "@/lib/mal/types";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -282,6 +285,9 @@ export async function syncMalList(
     mal_media_id: number;
     title: string;
     title_en: string | null;
+    // Every other name MAL knows the title by, so the search page can find
+    // it by any of them. See collectAltTitles.
+    alt_titles: string[];
     main_picture_url: string | null;
     mal_media_kind: string | null;
     num_chapters: number | null;
@@ -304,6 +310,7 @@ export async function syncMalList(
       mal_media_id: node.id,
       title: node.title,
       title_en: node.alternative_titles?.en || null,
+      alt_titles: malAltTitles(node),
       main_picture_url: node.main_picture?.large ?? node.main_picture?.medium ?? null,
       mal_media_kind: node.media_type ?? null,
       num_chapters: node.num_chapters ?? null,
@@ -349,6 +356,29 @@ export async function syncMalList(
     await syncGenres(admin, collected.map((c) => c.node), idMap);
   } catch (error) {
     console.error("Genre sync failed:", error);
+  }
+
+  // And AniList's genres for the same titles, onto the same tags, so a title
+  // is filed under every genre either site gives it. The two are merged,
+  // not reconciled: a genre one site gives is a reasonable place for a
+  // reader to look for the title.
+  //
+  // Anonymous and batched 50 ids a request, so it needs no AniList account.
+  // Separate from the MAL half so either failing leaves the other's tags in
+  // place; an AniList outage or rate limit costs these links until the next
+  // sync, and nothing else.
+  try {
+    const anilistGenres = await findGenresByMalIds([...idMap.keys()]);
+    await syncGenres(
+      admin,
+      [...anilistGenres].map(([malId, genres]) => ({
+        id: malId,
+        genres: malGenresFor(genres),
+      })),
+      idMap,
+    );
+  } catch (error) {
+    console.error("AniList genre sync failed:", error);
   }
 
   // --- 3. Upsert this user's entries --------------------------------------

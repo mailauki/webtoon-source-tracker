@@ -5,7 +5,7 @@ import { LibraryBig } from "lucide-react";
 import { EntryCard } from "@/components/entry-card";
 import { useSearchFilters } from "@/components/search/search-filters";
 import type { RankedSource, Source } from "@/lib/data/rank-sources";
-import { matchesMediaKind, matchesTitle } from "@/lib/data/search";
+import { matchesMediaKind, titleMatchScore } from "@/lib/data/search";
 
 /**
  * The half of the search page that looks at titles you already track.
@@ -14,6 +14,10 @@ import { matchesMediaKind, matchesTitle } from "@/lib/data/search";
  * cheaper question and the one that settles what to do next: if the title is
  * here, adding it again is not the answer, and the catalog below has already
  * dropped it from its results for that reason.
+ *
+ * Matching is forgiving — case, accents, punctuation and spacing are ignored,
+ * a longer term may carry a typo, and every title a row is known by counts,
+ * not only the one on its card. See titleMatchScore in lib/data/search.ts.
  *
  * The rows are the ones the page fetched, so this narrows in the browser with
  * no round-trip — a keystroke moves the grid in the same render, which is what
@@ -43,17 +47,28 @@ export function LibraryResults({
   isPro: boolean;
 }) {
   const { deferredQuery, mediaKind, entries } = useSearchFilters();
-  const term = deferredQuery.trim().toLowerCase();
+  const term = deferredQuery.trim();
 
   // Nothing typed yet: the page's own prompt covers the empty state, and a
   // heading over no rows would just be noise above it.
   if (term === "") return null;
 
-  const matches = entries.filter(
-    (entry) =>
-      matchesTitle(entry.media_titles, term) &&
+  // Closest first: a title containing the term as typed outranks one that
+  // only matches ignoring spaces, which outranks one found through a typo.
+  // The sort is stable, so within a tier the shelf keeps its own order.
+  const matches = entries
+    .filter((entry) =>
       matchesMediaKind(entry.media_titles?.mal_media_kind, mediaKind),
-  );
+    )
+    .map((entry) => ({
+      entry,
+      score: titleMatchScore(entry.media_titles, term),
+    }))
+    .filter((match): match is { entry: typeof match.entry; score: number } =>
+      match.score !== null,
+    )
+    .sort((a, b) => a.score - b.score)
+    .map((match) => match.entry);
 
   return (
     <section className="grid gap-3">

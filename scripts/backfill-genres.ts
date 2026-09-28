@@ -1,6 +1,6 @@
 /**
- * Imports MAL genres — and content ratings — for catalog rows that predate
- * those syncs.
+ * Imports MAL genres — and content ratings and alternate titles — for catalog
+ * rows that predate those syncs.
  *
  * Run: yarn backfill:genres
  *
@@ -14,6 +14,8 @@
  * expensive part here is the paced per-title fetch, not the write. A second
  * script would mean walking the whole catalog twice at one request a second
  * for one extra field that /manga/{id} was already going to return.
+ *
+ * Alternate titles (`media_titles.alt_titles`) ride along for the same reason.
  *
  * Needs a MAL token, so it runs against one connected account — any account
  * will do, since /manga/{id} is not list-scoped. One-off, not a scheduled job.
@@ -55,6 +57,10 @@ import { createClient } from "@supabase/supabase-js";
 // (value) imports. A relative path is used because tsconfig's "@/*" alias
 // isn't set for plain `node`, same reason as everywhere else in this file.
 import type { Database } from "../lib/supabase/types";
+// A value import, so it needs the extension plain `node` resolves — the same
+// way scripts/canonicalize-urls.ts imports canonicalUrl. lib/data/search.ts
+// has no imports of its own, so none of the problems above apply to it.
+import { collectAltTitles } from "../lib/data/search.ts";
 
 // `import.meta.main` is a real, stable Node API since v24 (verified against
 // this repo's actual Node 25.2.1 runtime under --experimental-strip-types —
@@ -195,9 +201,12 @@ async function refreshAccessToken(
 
 type MangaNode = {
   id: number;
+  /** Always sent by MAL, requested or not. */
+  title?: string;
   genres?: { id: number; name: string }[];
   /** MAL's content rating: white | gray | black. Absent on some entries. */
   nsfw?: string;
+  alternative_titles?: { synonyms?: string[]; en?: string; ja?: string };
 };
 
 /**
@@ -221,7 +230,7 @@ async function fetchTitle(
 
   for (;;) {
     const url = new URL(`${API_BASE}/manga/${malMediaId}`);
-    url.searchParams.set("fields", "genres,nsfw");
+    url.searchParams.set("fields", "genres,nsfw,alternative_titles");
 
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${current.access_token}` },
@@ -441,6 +450,52 @@ export async function syncRatingsBatch(
   }
 }
 
+/**
+ * Writes MAL's alternate titles — synonyms and the Japanese title — onto the
+ * catalog rows for one batch of nodes, so the search page can find titles
+ * that predate the column by any of their names.
+ *
+ * One update per title, unlike the ratings above: every row's list is its
+ * own, so there is nothing to group by. The per-title fetch before it is
+ * paced at a request a second, so these writes are never the bottleneck.
+ *
+ * Mirrors lib/mal/alt-titles.ts's malAltTitles, which the sync paths use.
+ * That module cannot be imported here — its `@/` imports need tsconfig's path
+ * mapping — so the two are kept in lockstep by hand, and
+ * tests/backfill-alt-titles.test.ts asserts they agree.
+ */
+export async function syncAltTitlesBatch(
+  admin: SupabaseAdmin,
+  nodes: MangaNode[],
+): Promise<number> {
+  let written = 0;
+
+  for (const node of nodes) {
+    const alt = node.alternative_titles;
+    const altTitles = collectAltTitles(
+      [node.title, alt?.en],
+      [...(alt?.synonyms ?? []), alt?.ja],
+    );
+    // Nothing to add, and the column already defaults to empty.
+    if (altTitles.length === 0) continue;
+
+    const { error } = await admin
+      .from("media_titles")
+      .update({ alt_titles: altTitles })
+      .eq("media_type", "manga")
+      .eq("mal_media_id", node.id);
+
+    // Not fatal, for the same reason a rating write is not.
+    if (error) {
+      console.error(`- mal_media_id ${node.id}: alt titles write failed: ${error.message}`);
+    } else {
+      written++;
+    }
+  }
+
+  return written;
+}
+
 async function main(admin: SupabaseAdmin, malClientId: string, malClientSecret: string) {
   const { userId, tokens: initialTokens } = await getAnyConnectedAccount(admin);
   let tokens = initialTokens;
@@ -449,6 +504,7 @@ async function main(admin: SupabaseAdmin, malClientId: string, malClientSecret: 
   let totalTitles = 0;
   let totalTagged = 0;
   let totalRated = 0;
+  let totalAltTitled = 0;
 
   for (;;) {
     const { data: rows, error } = await admin
@@ -497,6 +553,7 @@ async function main(admin: SupabaseAdmin, malClientId: string, malClientSecret: 
 
     await syncGenresBatch(admin, nodes, idMap);
     await syncRatingsBatch(admin, nodes);
+    totalAltTitled += await syncAltTitlesBatch(admin, nodes);
 
     totalTitles += rows.length;
     totalTagged += nodes.filter((n) => (n.genres?.length ?? 0) > 0).length;
@@ -509,7 +566,8 @@ async function main(admin: SupabaseAdmin, malClientId: string, malClientSecret: 
 
   console.log(
     `Done. ${totalTitles} catalog rows walked, ${totalTagged} carried at least ` +
-      `one genre, ${totalRated} carried a content rating.`,
+      `one genre, ${totalRated} carried a content rating, ${totalAltTitled} ` +
+      `gained alternate titles.`,
   );
 }
 

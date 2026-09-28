@@ -11,29 +11,204 @@
 /** MAL's own minimum; shorter queries return noise from the catalog. */
 export const MIN_QUERY_LENGTH = 3;
 
-/** The two title fields a row carries, from either side of the search. */
+/**
+ * The title fields a row carries, from either side of the search.
+ *
+ * `alt_titles` is optional so callers that only have the two display titles —
+ * a catalog hit, a row from an older query — still type-check and match on
+ * what they have.
+ */
 type Titles =
-  | { title?: string | null; title_en?: string | null }
+  | {
+      title?: string | null;
+      title_en?: string | null;
+      alt_titles?: readonly string[] | null;
+    }
   | null
   | undefined;
 
 /**
- * Whether a title contains the search term.
+ * A string reduced to what a person means when they type it.
  *
- * Both titles are checked because the card shows one and the user may know the
- * other — a romanised title on the cover is no reason for the English name not
- * to find it. `term` arrives already trimmed and lowercased so this does not
- * redo that work per row.
- *
- * A substring match, matching the `ilike '%term%'` the server used to run, so
- * searching the shelf in the browser finds exactly what a query would.
+ * Accents come off (`é` → `e`), case goes, and every run of punctuation or
+ * whitespace becomes one space — so "Re:Zero", "re zero" and "RE - ZERO" are
+ * the same string. Recomposed at the end because stripping marks from the
+ * decomposed form leaves Hangul as loose jamo, and a Korean title should still
+ * compare syllable to syllable.
  */
+export function normalizeTitle(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .normalize("NFC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+/** A normalized title with its spaces removed as well. */
+type Prepared = { spaced: string; compact: string };
+
+function prepare(value: string): Prepared {
+  const spaced = normalizeTitle(value);
+  return { spaced, compact: spaced.replaceAll(" ", "") };
+}
+
+/**
+ * Prepared titles per row object.
+ *
+ * The shelf is re-matched on every settled keystroke, but its rows never
+ * change between them, so normalizing each title once and reusing it is what
+ * keeps a large library from redoing the same Unicode work per character.
+ * Weak, so a row the page has let go of takes its entry with it.
+ */
+const preparedTitles = new WeakMap<object, Prepared[]>();
+
+function titlesOf(titles: NonNullable<Titles>): Prepared[] {
+  const cached = preparedTitles.get(titles);
+  if (cached) return cached;
+
+  const prepared = [titles.title, titles.title_en, ...(titles.alt_titles ?? [])]
+    .filter((value): value is string => Boolean(value))
+    .map(prepare)
+    .filter((value) => value.compact !== "");
+
+  preparedTitles.set(titles, prepared);
+  return prepared;
+}
+
+/**
+ * How many typos a term of this length is allowed.
+ *
+ * None under five characters: a four-letter word one edit from a match is
+ * one edit from dozens, and the short terms are the ones typed straight
+ * through rather than misspelled. One up to eight characters, two beyond.
+ */
+function allowedTypos(length: number): number {
+  if (length < 5) return 0;
+  if (length < 9) return 1;
+  return 2;
+}
+
+/**
+ * The fewest edits that turn `term` into some stretch of `text`.
+ *
+ * Sellers' approximate substring match with adjacent transpositions counted as
+ * one edit (optimal string alignment), so "levleing" finds "leveling". A match
+ * may start anywhere in `text`, which is what makes this a search rather than
+ * a comparison of whole titles. Anything over `limit` comes back as
+ * `limit + 1`, so callers only ever compare against the bound they chose.
+ */
+function typoDistance(term: string, text: string, limit: number): number {
+  const m = term.length;
+  // Three rows of the DP over `term`, reused across every column of `text`.
+  let beforePrev = new Int32Array(m + 1);
+  let prev = new Int32Array(m + 1);
+  let row = new Int32Array(m + 1);
+  for (let i = 0; i <= m; i++) prev[i] = i;
+
+  let best = prev[m];
+
+  for (let j = 1; j <= text.length; j++) {
+    // Row 0 is 0 in every column: a match may begin at any position.
+    row[0] = 0;
+
+    for (let i = 1; i <= m; i++) {
+      const cost = term[i - 1] === text[j - 1] ? 0 : 1;
+      let value = Math.min(
+        prev[i] + 1, // a character of `text` the term does not have
+        row[i - 1] + 1, // a character of the term `text` does not have
+        prev[i - 1] + cost, // the same character, or a substitution
+      );
+      if (
+        i > 1 &&
+        j > 1 &&
+        term[i - 1] === text[j - 2] &&
+        term[i - 2] === text[j - 1]
+      ) {
+        value = Math.min(value, beforePrev[i - 2] + 1);
+      }
+      row[i] = value;
+    }
+
+    best = Math.min(best, row[m]);
+    if (best === 0) return 0;
+
+    [beforePrev, prev, row] = [prev, row, beforePrev];
+  }
+
+  return best <= limit ? best : limit + 1;
+}
+
+/**
+ * How well a row's titles match the term, or null for no match. Lower is
+ * better, so results can be ordered with the closest first:
+ *
+ * - `0` — the term appears as typed, give or take case, accents and
+ *   punctuation. "re zero" finds "Re:Zero".
+ * - `1` — it appears once spaces are ignored too. "rezero" finds "Re:Zero",
+ *   and "solo leveling" finds a title written "SoloLeveling".
+ * - `2` and up — it appears with a typo or two; `2 + edits`. Only for terms
+ *   long enough to carry one — see allowedTypos.
+ *
+ * Every title the row has is checked — the romanised one, the English one and
+ * every alternate — because the card shows one and the user may know the
+ * title by any of the others.
+ *
+ * `term` may arrive raw; it is normalized here the same way the titles are.
+ */
+export function titleMatchScore(titles: Titles, term: string): number | null {
+  if (!titles) return null;
+  const query = prepare(term);
+  if (query.compact === "") return null;
+
+  const candidates = titlesOf(titles);
+
+  if (candidates.some((c) => c.spaced.includes(query.spaced))) return 0;
+  if (candidates.some((c) => c.compact.includes(query.compact))) return 1;
+
+  const limit = allowedTypos(query.compact.length);
+  if (limit === 0) return null;
+
+  let best = limit + 1;
+  for (const candidate of candidates) {
+    best = Math.min(best, typoDistance(query.compact, candidate.compact, limit));
+    if (best === 1) break;
+  }
+  return best <= limit ? 2 + best : null;
+}
+
+/** Whether any of a row's titles matches the term. See titleMatchScore. */
 export function matchesTitle(titles: Titles, term: string): boolean {
-  if (!titles) return false;
-  return (
-    (titles.title?.toLowerCase().includes(term) ?? false) ||
-    (titles.title_en?.toLowerCase().includes(term) ?? false)
+  return titleMatchScore(titles, term) !== null;
+}
+
+/**
+ * The alternate titles worth storing for a row: every candidate that is not
+ * empty and not already one of its display titles, each kept once.
+ *
+ * Compared normalized, so a synonym that differs from the main title only in
+ * case or punctuation is not stored twice — it would match the same terms.
+ */
+export function collectAltTitles(
+  displayed: readonly (string | null | undefined)[],
+  candidates: readonly (string | null | undefined)[],
+): string[] {
+  const seen = new Set(
+    displayed.filter((v): v is string => Boolean(v)).map(normalizeTitle),
   );
+  const kept: string[] = [];
+
+  for (const candidate of candidates) {
+    const value = candidate?.trim();
+    if (!value) continue;
+    const key = normalizeTitle(value);
+    if (key === "" || seen.has(key)) continue;
+    seen.add(key);
+    kept.push(value);
+  }
+
+  return kept;
 }
 
 /* ------------------------------------------------------------------------ */

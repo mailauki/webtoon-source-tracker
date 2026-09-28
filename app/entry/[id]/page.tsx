@@ -14,8 +14,9 @@ import { EntrySourceEditor } from "@/components/entry-source-editor";
 import { EntryTags } from "@/components/entry-tags";
 import { ProgressEditor } from "@/components/progress-editor";
 import { getMediaExtras } from "@/lib/anilist/endpoints";
+import { malGenresFor } from "@/lib/anilist/genres";
 import type { AniListMediaExtras } from "@/lib/anilist/types";
-import { getChapterCount } from "@/lib/mal/endpoints";
+import { getMalLiveDetails, type MalLiveDetails } from "@/lib/mal/endpoints";
 import { isAdmin, verifySession } from "@/lib/auth/dal";
 import {
   catalogLinks,
@@ -29,7 +30,12 @@ import { getCollectionTargets } from "@/lib/data/collections";
 import { getEntry, type EntryDetail } from "@/lib/data/entries";
 import { getIsPro } from "@/lib/data/pro";
 import { getSources } from "@/lib/data/sources";
-import { getActiveTags, getTagsForTitle } from "@/lib/data/tags";
+import { mergeTags, type Tag } from "@/lib/data/tag-items";
+import {
+  getActiveTags,
+  getTagsForMalGenres,
+  getTagsForTitle,
+} from "@/lib/data/tags";
 
 export async function generateMetadata({ params }: PageProps<"/entry/[id]">) {
   const { id } = await params;
@@ -74,14 +80,17 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
     anilistMediaId: title.anilist_media_id,
     malMediaId: title.mal_media_id,
   });
-  // Live from MAL, falling back to the synced count if MAL is unreachable.
-  // Null for an AniList-only title, which has no MAL count to read.
+  // Live from MAL in one request: the chapter count, falling back to the
+  // synced one if MAL is unreachable, and the genres merged into the tags.
+  // Null for an AniList-only title, which has nothing on MAL to read.
+  const malLive =
+    title.mal_media_id === null
+      ? Promise.resolve(null)
+      : getMalLiveDetails(title.mal_media_id);
   const malChapters =
     title.mal_media_id === null
       ? Promise.resolve(null)
-      : getChapterCount(title.mal_media_id).then(
-          (live) => live ?? title.num_chapters,
-        );
+      : malLive.then((live) => live?.numChapters ?? title.num_chapters);
 
   // allTags is only fetched for an admin — a reader never sees the picker, so
   // there is nothing for the full tag vocabulary to do on their render.
@@ -109,13 +118,29 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
       }
     >
       <div className="grid gap-8">
-        <EntryHeader entry={entry}>
-          <EntryTags
-            titleId={title.id}
-            tags={tags}
-            allTags={allTags}
-            isAdmin={admin}
-          />
+        <EntryHeader entry={entry} formatTag={formatTagFor(title, tags)}>
+          {/* The saved tags first, then merged with both sites' live genres
+              once they answer — so a genre either site has added since the
+              last sync shows without waiting for one. */}
+          <Suspense
+            fallback={
+              <EntryTags
+                titleId={title.id}
+                tags={tags}
+                allTags={allTags}
+                isAdmin={admin}
+              />
+            }
+          >
+            <EntryTagsWithLiveGenres
+              titleId={title.id}
+              saved={tags}
+              allTags={allTags}
+              isAdmin={admin}
+              extras={anilist}
+              malLive={malLive}
+            />
+          </Suspense>
         </EntryHeader>
 
         {/* Below the header rather than inside it: EntryHeader is the shelf
@@ -217,6 +242,56 @@ async function ChapterCheck({
       <p className="text-sm text-muted-foreground">{difference}</p>
     </div>
   );
+}
+
+/**
+ * The title's tags, merged with the genres MyAnimeList and AniList give it
+ * right now.
+ *
+ * The syncs already save both sites' genres as tags; this only closes the gap
+ * until the next one. Genres are matched to tags by MAL genre id, whichever
+ * site they came from, so a genre both sites give shows once.
+ */
+async function EntryTagsWithLiveGenres({
+  saved,
+  extras,
+  malLive,
+  ...props
+}: {
+  titleId: number;
+  saved: Tag[];
+  allTags: Tag[];
+  isAdmin: boolean;
+  extras: Promise<AniListMediaExtras | null>;
+  malLive: Promise<MalLiveDetails | null>;
+}) {
+  const [media, mal] = await Promise.all([extras, malLive]);
+  const live = await getTagsForMalGenres([
+    ...(mal?.genres ?? []).map((genre) => genre.id),
+    ...malGenresFor(media?.genres).map((genre) => genre.id),
+  ]);
+
+  return (
+    <EntryTags
+      {...props}
+      tags={mergeTags(saved, live)}
+      savedTagIds={new Set(saved.map((tag) => tag.id))}
+    />
+  );
+}
+
+/**
+ * The format tag to show as the header's format badge: the one matching the
+ * title's kind (whose slug is the kind with `_` as `-`), else any format tag
+ * the title carries. Null leaves the header showing the kind as plain text.
+ */
+function formatTagFor(
+  title: { mal_media_kind: string | null },
+  tags: Tag[],
+): Tag | null {
+  const formats = tags.filter((tag) => tag.kind === "format");
+  const slug = title.mal_media_kind?.replaceAll("_", "-");
+  return formats.find((tag) => tag.slug === slug) ?? formats[0] ?? null;
 }
 
 /** AniList's reading links, offered as URLs for the sources already attached. */

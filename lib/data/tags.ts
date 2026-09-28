@@ -44,6 +44,39 @@ export async function getActiveTags(): Promise<Tag[]> {
 }
 
 /**
+ * The active tags for a set of MAL genre ids.
+ *
+ * Tags are keyed on MAL genre ids whichever site a genre came from (see
+ * lib/anilist/genres.ts), so this turns both sites' live genres into the
+ * tags the app already has. A genre with no tag yet is left out rather than
+ * created here: tags are created by the syncs, not by viewing a page.
+ *
+ * The same age gate as getActiveTags and getTagsForTitle, so a live genre can
+ * never show a chip those would hide.
+ */
+export async function getTagsForMalGenres(
+  malGenreIds: readonly number[],
+): Promise<Tag[]> {
+  if (malGenreIds.length === 0) return [];
+  const supabase = await createClient();
+
+  const [{ data, error }, hideMature] = await Promise.all([
+    supabase
+      .from("tags")
+      .select(TAG_COLUMNS)
+      .eq("is_active", true)
+      .in("mal_genre_id", [...new Set(malGenreIds)]),
+    hidesMatureTitles(),
+  ]);
+
+  // A garnish, like getTagsForTitle: the saved tags still show without these.
+  if (error) return [];
+
+  const tags = (data ?? []) as Tag[];
+  return hideMature ? tags.filter((tag) => !isExplicitKind(tag.kind)) : tags;
+}
+
+/**
  * One active tag by slug, for /discover/tag/[slug].
  *
  * Returns null for an unknown slug and for a retired tag alike, which the page

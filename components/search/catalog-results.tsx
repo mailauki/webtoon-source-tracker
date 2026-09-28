@@ -231,9 +231,7 @@ function CatalogPanel({
               key={result.key}
               result={result}
               anilistConnected={anilistConnected}
-              added={
-                result.mal_media_id !== null && added.has(result.mal_media_id)
-              }
+              added={added.has(addedKey(result))}
               // setAdded is a stable setter, so the card's effect does not
               // re-run every render. An inline closure here would give the
               // effect a new identity each time and loop forever.
@@ -244,6 +242,22 @@ function CatalogPanel({
       ) : null}
     </div>
   );
+}
+
+/**
+ * The key a row is tracked under in the panel's set of titles added this
+ * session: whichever id it actually has. AniList-only ids are negated so they
+ * cannot collide with a MAL id in the same set.
+ *
+ * One function for both the card that records an add and the panel that
+ * reads it back. They used to derive it separately, and the panel only ever
+ * looked up the MAL id — so an AniList-only title was recorded and never
+ * found, and its button said "Add" after the add had succeeded.
+ */
+export function addedKey(
+  result: Pick<MergedResult, "mal_media_id" | "anilist_media_id">,
+): number {
+  return result.mal_media_id ?? -(result.anilist_media_id ?? 0);
 }
 
 /** How a merged row's provenance reads on the card. */
@@ -298,19 +312,17 @@ function CatalogResultCard({
   const handled = useRef(false);
 
   const malId = result.mal_media_id;
-  // Rows are tracked as added by whichever id they actually have. AniList-only
-  // ids are negated so they cannot collide with a MAL id in the same set.
-  const addedKey = malId ?? -(result.anilist_media_id ?? 0);
+  const key = addedKey(result);
 
   useEffect(() => {
     if (!state?.ok || handled.current) return;
     handled.current = true;
 
-    onAdded((prev) => new Set(prev).add(addedKey));
+    onAdded((prev) => new Set(prev).add(key));
     // The action revalidated the library; pull the fresh rows in so the title
     // shows up in the half above without a manual reload.
     router.refresh();
-  }, [state, onAdded, router, addedKey]);
+  }, [state, onAdded, router, key]);
 
   const hasMismatch = result.mismatches.length > 0;
 
@@ -332,6 +344,13 @@ function CatalogResultCard({
               ? "bg-black/70 text-white/90"
               : "bg-accent/90 text-accent-foreground"
           }`}
+          // A name match is the app's inference, not AniList's own link, so
+          // it says so on hover rather than reading exactly like one.
+          title={
+            result.matched_on === "title"
+              ? "Matched by name: AniList lists no MyAnimeList entry for this title"
+              : undefined
+          }
         >
           {SOURCE_LABELS[result.source]}
         </span>

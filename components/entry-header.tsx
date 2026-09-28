@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { CoverImage } from "@/components/cover-image";
 import { ProgressBar, SourceBadges, StatStrip } from "@/components/entry-parts";
 import {
@@ -11,6 +13,7 @@ import { chapterTotal } from "@/lib/data/chapter-totals";
 import { displayTitle, secondaryTitle } from "@/lib/data/display-title";
 import type { EntryDetail } from "@/lib/data/entries";
 import { progressLabel, statusLabel } from "@/lib/data/entry-labels";
+import type { Tag } from "@/lib/data/tag-items";
 
 /**
  * The entry page's own header: the shelf row, at detail scale.
@@ -40,9 +43,16 @@ import { progressLabel, statusLabel } from "@/lib/data/entry-labels";
  */
 export function EntryHeader({
   entry,
+  formatTag,
   children,
 }: {
   entry: EntryDetail;
+  /**
+   * The title's format tag (Manhwa, Novel, …), when it has one. The format
+   * badge links to its tag page, so the badge and the tag are one control
+   * rather than two chips saying the same thing.
+   */
+  formatTag?: Tag | null;
   /** The tag row, which is interactive and so cannot be built here. */
   children?: React.ReactNode;
 }) {
@@ -116,7 +126,15 @@ export function EntryHeader({
           <Badge variant="secondary" className="rounded-pill">
             {statusLabel(entry.list_status)}
           </Badge>
-          {title.mal_media_kind ? (
+          {formatTag ? (
+            <Link href={`/discover/tag/${formatTag.slug}`}>
+              <Badge variant="outline" className="rounded-pill hover:bg-muted">
+                {formatTag.name}
+              </Badge>
+            </Link>
+          ) : title.mal_media_kind ? (
+            // No format tag to link to (retired, or a kind with none): the
+            // kind itself, as plain text.
             <Badge variant="outline" className="rounded-pill capitalize">
               {title.mal_media_kind.replace("_", " ")}
             </Badge>

@@ -39,12 +39,22 @@ import type { Tag } from "@/lib/data/tag-items";
 export function EntryTags({
   titleId,
   tags,
+  savedTagIds,
   allTags,
   isAdmin,
 }: {
   titleId: number;
-  /** Active tags already on this title. */
+  /**
+   * The title's tags: the saved ones, merged with the genres both sites give
+   * it right now (see mergeTags).
+   */
   tags: Tag[];
+  /**
+   * Which of `tags` are saved on the title. Edit mode lists only these: a
+   * genre shown only because a site gives it live has no saved link to
+   * remove. Omitted means every tag is saved.
+   */
+  savedTagIds?: ReadonlySet<number>;
   /** Every active tag, for the admin's "add a tag" picker. Empty for a reader. */
   allTags: Tag[];
   isAdmin: boolean;
@@ -54,17 +64,27 @@ export function EntryTags({
   // after, not by skipping useState.
   const [editing, setEditing] = useState(false);
 
-  if (tags.length === 0 && !isAdmin) return null;
+  // The format (Manhwa, Novel, …) is left out: the header shows it as its own
+  // badge, linking to the same tag page, so a chip here would say it twice.
+  const shown = tags.filter(
+    (tag) =>
+      tag.kind !== "format" &&
+      (!editing || !savedTagIds || savedTagIds.has(tag.id)),
+  );
+
+  if (shown.length === 0 && !isAdmin) return null;
 
   const taggedIds = new Set(tags.map((tag) => tag.id));
-  const untagged = allTags.filter((tag) => !taggedIds.has(tag.id));
+  const untagged = allTags.filter(
+    (tag) => !taggedIds.has(tag.id) && tag.kind !== "format",
+  );
 
   return (
     <section className="grid gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        {tags.length > 0 ? (
+        {shown.length > 0 ? (
           <ul className="flex flex-wrap gap-2">
-            {tags.map((tag) => (
+            {shown.map((tag) => (
               <li key={tag.id}>
                 {editing ? (
                   <RemovableTagChip titleId={titleId} tag={tag} />

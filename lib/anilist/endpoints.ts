@@ -5,6 +5,7 @@ import { AniListApiError } from "./errors";
 import {
   anilistListCollectionSchema,
   anilistMediaExtrasSchema,
+  anilistGenresByMalPageSchema,
   anilistMediaIdPageSchema,
   anilistSearchMediaSchema,
   anilistSearchPageSchema,
@@ -61,7 +62,10 @@ const LIST_QUERY = /* GraphQL */ `
             title {
               romaji
               english
+              native
             }
+            synonyms
+            genres
             format
             countryOfOrigin
             chapters
@@ -156,6 +160,56 @@ export async function findMediaByMalIds(
       for (const media of parsed.media) {
         if (media.idMal !== null && !found.has(media.idMal)) {
           found.set(media.idMal, media.id);
+        }
+      }
+      if (!parsed.pageInfo.hasNextPage) break;
+    }
+  }
+
+  return found;
+}
+
+const GENRES_BY_MAL_QUERY = /* GraphQL */ `
+  query ($ids: [Int], $page: Int) {
+    Page(page: $page, perPage: 50) {
+      pageInfo {
+        hasNextPage
+      }
+      media(idMal_in: $ids, type: MANGA) {
+        idMal
+        genres
+      }
+    }
+  }
+`;
+
+/**
+ * AniList's genres for titles MAL also has, keyed by MAL id.
+ *
+ * Anonymous, like searchManga: genres are public catalog data, so the MAL
+ * sync can ask for them whether or not the user has connected AniList. Ids
+ * AniList has no entry for are absent from the result; where AniList has two
+ * entries claiming one MAL id, the first wins, as in findMediaByMalIds.
+ */
+export async function findGenresByMalIds(
+  malIds: number[],
+): Promise<Map<number, string[]>> {
+  const found = new Map<number, string[]>();
+  const unique = [...new Set(malIds)];
+
+  for (let i = 0; i < unique.length; i += 50) {
+    const ids = unique.slice(i, i + 50);
+
+    for (let page = 1; page <= 5; page++) {
+      const raw = await anilistRequest<unknown>(null, GENRES_BY_MAL_QUERY, {
+        ids,
+        page,
+      });
+      const parsed = anilistGenresByMalPageSchema.parse(raw).Page;
+
+      for (const media of parsed.media) {
+        if (media.idMal !== null && !found.has(media.idMal)) {
+          found.set(media.idMal, media.genres ?? []);
         }
       }
       if (!parsed.pageInfo.hasNextPage) break;
@@ -288,7 +342,9 @@ const SEARCH_QUERY = /* GraphQL */ `
         title {
           romaji
           english
+          native
         }
+        synonyms
         format
         countryOfOrigin
         chapters
@@ -344,7 +400,10 @@ const MEDIA_BY_ID_QUERY = /* GraphQL */ `
       title {
         romaji
         english
+        native
       }
+      synonyms
+      genres
       format
       countryOfOrigin
       chapters
@@ -396,6 +455,7 @@ const MEDIA_EXTRAS_QUERY = /* GraphQL */ `
       id
       chapters
       status
+      genres
       externalLinks {
         url
         site

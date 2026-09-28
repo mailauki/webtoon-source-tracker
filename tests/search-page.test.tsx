@@ -234,6 +234,32 @@ describe("the library half", () => {
     expect(visibleIds()).toEqual([2]);
   });
 
+  it("matches an alternate title the card does not show", async () => {
+    const entries = [
+      ...ROWS,
+      {
+        ...row(5, "Na Honjaman Level Up"),
+        media_titles: {
+          title: "Na Honjaman Level Up",
+          title_en: null,
+          alt_titles: ["Only I Level Up"],
+          mal_media_kind: "manhwa",
+        },
+      } as unknown as LibraryRow,
+    ];
+    setup({ entries });
+    await userEvent.type(field(), "only i level");
+    expect(visibleIds()).toEqual([5]);
+  });
+
+  it("puts exact matches ahead of ones found through a typo", async () => {
+    // Row 6 has the term as typed; row 1 only matches with one letter off.
+    const entries = [row(1, "Solo Leveling"), row(6, "Solo Leveing Diaries")];
+    setup({ entries });
+    await userEvent.type(field(), "solo leveing");
+    expect(visibleIds()).toEqual([6, 1]);
+  });
+
   it("says so plainly when the shelf has no match", async () => {
     setup();
     await userEvent.type(field(), "nonesuch");
@@ -557,5 +583,28 @@ describe("the catalog half", () => {
     // One refresh, not a render loop: the effect is guarded, so the render
     // that `refresh` itself causes must not fire it again.
     await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+  });
+
+  // An AniList-only row has no MAL id, so it is tracked by its AniList id. The
+  // card used to record it that way while the panel only ever looked up the
+  // MAL id, so the add succeeded and the button kept saying "Add".
+  it("marks an AniList-only title added too", async () => {
+    addAniListEntry.mockResolvedValue({ ok: true, message: "Added", entryId: 8 });
+    mockSearch([
+      {
+        ...RESULT,
+        key: "anilist:4321",
+        source: "anilist",
+        mal_media_id: null,
+        anilist_media_id: 4321,
+      },
+    ]);
+    setup();
+    await userEvent.type(field(), "solo");
+
+    await userEvent.click(await screen.findByRole("button", { name: /^add$/i }));
+
+    expect(await screen.findByText("Added")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^add$/i })).not.toBeInTheDocument();
   });
 });
