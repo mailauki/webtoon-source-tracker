@@ -359,9 +359,9 @@ export async function syncMalList(
   }
 
   // And AniList's genres for the same titles, onto the same tags, so a title
-  // is filed under every genre either site gives it. Where the two disagree
-  // is shown on the entry page (see GenreCheck), not decided here: a genre
-  // one site gives is a reasonable place for a reader to look for it.
+  // is filed under every genre either site gives it. The two are merged,
+  // not reconciled: a genre one site gives is a reasonable place for a
+  // reader to look for the title.
   //
   // Anonymous and batched 50 ids a request, so it needs no AniList account.
   // Separate from the MAL half so either failing leaves the other's tags in

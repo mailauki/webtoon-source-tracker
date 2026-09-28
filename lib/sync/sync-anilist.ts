@@ -222,8 +222,7 @@ export async function syncAniListList(
   // missing, so a title already tagged costs one read.
   //
   // MAL-backed rows included: a title is filed under every genre either site
-  // gives it, alongside the MAL sync's own. Where the two sites disagree is
-  // shown on the entry page, not settled here.
+  // gives it, merged with the MAL sync's own.
   const genreIdMap = new Map<number, number>();
   const genreNodes = entries.flatMap((e) => {
     const row = known.get(e.mediaId);

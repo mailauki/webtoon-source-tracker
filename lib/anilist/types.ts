@@ -168,7 +168,7 @@ export const anilistMediaExtrasSchema = z.object({
   chapters: z.number().nullable(),
   status: z.string().nullable(),
   // Optional: added after the rest, and a cached response without it should
-  // still parse. Compared against MAL's on the entry page.
+  // still parse. Merged into the entry page's tags.
   genres: z.array(z.string()).nullable().optional(),
   externalLinks: z
     .array(

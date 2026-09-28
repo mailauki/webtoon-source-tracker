@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { groupByKind, slugify, sortTags, type Tag } from "@/lib/data/tag-items";
+import {
+  groupByKind,
+  mergeTags,
+  slugify,
+  sortTags,
+  type Tag,
+} from "@/lib/data/tag-items";
 
 const tag = (over: Partial<Tag> & { id: number; name: string }): Tag => ({
   slug: slugify(over.name),
@@ -66,5 +72,34 @@ describe("groupByKind", () => {
       tag({ id: 2, name: "Action", kind: "genre" }),
     ]);
     expect(groups[0].tags.map((t) => t.name)).toEqual(["Action", "Romance"]);
+  });
+});
+
+describe("mergeTags", () => {
+  const tag = (id: number, name: string, sort_order = 100): Tag => ({
+    id,
+    slug: name.toLowerCase(),
+    name,
+    description: null,
+    kind: "genre",
+    mal_genre_id: null,
+    sort_order,
+    is_active: true,
+  });
+
+  it("keeps each tag once, whichever list it came from", () => {
+    const romance = tag(1, "Romance");
+    const merged = mergeTags([romance, tag(2, "Drama")], [romance, tag(3, "Fantasy")]);
+    expect(merged.map((t) => t.id).sort()).toEqual([1, 2, 3]);
+  });
+
+  it("returns the merged tags in display order", () => {
+    const merged = mergeTags([tag(1, "Romance")], [tag(2, "Action")]);
+    expect(merged.map((t) => t.name)).toEqual(["Action", "Romance"]);
+  });
+
+  it("handles empty lists", () => {
+    expect(mergeTags([], [])).toEqual([]);
+    expect(mergeTags()).toEqual([]);
   });
 });
