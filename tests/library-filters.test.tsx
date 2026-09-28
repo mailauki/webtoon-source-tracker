@@ -108,7 +108,7 @@ async function openMenu() {
  * Both submenus contain an "All" item, so the item lookup is scoped to the
  * submenu that was just opened rather than searched for document-wide.
  */
-async function choose(group: "Status" | "Source", label: string) {
+async function choose(group: "Status" | "Source" | "Series", label: string) {
   await openMenu();
   await userEvent.click(await screen.findByRole("menuitem", { name: new RegExp(`^${group}`) }));
 
@@ -537,5 +537,81 @@ describe("the hide-adult-titles toggle", () => {
     expect(
       screen.getByRole("menuitemcheckbox", { name: "Owned only" }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("series filter", () => {
+  // 7 is finished, 8 still publishing, 9 paused upstream (still ongoing),
+  // 10 discontinued (no more chapters: completed), 11 has no status at all.
+  const withStatus = (id: number, mal_status: string | null) =>
+    ({
+      ...row(id, "reading"),
+      media_titles: { title: `Title ${id}`, title_en: null, mal_status },
+    }) as unknown as LibraryRow;
+  const SHELF = [
+    withStatus(7, "finished"),
+    withStatus(8, "currently_publishing"),
+    withStatus(9, "on_hiatus"),
+    withStatus(10, "discontinued"),
+    withStatus(11, null),
+  ];
+
+  function setupShelf(publication?: "" | "ongoing" | "completed") {
+    return render(
+      <LibraryFilters
+        initial={{ sort: DEFAULT_SORT, status: "", source: "", publication }}
+      >
+        <LibraryFilterMenu statuses={STATUSES} sources={SOURCES} />
+        <LibraryGrid
+          entries={SHELF}
+          emptyFiltered={<p>No titles match</p>}
+          emptyUnfiltered={<p>Nothing synced yet</p>}
+          isPro
+        />
+      </LibraryFilters>,
+    );
+  }
+
+  it("shows every series by default", () => {
+    setupShelf();
+    expect(visibleIds()).toEqual([7, 8, 9, 10, 11]);
+  });
+
+  it("narrows to completed series: finished or discontinued", async () => {
+    setupShelf();
+    await choose("Series", "Completed");
+    expect(visibleIds()).toEqual([7, 10]);
+  });
+
+  it("narrows to ongoing series, including one paused upstream", async () => {
+    setupShelf();
+    await choose("Series", "Ongoing");
+    expect(visibleIds()).toEqual([8, 9]);
+  });
+
+  it("saves the choice, and All as the sentinel", async () => {
+    setupShelf();
+    await choose("Series", "Ongoing");
+    expect(saveLibraryPrefs).toHaveBeenCalledWith({ publication: "ongoing" });
+
+    await choose("Series", "All");
+    expect(saveLibraryPrefs).toHaveBeenLastCalledWith({ publication: "all" });
+    expect(visibleIds()).toEqual([7, 8, 9, 10, 11]);
+  });
+
+  it("starts from the stored preference and counts it on the trigger", () => {
+    setupShelf("completed");
+    expect(visibleIds()).toEqual([7, 10]);
+    expect(
+      screen.getByRole("button", { name: /^Filters: All, 1 more active/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("is cleared along with the other filters", async () => {
+    setupShelf("completed");
+    await openMenu();
+    await userEvent.click(await screen.findByRole("menuitem", { name: /Clear/ }));
+    expect(saveLibraryPrefs).toHaveBeenCalledWith({ publication: "all" });
+    expect(visibleIds()).toEqual([7, 8, 9, 10, 11]);
   });
 });

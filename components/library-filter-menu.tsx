@@ -18,13 +18,26 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  resolvePublication,
   SORT_OPTIONS,
   type Layout,
+  type Publication,
   type SortKey,
 } from "@/lib/data/library-prefs";
 import { Button } from "./ui/button";
 
 export type FilterChip = { value: string; label: string; count?: number };
+
+/**
+ * The Series choices. "Completed" is finished or discontinued on MyAnimeList
+ * — no more chapters coming — and "Ongoing" is everything still running,
+ * including a series paused upstream. See matchesPublication.
+ */
+const PUBLICATION_OPTIONS: { value: Publication; label: string }[] = [
+  { value: "", label: "All" },
+  { value: "ongoing", label: "Ongoing" },
+  { value: "completed", label: "Completed" },
+];
 
 /**
  * Every library control, as one menu.
@@ -69,6 +82,8 @@ export function LibraryFilterMenu({
     setHideHiatus,
     ownedOnly,
     setOwnedOnly,
+    publication,
+    setPublication,
     hideNsfw,
     setHideNsfw,
     canSeeNsfw,
@@ -94,11 +109,12 @@ export function LibraryFilterMenu({
 
   // The status is named on the trigger rather than counted, so it is not
   // counted again here — otherwise "Reading" would read as "Reading 1".
-  const extras = [source, hideHiatus, ownedOnly, hideNsfw].filter(Boolean)
-    .length;
+  const extras = [source, publication, hideHiatus, ownedOnly, hideNsfw].filter(
+    Boolean,
+  ).length;
 
   const anyActive = Boolean(
-    status || source || hideHiatus || ownedOnly || hideNsfw,
+    status || source || publication || hideHiatus || ownedOnly || hideNsfw,
   );
 
   function clearAll() {
@@ -107,6 +123,7 @@ export function LibraryFilterMenu({
     // than a special-case action on the server.
     if (status) setStatus("");
     if (source) setSource("");
+    if (publication) setPublication("");
     if (hideHiatus) setHideHiatus(false);
     if (ownedOnly) setOwnedOnly(false);
     if (hideNsfw) setHideNsfw(false);
@@ -182,6 +199,36 @@ export function LibraryFilterMenu({
               {sourceChips.map((chip) => (
                 <DropdownMenuRadioItem key={chip.value || "all"} value={chip.value}>
                   {chip.label}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+
+        {/* Whether the series itself is still publishing, which the status
+            chips above cannot say: those are the reader's own progress.
+            A radio group rather than two checkboxes, because the two sides
+            exclude each other — both on would only empty the shelf. */}
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            Series
+            <span className="ml-auto pl-4 text-muted-foreground">
+              {PUBLICATION_OPTIONS.find((o) => o.value === publication)?.label}
+            </span>
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="min-w-44">
+            <DropdownMenuRadioGroup
+              value={publication}
+              onValueChange={(value) =>
+                value !== publication && setPublication(resolvePublication(value))
+              }
+            >
+              {PUBLICATION_OPTIONS.map((option) => (
+                <DropdownMenuRadioItem
+                  key={option.value || "all"}
+                  value={option.value}
+                >
+                  {option.label}
                 </DropdownMenuRadioItem>
               ))}
             </DropdownMenuRadioGroup>

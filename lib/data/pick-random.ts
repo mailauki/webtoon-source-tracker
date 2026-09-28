@@ -1,4 +1,6 @@
+import { isSeriesFinished } from "@/lib/data/chapter-totals";
 import type { LibraryRow } from "@/lib/data/entries";
+import type { Publication } from "@/lib/data/library-prefs";
 import { isMature } from "@/lib/data/nsfw";
 
 /**
@@ -26,7 +28,29 @@ export type CandidateFilters = {
    * preference rather than the gate. See lib/auth/dal.ts.
    */
   hideNsfw?: boolean;
+  /**
+   * Whether the series is still publishing: "" for both, or only ongoing or
+   * only completed titles. Off by default, like the toggles.
+   */
+  publication?: Publication;
 };
+
+/**
+ * Whether a title matches the publication filter.
+ *
+ * A title MAL gives no status matches neither side: there is no telling
+ * which it is, and guessing would put a finished series under Ongoing or the
+ * other way round. It still shows under All.
+ */
+export function matchesPublication(
+  entry: LibraryRow,
+  publication: Publication,
+): boolean {
+  if (!publication) return true;
+  const finished = isSeriesFinished(entry.media_titles?.mal_status);
+  if (finished === null) return false;
+  return publication === "completed" ? finished : !finished;
+}
 
 /**
  * Whether this title has paused everywhere it is read.
@@ -86,10 +110,12 @@ export function selectCandidates(
     hideHiatus = false,
     ownedOnly = false,
     hideNsfw = false,
+    publication = "",
   }: CandidateFilters,
 ): LibraryRow[] {
   return entries.filter((entry) => {
     if (status && entry.list_status !== status) return false;
+    if (!matchesPublication(entry, publication)) return false;
 
     // Applied before the source chip, so "Webtoon" and "hide hiatus" together
     // mean titles on Webtoon that are still updating somewhere.

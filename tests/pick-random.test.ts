@@ -4,6 +4,7 @@ import type { LibraryRow } from "@/lib/data/entries";
 import {
   isOnHiatus,
   isOwned,
+  matchesPublication,
   pickNext,
   selectByMode,
   selectCandidates,
@@ -682,6 +683,48 @@ describe("selectCandidates, hideNsfw", () => {
 
     expect(
       ids(selectCandidates(rows, { status: "reading", source: "", hideNsfw: true })),
+    ).toEqual([1]);
+  });
+});
+
+describe("matchesPublication", () => {
+  const entry = (mal_status: string | null) =>
+    ({ media_titles: { mal_status }, entry_sources: [] }) as unknown as LibraryRow;
+
+  it("matches everything when the filter is off", () => {
+    expect(matchesPublication(entry(null), "")).toBe(true);
+    expect(matchesPublication(entry("finished"), "")).toBe(true);
+  });
+
+  it("counts finished and discontinued as completed", () => {
+    expect(matchesPublication(entry("finished"), "completed")).toBe(true);
+    expect(matchesPublication(entry("discontinued"), "completed")).toBe(true);
+    expect(matchesPublication(entry("currently_publishing"), "completed")).toBe(false);
+  });
+
+  it("counts publishing, paused and upcoming series as ongoing", () => {
+    for (const status of ["currently_publishing", "on_hiatus", "not_yet_published"]) {
+      expect(matchesPublication(entry(status), "ongoing")).toBe(true);
+    }
+    expect(matchesPublication(entry("finished"), "ongoing")).toBe(false);
+  });
+
+  // No status is no answer: guessing would file a finished series under
+  // Ongoing, or the other way round.
+  it("leaves a title with no status out of both sides", () => {
+    expect(matchesPublication(entry(null), "ongoing")).toBe(false);
+    expect(matchesPublication(entry(null), "completed")).toBe(false);
+  });
+
+  it("narrows the candidates the dice draws from", () => {
+    const rows = [
+      { ...entry("finished"), id: 1, list_status: "reading" },
+      { ...entry("currently_publishing"), id: 2, list_status: "reading" },
+    ] as unknown as LibraryRow[];
+    expect(
+      selectCandidates(rows, { status: "", source: "", publication: "completed" }).map(
+        (r) => r.id,
+      ),
     ).toEqual([1]);
   });
 });

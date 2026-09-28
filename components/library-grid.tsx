@@ -14,6 +14,7 @@ import {
   serializeSort,
   sortEntries,
   type Layout,
+  type Publication,
   type Sort,
 } from "@/lib/data/library-prefs";
 import type { LibraryRow } from "@/lib/data/entries";
@@ -52,6 +53,8 @@ type Filters = {
   hideHiatus: boolean;
   ownedOnly: boolean;
   hideNsfw: boolean;
+  /** Whether the series is still publishing; "" for both. */
+  publication: Publication;
 };
 type State = Filters & { sort: Sort; layout: Layout };
 
@@ -62,8 +65,10 @@ type State = Filters & { sort: Sort; layout: Layout };
  */
 type InitialState = Omit<
   State,
-  "hideHiatus" | "ownedOnly" | "hideNsfw" | "layout"
+  "hideHiatus" | "ownedOnly" | "hideNsfw" | "layout" | "publication"
 > & {
+  /** Optional like the toggles: no stored choice shows both. */
+  publication?: Publication;
   hideHiatus?: boolean;
   ownedOnly?: boolean;
   hideNsfw?: boolean;
@@ -79,6 +84,12 @@ type LibraryFilterContext = State & {
   setHideHiatus: (value: boolean) => void;
   /** The owned toggle. A boolean too, and positive where hiatus subtracts. */
   setOwnedOnly: (value: boolean) => void;
+  /**
+   * Ongoing or completed series only, or "" for both. A chip-style value
+   * rather than two toggles: the two sides exclude each other, so both on
+   * would be an empty shelf nobody asked for.
+   */
+  setPublication: (value: Publication) => void;
   /**
    * The adult-titles toggle, for a viewer who is allowed to see them at all.
    *
@@ -164,6 +175,7 @@ export function LibraryFilters({
   // moment the write finished. Here the client is the source of truth for the
   // rest of the session, and the server value is only the seed.
   const [state, setState] = useState<State>({
+    publication: "",
     hideHiatus: false,
     ownedOnly: false,
     hideNsfw: false,
@@ -215,6 +227,7 @@ export function LibraryFilters({
         setSource: (source) => update({ source }),
         setHideHiatus: (hideHiatus) => update({ hideHiatus }),
         setOwnedOnly: (ownedOnly) => update({ ownedOnly }),
+        setPublication: (publication) => update({ publication }),
         setHideNsfw: (hideNsfw) => update({ hideNsfw }),
         canSeeNsfw,
         setSort: updateSort,
@@ -262,6 +275,7 @@ export function LibraryGrid({
     hideHiatus,
     ownedOnly,
     hideNsfw,
+    publication,
     sort,
     layout,
     selected,
@@ -276,11 +290,13 @@ export function LibraryGrid({
     hideHiatus,
     ownedOnly,
     hideNsfw,
+    publication,
   });
   const ordered = sortEntries(visible, sort);
 
   if (visible.length === 0) {
-    const narrowed = status || source || hideHiatus || ownedOnly || hideNsfw;
+    const narrowed =
+      status || source || hideHiatus || ownedOnly || hideNsfw || publication;
     return <>{narrowed ? emptyFiltered : emptyUnfiltered}</>;
   }
 

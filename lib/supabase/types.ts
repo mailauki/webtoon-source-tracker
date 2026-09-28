@@ -284,6 +284,7 @@ export type Database = {
           hide_nsfw: boolean
           layout: string | null
           owned_only: boolean
+          publication: string | null
           search_include_nsfw: boolean
           search_media_kind: string | null
           sort: string | null
@@ -297,6 +298,7 @@ export type Database = {
           hide_nsfw?: boolean
           layout?: string | null
           owned_only?: boolean
+          publication?: string | null
           search_include_nsfw?: boolean
           search_media_kind?: string | null
           sort?: string | null
@@ -310,6 +312,7 @@ export type Database = {
           hide_nsfw?: boolean
           layout?: string | null
           owned_only?: boolean
+          publication?: string | null
           search_include_nsfw?: boolean
           search_media_kind?: string | null
           sort?: string | null
