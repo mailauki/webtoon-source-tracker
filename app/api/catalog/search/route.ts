@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 
 import { AniListRateLimitError } from "@/lib/anilist/errors";
 import { anilistAltTitles } from "@/lib/anilist/catalog";
@@ -8,8 +8,10 @@ import {
   searchManga as searchAniList,
 } from "@/lib/anilist/endpoints";
 import { getOptionalSession, isAgeConfirmedAdult } from "@/lib/auth/dal";
+import { rememberNameMatches } from "@/lib/data/catalog-links";
 import {
   mergeResults,
+  nameMatchedLinks,
   type AniListHit,
   type MalHit,
 } from "@/lib/data/cross-search";
@@ -105,7 +107,17 @@ export async function GET(request: Request) {
 
   const owned = await ownedIds(malOutcome.hits, anilistOutcome.hits);
 
-  const merged = mergeResults(malOutcome.hits, anilistOutcome.hits)
+  const all = mergeResults(malOutcome.hits, anilistOutcome.hits);
+
+  // Every title the merge could only line up by name, saved onto its catalog
+  // row so the mirror and the entry page can reach AniList by id next time.
+  // Taken before the owned filter below, not after: the titles someone
+  // already tracks are exactly the ones with a catalog row to save onto.
+  // After the response, so a search never waits on a write.
+  const links = nameMatchedLinks(all);
+  if (links.length > 0) after(() => rememberNameMatches(links));
+
+  const merged = all
     // Dropped rather than flagged: everything left is something the user can
     // actually act on. A row matched only on AniList still counts as owned
     // when AniList gave it a MAL id the library already holds, and a row with

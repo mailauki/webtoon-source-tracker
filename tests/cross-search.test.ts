@@ -5,6 +5,7 @@ import {
   countUnmatchedToAniList,
   findMismatches,
   mergeResults,
+  nameMatchedLinks,
   type AniListHit,
   type MalHit,
 } from "@/lib/data/cross-search";
@@ -180,6 +181,14 @@ describe("mergeResults, lining up a missing idMal by name", () => {
     title_en: "Second Male Lead, You Said It Was a Contract Marriage?",
     alt_titles: ["서브 남주님, 계약 결혼이라면서요?"],
     media_kind: "manhwa",
+  });
+
+  it("hands the name-matched pair over to be saved, and no id-linked one", () => {
+    const merged = mergeResults(
+      [malHit, mal({ mal_media_id: 8, title: "Linked", title_en: null })],
+      [anilistHit, anilist({ anilist_media_id: 800, mal_media_id: 8, title: "Linked" })],
+    );
+    expect(nameMatchedLinks(merged)).toEqual([{ malMediaId: 7, anilistMediaId: 700 }]);
   });
 
   it("merges when a name matches exactly and the kinds agree", () => {
