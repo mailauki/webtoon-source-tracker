@@ -63,6 +63,7 @@ export async function getLibrary() {
       created_at,
       sync_to_mal,
       sync_to_anilist,
+      cover_url,
       media_titles!inner (
         id, mal_media_id, anilist_media_id, title, title_en, alt_titles,
         main_picture_url, mal_media_kind, num_chapters, num_volumes, mal_status,
@@ -189,6 +190,7 @@ export async function getEntry(entryId: number) {
       archived_at,
       sync_to_mal,
       sync_to_anilist,
+      cover_url,
       media_titles!inner (
         id, mal_media_id, anilist_media_id, title, title_en, alt_titles,
         main_picture_url, mal_media_kind, num_chapters, num_volumes, mal_status

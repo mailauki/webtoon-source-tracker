@@ -16,6 +16,7 @@ export default async function ProPage({ searchParams }: PageProps<"/pro">) {
           <li>Record which chapters you own at each source</li>
           <li>Sync to MyAnimeList and AniList at the same time</li>
           <li>Random pick: let the library choose what to read next</li>
+          <li>Choose each title&apos;s poster, from MyAnimeList, AniList or your own link</li>
         </ul>
         <p className="text-sm text-muted-foreground">
           One payment, yours for good — on the web and in the iOS app.

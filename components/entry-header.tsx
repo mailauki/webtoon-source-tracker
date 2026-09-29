@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { ownsEveryChapter } from "@/lib/data/chapter-ranges";
 import { chapterTotal } from "@/lib/data/chapter-totals";
 import { displayTitle, secondaryTitle } from "@/lib/data/display-title";
+import { entryCover } from "@/lib/data/entry-cover";
 import type { EntryDetail } from "@/lib/data/entries";
 import { progressLabel, statusLabel } from "@/lib/data/entry-labels";
 import type { Tag } from "@/lib/data/tag-items";
@@ -44,9 +45,15 @@ import type { Tag } from "@/lib/data/tag-items";
 export function EntryHeader({
   entry,
   formatTag,
+  coverAction,
   children,
 }: {
   entry: EntryDetail;
+  /**
+   * A control laid over the cover — the poster picker. A slot rather than
+   * built here, for the same reason as the tag row: it is interactive.
+   */
+  coverAction?: React.ReactNode;
   /**
    * The title's format tag (Manhwa, Novel, …), when it has one. The format
    * badge links to its tag page, so the badge and the tag are one control
@@ -93,7 +100,7 @@ export function EntryHeader({
       <div className="mx-4 mt-4 w-40 shrink-0 self-center sm:m-0 sm:bg-muted sm:w-44 sm:self-stretch">
         <div className="relative aspect-[9/16] overflow-hidden rounded-lg sm:rounded-none">
           <CoverImage
-            src={title.main_picture_url}
+            src={entryCover(entry)}
             title={name}
             sizes="176px"
             // `object-top` for the same reason the grid card uses it: a webtoon
@@ -101,6 +108,7 @@ export function EntryHeader({
             className="object-cover object-top"
             preload
           />
+          {coverAction}
         </div>
       </div>
 
