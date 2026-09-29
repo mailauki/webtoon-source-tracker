@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 
 import { AniListLinkImport } from "@/components/anilist-link-import";
 import { AppShell } from "@/components/app-shell";
+import { EntryAuthorWorks } from "@/components/entry-author-works";
 import { Button } from "@/components/ui/button";
 import { EntryCollections } from "@/components/entry-collections";
 import { EntryHeader } from "@/components/entry-header";
@@ -14,22 +15,27 @@ import { EntrySourceEditor } from "@/components/entry-source-editor";
 import { EntryTags } from "@/components/entry-tags";
 import { PosterPicker } from "@/components/poster-picker";
 import { ProgressEditor } from "@/components/progress-editor";
-import { getMediaExtras } from "@/lib/anilist/endpoints";
+import { getMediaExtras, getMediaStaff } from "@/lib/anilist/endpoints";
 import { malGenresFor } from "@/lib/anilist/genres";
 import type { AniListMediaExtras } from "@/lib/anilist/types";
 import { getMalLiveDetails, type MalLiveDetails } from "@/lib/mal/endpoints";
-import { isAdmin, verifySession } from "@/lib/auth/dal";
+import { hidesMatureTitles, isAdmin, verifySession } from "@/lib/auth/dal";
 import {
   catalogLinks,
   chapterDifference,
   higherChapterCount,
   suggestSourceLinks,
 } from "@/lib/data/anilist-links";
+import { authorWorks, relatedWorks } from "@/lib/data/author-works";
 import { chapterTotal } from "@/lib/data/chapter-totals";
 import { displayTitle } from "@/lib/data/display-title";
 import { posterOptions } from "@/lib/data/entry-cover";
 import { getCollectionTargets } from "@/lib/data/collections";
-import { getEntry, type EntryDetail } from "@/lib/data/entries";
+import {
+  getEntry,
+  getLibraryMatches,
+  type EntryDetail,
+} from "@/lib/data/entries";
 import { getIsPro } from "@/lib/data/pro";
 import { getSources } from "@/lib/data/sources";
 import { mergeTags, type Tag } from "@/lib/data/tag-items";
@@ -243,6 +249,22 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
             and which lists you filed it under is the lighter question. */}
         <EntryCollections titleId={title.id} collections={collections} />
 
+        {/* After the reader's own filing: this looks outward, at titles they
+            may not track. Pro, and only asked of AniList for Pro — without it
+            the teaser needs nothing from anywhere. */}
+        {isPro ? (
+          <Suspense fallback={null}>
+            <AuthorWorks
+              titleIds={{
+                anilistMediaId: title.anilist_media_id,
+                malMediaId: title.mal_media_id,
+              }}
+            />
+          </Suspense>
+        ) : (
+          <EntryAuthorWorks isPro={false} />
+        )}
+
         {/* Last on the page, and visually quiet: this is the one action here
             that can reach past the app and change a list on another site. */}
         <EntryRemove
@@ -359,6 +381,45 @@ function formatTagFor(
   const formats = tags.filter((tag) => tag.kind === "format");
   const slug = title.mal_media_kind?.replaceAll("_", "-");
   return formats.find((tag) => tag.slug === slug) ?? formats[0] ?? null;
+}
+
+/**
+ * The title's authors and their other works, from AniList, each linked to its
+ * entry page when the reader already tracks it.
+ *
+ * Its own AniList request rather than a field on getMediaExtras: the staff
+ * connection is the heaviest thing the page would ask for, and only Pro reads
+ * it. Streams in behind Suspense like the other AniList sections, and an
+ * unreachable AniList costs only this.
+ */
+async function AuthorWorks({
+  titleIds,
+}: {
+  titleIds: Parameters<typeof getMediaStaff>[0];
+}) {
+  const [staff, hideMature] = await Promise.all([
+    getMediaStaff(titleIds),
+    hidesMatureTitles(),
+  ]);
+  const { authors, works } = authorWorks(staff);
+
+  const library =
+    works.length === 0
+      ? []
+      : await getLibraryMatches({
+          anilistIds: works.map((work) => work.anilistId),
+          malIds: works.flatMap((work) =>
+            work.malId === null ? [] : [work.malId],
+          ),
+        });
+
+  return (
+    <EntryAuthorWorks
+      isPro
+      authors={authors}
+      works={relatedWorks(works, library, { hideMature })}
+    />
+  );
 }
 
 /** AniList's reading links, offered as URLs for the sources already attached. */

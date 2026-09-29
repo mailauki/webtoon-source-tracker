@@ -126,10 +126,10 @@ export function EntryHeader({
           ) : null}
         </div>
 
-        {/* TODO(authors): the title's author is not shown, because it is not
-            synced — so "more from this author" has nowhere to hang. See
-            TODO.md for why the storage shape is the decision, and why the
-            local catalog alone cannot answer the question honestly. */}
+        {/* TODO(authors): the title's author is not shown here, because it is
+            not synced. "More from this author" reads it live from AniList
+            further down the page (components/entry-author-works.tsx); see
+            TODO.md for why storing it is still the open decision. */}
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="secondary" className="rounded-pill">
             {statusLabel(entry.list_status)}

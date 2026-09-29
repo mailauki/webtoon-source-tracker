@@ -1,6 +1,9 @@
 import "server-only";
 
 import { hidesMatureTitles } from "@/lib/auth/dal";
+import type { LibraryMatch } from "@/lib/data/author-works";
+import { displayTitle } from "@/lib/data/display-title";
+import { entryCover } from "@/lib/data/entry-cover";
 import { MATURE_RATINGS, screenMature } from "@/lib/data/nsfw";
 import { readAllRows } from "@/lib/data/pagination";
 import { MAL_LIST_STATUSES } from "@/lib/mal/types";
@@ -155,6 +158,50 @@ export async function getStatusCounts(): Promise<Record<string, number>> {
 }
 
 /**
+ * The reader's own entries for any of these titles, by AniList or MAL id —
+ * what the entry page's "more from this author" links to.
+ *
+ * Archived entries are left out: a removed title is gone from the reader's
+ * point of view, and linking to it would send them to a restore page rather
+ * than to a title they track. A failed read is an empty shelf, not an error —
+ * every work still links out to AniList without it.
+ */
+export async function getLibraryMatches(ids: {
+  anilistIds: number[];
+  malIds: number[];
+}): Promise<LibraryMatch[]> {
+  const filters = [
+    ids.anilistIds.length > 0
+      ? `anilist_media_id.in.(${ids.anilistIds.join(",")})`
+      : null,
+    ids.malIds.length > 0 ? `mal_media_id.in.(${ids.malIds.join(",")})` : null,
+  ].filter((filter): filter is string => filter !== null);
+  if (filters.length === 0) return [];
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("user_entries")
+    .select(
+      "id, cover_url, media_titles!inner(anilist_media_id, mal_media_id, title, title_en, main_picture_url)",
+    )
+    .is("archived_at", null)
+    .or(filters.join(","), { referencedTable: "media_titles" });
+
+  if (error) {
+    console.error("[entries/library-matches] failed:", error.message);
+    return [];
+  }
+
+  return (data ?? []).map((row) => ({
+    entryId: row.id,
+    anilistMediaId: row.media_titles.anilist_media_id,
+    malMediaId: row.media_titles.mal_media_id,
+    title: displayTitle(row.media_titles),
+    cover: entryCover(row),
+  }));
+}
+
+/**
  * A single entry with its title and sources.
  *
  * Returns null when the entry does not exist OR belongs to someone else — RLS
@@ -210,3 +257,4 @@ export async function getEntry(entryId: number) {
 }
 
 export type EntryDetail = NonNullable<Awaited<ReturnType<typeof getEntry>>>;
+

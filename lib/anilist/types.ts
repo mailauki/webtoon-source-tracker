@@ -197,3 +197,67 @@ export const anilistMediaExtrasSchema = z.object({
 });
 
 export type AniListMediaExtras = z.infer<typeof anilistMediaExtrasSchema>;
+
+/**
+ * A title's authors on AniList, each with the other manga they are credited
+ * on — what the entry page's "more from this author" section reads.
+ *
+ * `role` is AniList's free-text credit ("Story", "Art", "Story & Art",
+ * "Original Creator", "Translator (English)"…), so which of these count as the
+ * title's authors is decided in lib/data/author-works.ts, not here. Everything
+ * AniList might leave out is optional: this is a hint beside the page, and a
+ * shape it did not expect should cost the hint rather than the section.
+ */
+export const anilistAuthorWorkSchema = z.object({
+  id: z.number(),
+  idMal: z.number().nullable().optional(),
+  title: z
+    .object({
+      romaji: z.string().nullable().optional(),
+      english: z.string().nullable().optional(),
+    })
+    .nullable()
+    .optional(),
+  format: z.string().nullable().optional(),
+  isAdult: z.boolean().nullable().optional(),
+  siteUrl: z.string().nullable().optional(),
+  coverImage: z
+    .object({
+      large: z.string().nullable().optional(),
+      medium: z.string().nullable().optional(),
+    })
+    .nullable()
+    .optional(),
+});
+
+export type AniListAuthorWork = z.infer<typeof anilistAuthorWorkSchema>;
+
+export const anilistMediaStaffSchema = z.object({
+  id: z.number(),
+  staff: z
+    .object({
+      edges: z
+        .array(
+          z.object({
+            role: z.string().nullable(),
+            node: z
+              .object({
+                id: z.number(),
+                name: z.object({ full: z.string().nullable() }).nullable(),
+                siteUrl: z.string().nullable().optional(),
+                staffMedia: z
+                  .object({
+                    nodes: z.array(anilistAuthorWorkSchema.nullable()).nullable(),
+                  })
+                  .nullable()
+                  .optional(),
+              })
+              .nullable(),
+          }),
+        )
+        .nullable(),
+    })
+    .nullable(),
+});
+
+export type AniListMediaStaff = z.infer<typeof anilistMediaStaffSchema>;
