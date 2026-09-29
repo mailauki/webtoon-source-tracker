@@ -142,7 +142,7 @@ describe("the chosen poster survives a sync", () => {
 describe("choosing a poster is Pro", () => {
   it("is refused by the database, but clearing one never is", async () => {
     const migration = await readFile(
-      "supabase/migrations/20260929000000_entry_cover_override.sql",
+      "supabase/migrations/20260929092641_entry_cover_override.sql",
       "utf8",
     );
 
