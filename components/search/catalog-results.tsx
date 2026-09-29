@@ -275,6 +275,14 @@ const FIELD_LABELS: Record<MergedResult["mismatches"][number]["field"], string> 
     volumes: "Volumes",
   };
 
+/**
+ * AniList's edit form for a title, where a missing MyAnimeList id can be
+ * submitted. Signing in to AniList is needed to use it.
+ */
+function anilistEditUrl(anilistMediaId: number): string {
+  return `https://anilist.co/edit/manga/${anilistMediaId}`;
+}
+
 function CatalogResultCard({
   result,
   added,
@@ -392,6 +400,25 @@ function CatalogResultCard({
             </li>
           ))}
         </ul>
+      ) : null}
+
+      {/* A name match is the app's inference: AniList itself does not link
+          this title to MyAnimeList, which is why every lookup by MAL id
+          misses it. The fix belongs on AniList, and only a person can make
+          it — AniList's API cannot edit its catalog, and changes go through
+          moderated submissions — so this hands over the one number the edit
+          needs and a way to the form. */}
+      {result.matched_on === "title" &&
+      result.anilist_media_id !== null &&
+      result.mal_media_id !== null ? (
+        <a
+          href={anilistEditUrl(result.anilist_media_id)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[10px] leading-tight text-muted-foreground underline underline-offset-2 hover:text-foreground"
+        >
+          AniList has no MAL link — suggest ID {result.mal_media_id}
+        </a>
       ) : null}
 
       {/* Results arrive already filtered to titles the user lacks, so the only

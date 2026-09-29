@@ -1,29 +1,45 @@
 /**
- * "More from this author": a title's authors, and what else they made.
+ * A title's authors, as both sites credit them, and what else they made.
  *
- * The catalog does not store authors (see TODO.md, `TODO(authors)`), and it
- * could not answer this honestly if it did — `media_titles` holds only what
- * somebody tracks, so a shelf built from it would imply the author wrote
- * nothing else. AniList can: a title's staff each carry their own credits. So
- * the works come from AniList, live, and the library only decides where each
- * one links — a title the reader tracks opens its entry page, anything else
- * opens on AniList.
+ * The catalog does not store authors (see TODO.md, `TODO(authors)`), so both
+ * halves are read live, on requests the entry page already makes:
+ *
+ * - **Who made it** comes from MyAnimeList and AniList together. The two are
+ *   lined up by name — neither site records the other's person id — and where
+ *   they disagree, about who is credited or for what, the page says so, the
+ *   same way it flags a chapter-count disagreement.
+ * - **What else they made** comes from AniList alone. MAL's v2 API has no way
+ *   to list a person's works, and `media_titles` holds only what somebody
+ *   tracks, so a shelf built from it would imply the author wrote nothing
+ *   else. AniList's staff credits carry every title. The library only decides
+ *   what each one offers: a title the reader tracks opens its entry page,
+ *   anything else can be added.
  *
  * Deliberately not `server-only`: the tests call these directly, and nothing
  * here reads anything.
  */
 
-import type { AniListMediaStaff } from "@/lib/anilist/types";
+import type { AniListMediaExtras } from "@/lib/anilist/types";
+import type { MalAuthor } from "@/lib/mal/endpoints";
 
-/** One of the title's authors. */
-export type AuthorCredit = {
-  id: number;
+type AniListStaff = NonNullable<AniListMediaExtras["staff"]>;
+
+/** One of the title's authors, with each site's credit where it has one. */
+export type MergedAuthor = {
+  /** Stable across renders: the site and that site's person id. */
+  key: string;
+  /** MyAnimeList's spelling where it has one, as elsewhere in the app. */
   name: string;
-  /** Their AniList page, where the rest of their credits are. */
-  url: string | null;
-  /** "Story", "Art"… — one person can hold both. */
+  /** The credit to show: MyAnimeList's where it has one, else AniList's. */
   roles: string[];
+  mal: { id: number; url: string; roles: string[] } | null;
+  anilist: { id: number; url: string | null; roles: string[] } | null;
 };
+
+/** Somewhere the two sites' credits for this title disagree. */
+export type AuthorMismatch =
+  | { kind: "missing"; name: string; creditedBy: "mal" | "anilist" }
+  | { kind: "roles"; name: string; mal: string; anilist: string };
 
 /** A title one of the authors is credited on, not yet matched to the library. */
 export type AuthorWork = {
@@ -33,10 +49,6 @@ export type AuthorWork = {
   format: string | null;
   cover: string | null;
   isAdult: boolean;
-  /** Where it opens when the reader does not track it. */
-  externalUrl: string;
-  /** Which of the authors it is credited to, in the authors' order. */
-  authorIds: number[];
 };
 
 /** A title on the reader's shelf, as far as matching needs it. */
@@ -66,64 +78,204 @@ export function isAuthorRole(role: string | null | undefined): boolean {
 }
 
 /**
- * The title's authors, and every other manga they are credited on.
- *
- * Staff that are not authors are dropped, and a person AniList lists twice
- * (once per role) is folded into one credit. Works are deduplicated across
- * authors — a series both the writer and the artist are credited on is one
- * work with two `authorIds` — and the title itself is left out. Order is
- * AniList's: the authors by relevance, then each one's works by popularity.
+ * A name as a comparison key: case, accents, punctuation and word order all
+ * ignored. Word order matters most — MAL stores a family and a given name
+ * and AniList one `full` string, and the two sites do not agree on which
+ * comes first for Korean and Chinese names. "Sung-Lak Jang" and "Jang
+ * Sung-lak" are one person.
  */
-export function authorWorks(staff: AniListMediaStaff | null): {
-  authors: AuthorCredit[];
-  works: AuthorWork[];
-} {
-  const authors = new Map<number, AuthorCredit>();
-  const works = new Map<number, AuthorWork>();
-  if (!staff) return { authors: [], works: [] };
+export function nameKey(name: string): string {
+  return name
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .split(/[\s,]+/)
+    .map((word) => word.replace(/[^\p{L}\p{N}]/gu, ""))
+    .filter(Boolean)
+    .sort()
+    .join(" ");
+}
 
-  for (const edge of staff.staff?.edges ?? []) {
+/**
+ * A credit reduced to what it means, for comparing across sites: "Story & Art"
+ * and a "Story" credit plus an "Art" credit are the same claim. Parentheticals
+ * ("Art (ch 1-40)") are detail one site records and the other does not.
+ */
+function roleParts(roles: string[]): string {
+  const parts = new Set<string>();
+  for (const role of roles) {
+    for (const part of role.replace(/\(.*?\)/g, "").split(/&|,|\//)) {
+      const trimmed = part.trim().toLowerCase();
+      if (!trimmed) continue;
+      // "Original Creator" is AniList's name for the writer of the source.
+      parts.add(trimmed.startsWith("original") ? "story" : trimmed);
+    }
+  }
+  return [...parts].sort().join(" & ");
+}
+
+/** Each AniList author once, with every author credit they hold. */
+function anilistAuthors(staff: AniListStaff | null | undefined) {
+  const byId = new Map<
+    number,
+    { id: number; name: string; keys: Set<string>; url: string | null; roles: string[] }
+  >();
+
+  for (const edge of staff?.edges ?? []) {
     const node = edge.node;
     if (!node || !isAuthorRole(edge.role)) continue;
 
     const role = edge.role!.trim();
-    const author = authors.get(node.id);
-    if (author) {
-      if (!author.roles.includes(role)) author.roles.push(role);
-    } else {
-      authors.set(node.id, {
-        id: node.id,
-        name: node.name?.full?.trim() || "Unknown author",
-        url: node.siteUrl ?? null,
-        roles: [role],
-      });
+    const known = byId.get(node.id);
+    if (known) {
+      if (!known.roles.includes(role)) known.roles.push(role);
+      continue;
     }
 
-    for (const media of node.staffMedia?.nodes ?? []) {
-      if (!media || media.id === staff.id) continue;
+    const names = [node.name?.full, node.name?.native, ...(node.name?.alternative ?? [])];
+    const keys = new Set(
+      names.flatMap((name) => (name?.trim() ? [nameKey(name)] : [])),
+    );
+    byId.set(node.id, {
+      id: node.id,
+      name: node.name?.full?.trim() || node.name?.native?.trim() || "Unknown author",
+      keys,
+      url: node.siteUrl ?? null,
+      roles: [role],
+    });
+  }
 
-      const known = works.get(media.id);
-      if (known) {
-        if (!known.authorIds.includes(node.id)) known.authorIds.push(node.id);
+  return [...byId.values()];
+}
+
+/**
+ * Lines up MyAnimeList's and AniList's authors for one title.
+ *
+ * Matched by name, since neither site records the other's person id: any of
+ * AniList's names for a person (full, native, alternatives) against MAL's, as
+ * `nameKey`s. Exact keys only — two people with near-identical romanised names
+ * are more likely than a typo, and fusing them would hide a real disagreement.
+ *
+ * `mal` or `anilist` null means that site did not answer, or does not have the
+ * title: its authors are then simply absent, and nothing is reported as a
+ * disagreement, because silence is not a different answer. Only when both
+ * answered does a one-sided or differently-credited author count as one.
+ *
+ * Order: MyAnimeList's credits first, then any only AniList has — the same
+ * precedence cross-search gives a merged row.
+ */
+export function mergeAuthors(
+  mal: MalAuthor[] | null,
+  anilist: AniListStaff | null | undefined,
+): { authors: MergedAuthor[]; mismatches: AuthorMismatch[] } {
+  const fromAniList = anilistAuthors(anilist);
+  const claimed = new Set<number>();
+  const authors: MergedAuthor[] = [];
+
+  // MAL lists "Story" and "Art" as separate rows for one person too.
+  const malById = new Map<number, { id: number; name: string; roles: string[] }>();
+  for (const credit of mal ?? []) {
+    const known = malById.get(credit.id);
+    const role = credit.role?.trim();
+    if (known) {
+      if (role && !known.roles.includes(role)) known.roles.push(role);
+    } else {
+      malById.set(credit.id, { id: credit.id, name: credit.name, roles: role ? [role] : [] });
+    }
+  }
+
+  for (const person of malById.values()) {
+    const key = nameKey(person.name);
+    const match = fromAniList.find(
+      (candidate) => !claimed.has(candidate.id) && candidate.keys.has(key),
+    );
+    if (match) claimed.add(match.id);
+
+    authors.push({
+      key: `mal:${person.id}`,
+      name: person.name,
+      roles: person.roles.length > 0 ? person.roles : (match?.roles ?? []),
+      mal: {
+        id: person.id,
+        url: `https://myanimelist.net/people/${person.id}`,
+        roles: person.roles,
+      },
+      anilist: match ? { id: match.id, url: match.url, roles: match.roles } : null,
+    });
+  }
+
+  for (const person of fromAniList) {
+    if (claimed.has(person.id)) continue;
+    authors.push({
+      key: `anilist:${person.id}`,
+      name: person.name,
+      roles: person.roles,
+      mal: null,
+      anilist: { id: person.id, url: person.url, roles: person.roles },
+    });
+  }
+
+  const bothAnswered = mal !== null && anilist != null;
+  const mismatches: AuthorMismatch[] = [];
+  if (bothAnswered) {
+    for (const author of authors) {
+      if (!author.mal || !author.anilist) {
+        mismatches.push({
+          kind: "missing",
+          name: author.name,
+          creditedBy: author.mal ? "mal" : "anilist",
+        });
         continue;
       }
-      works.set(media.id, {
-        anilistId: media.id,
-        malId: media.idMal ?? null,
-        title:
-          media.title?.english?.trim() ||
-          media.title?.romaji?.trim() ||
-          "Untitled",
-        format: media.format ?? null,
-        cover: media.coverImage?.large ?? media.coverImage?.medium ?? null,
-        isAdult: media.isAdult === true,
-        externalUrl: media.siteUrl ?? `https://anilist.co/manga/${media.id}`,
-        authorIds: [node.id],
+      const malRoles = roleParts(author.mal.roles);
+      const anilistRoles = roleParts(author.anilist.roles);
+      // An empty side is an unrecorded role, not a different one.
+      if (malRoles && anilistRoles && malRoles !== anilistRoles) {
+        mismatches.push({
+          kind: "roles",
+          name: author.name,
+          mal: author.mal.roles.join(", "),
+          anilist: author.anilist.roles.join(", "),
+        });
+      }
+    }
+  }
+
+  return { authors, mismatches };
+}
+
+/**
+ * Every other manga the title's authors are credited on, from AniList.
+ *
+ * Only author credits count — a translator's other work is not "more from
+ * this author". Works are deduplicated across authors (a series the writer
+ * and the artist both made appears once), and the title itself is left out.
+ * Order is AniList's: authors by relevance, then each one's works by
+ * popularity. Empty when AniList did not answer, or was not asked for works.
+ */
+export function authorWorks(
+  media: Pick<AniListMediaExtras, "id" | "staff"> | null,
+): AuthorWork[] {
+  const works = new Map<number, AuthorWork>();
+  if (!media) return [];
+
+  for (const edge of media.staff?.edges ?? []) {
+    if (!edge.node || !isAuthorRole(edge.role)) continue;
+
+    for (const work of edge.node.staffMedia?.nodes ?? []) {
+      if (!work || work.id === media.id || works.has(work.id)) continue;
+      works.set(work.id, {
+        anilistId: work.id,
+        malId: work.idMal ?? null,
+        title: work.title?.english?.trim() || work.title?.romaji?.trim() || "Untitled",
+        format: work.format ?? null,
+        cover: work.coverImage?.large ?? work.coverImage?.medium ?? null,
+        isAdult: work.isAdult === true,
       });
     }
   }
 
-  return { authors: [...authors.values()], works: [...works.values()] };
+  return [...works.values()];
 }
 
 /**
@@ -132,8 +284,8 @@ export function authorWorks(staff: AniListMediaStaff | null): {
  * A match on either id counts — a title synced from MyAnimeList may not have
  * its AniList id stored yet — and a tracked work takes the name and cover the
  * reader sees everywhere else in the app, so the same series does not look
- * like a different one here. Tracked works lead, since those are the ones
- * that link somewhere in the app; beyond that AniList's order holds.
+ * like a different one here. Tracked works lead; beyond that AniList's order
+ * holds.
  *
  * Adult works are dropped when the reader hides them, tracked or not: this is
  * a browsing surface, the same as the shelf, which hides them too.

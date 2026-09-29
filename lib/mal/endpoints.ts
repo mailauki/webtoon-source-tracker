@@ -20,10 +20,10 @@ import {
  * Fields requested for list entries — enough to render a card without extra
  * calls.
  *
- * TODO(authors): `authors{first_name,last_name}` is not here, so nothing in
- * the app knows who wrote a title and "more from this author" has no data to
- * stand on. The field rides these same pages, so asking for it costs no extra
- * requests — the work is where to store it. See TODO.md.
+ * TODO(authors): `authors{first_name,last_name}` is not here, so nothing is
+ * stored about who wrote a title — the entry page reads it live instead (see
+ * getMalLiveDetails). The field rides these same pages, so asking for it costs
+ * no extra requests; the work is where to store it. See TODO.md.
  */
 const LIST_FIELDS =
   "list_status,alternative_titles,main_picture,num_chapters,num_volumes,media_type,status,genres,nsfw";
@@ -90,13 +90,21 @@ export type MalLiveDetails = {
    * page's poster picker offers from MyAnimeList.
    */
   pictures: string[];
+  /**
+   * Who made it, as MyAnimeList credits them: `role` is "Story", "Art" or
+   * "Story & Art". The entry page's header names these, lined up against
+   * AniList's credits — see lib/data/author-works.ts.
+   */
+  authors: MalAuthor[];
 };
+
+export type MalAuthor = { id: number; name: string; role: string | null };
 
 type MalPicture = { medium?: string; large?: string };
 
 /**
- * MAL's current chapter count, genres and pictures for a title, read live with
- * the app's client id, in one request.
+ * MAL's current chapter count, genres, pictures and authors for a title, read
+ * live with the app's client id, in one request.
  *
  * The stored values are only as fresh as the last sync; the entry page's
  * chapter check and tags want today's. Null when MAL cannot be
@@ -111,8 +119,13 @@ export async function getMalLiveDetails(
       genres?: { id: number; name: string }[];
       main_picture?: MalPicture;
       pictures?: MalPicture[];
+      authors?: {
+        node?: { id: number; first_name?: string; last_name?: string };
+        role?: string | null;
+      }[];
     }>(`/manga/${mangaId}`, {
-      fields: "num_chapters,genres,main_picture,pictures",
+      fields:
+        "num_chapters,genres,main_picture,pictures,authors{first_name,last_name}",
     });
     return {
       numChapters: raw.num_chapters ?? null,
@@ -120,6 +133,17 @@ export async function getMalLiveDetails(
       pictures: [raw.main_picture, ...(raw.pictures ?? [])]
         .map((picture) => picture?.large ?? picture?.medium)
         .filter((url): url is string => Boolean(url)),
+      authors: (raw.authors ?? []).flatMap((credit) => {
+        const node = credit.node;
+        if (!node) return [];
+        // Given name first, the order AniList's `full` uses, so the two read
+        // alike side by side. MAL leaves `first_name` empty for a pen name.
+        const name = [node.first_name, node.last_name]
+          .map((part) => part?.trim())
+          .filter(Boolean)
+          .join(" ");
+        return name ? [{ id: node.id, name, role: credit.role ?? null }] : [];
+      }),
     };
   } catch (cause) {
     console.error("[mal/live] failed:", cause);

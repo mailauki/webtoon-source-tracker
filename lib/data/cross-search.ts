@@ -317,6 +317,28 @@ export function mergeResults(
 }
 
 /**
+ * The pairs a merge lined up by name alone: the two ids of every "both" row
+ * matched on title rather than on AniList's own `idMal`.
+ *
+ * These are the links nothing else in the app can find. The mirror, the
+ * syncs and the entry page all reach AniList by MAL id (`idMal`), and AniList
+ * does not have one for these titles, so each of those lookups comes back
+ * empty. Saving the pair onto the catalog row — see rememberNameMatches — is
+ * what lets them use the AniList id directly instead.
+ */
+export function nameMatchedLinks(
+  results: MergedResult[],
+): { malMediaId: number; anilistMediaId: number }[] {
+  return results.flatMap((row) =>
+    row.matched_on === "title" &&
+    row.mal_media_id !== null &&
+    row.anilist_media_id !== null
+      ? [{ malMediaId: row.mal_media_id, anilistMediaId: row.anilist_media_id }]
+      : [],
+  );
+}
+
+/**
  * The `anilist_media_id` fields to include in a catalog upsert.
  *
  * Returns an empty object rather than `{ anilist_media_id: null }` when there

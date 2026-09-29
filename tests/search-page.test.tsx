@@ -434,6 +434,23 @@ describe("the catalog half", () => {
     ).toBeInTheDocument();
   });
 
+  // A name match is the app's guess; AniList itself has no MAL id for the
+  // title. The card hands over the id and the way to AniList's edit form,
+  // and an id-linked row offers nothing, since AniList already has it.
+  it("offers to suggest the MAL id on AniList for a name match only", async () => {
+    mockSearch([
+      { ...RESULT, matched_on: "title" },
+      { ...RESULT, key: "mal:98", mal_media_id: 98, anilist_media_id: 4320, title: "Linked", matched_on: "mal_id" },
+    ]);
+    setup();
+    await userEvent.type(field(), "solo");
+
+    const link = await screen.findByRole("link", { name: /suggest ID 99/ });
+    expect(link).toHaveAttribute("href", "https://anilist.co/edit/manga/4321");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(screen.getAllByRole("link", { name: /suggest ID/ })).toHaveLength(1);
+  });
+
   // The debounce is what the old opt-in button was really buying: one request
   // for a word typed straight through, not one per character.
   it("spends one request on a word typed straight through", async () => {

@@ -6,6 +6,7 @@ import { ArrowLeft } from "lucide-react";
 import { AniListLinkImport } from "@/components/anilist-link-import";
 import { AppShell } from "@/components/app-shell";
 import { EntryAuthorWorks } from "@/components/entry-author-works";
+import { AuthorCheck, EntryAuthors } from "@/components/entry-authors";
 import { Button } from "@/components/ui/button";
 import { EntryCollections } from "@/components/entry-collections";
 import { EntryHeader } from "@/components/entry-header";
@@ -15,18 +16,27 @@ import { EntrySourceEditor } from "@/components/entry-source-editor";
 import { EntryTags } from "@/components/entry-tags";
 import { PosterPicker } from "@/components/poster-picker";
 import { ProgressEditor } from "@/components/progress-editor";
-import { getMediaExtras, getMediaStaff } from "@/lib/anilist/endpoints";
+import { getMediaExtras } from "@/lib/anilist/endpoints";
 import { malGenresFor } from "@/lib/anilist/genres";
 import type { AniListMediaExtras } from "@/lib/anilist/types";
 import { getMalLiveDetails, type MalLiveDetails } from "@/lib/mal/endpoints";
-import { hidesMatureTitles, isAdmin, verifySession } from "@/lib/auth/dal";
+import {
+  getAniListConnection,
+  hidesMatureTitles,
+  isAdmin,
+  verifySession,
+} from "@/lib/auth/dal";
 import {
   catalogLinks,
   chapterDifference,
   higherChapterCount,
   suggestSourceLinks,
 } from "@/lib/data/anilist-links";
-import { authorWorks, relatedWorks } from "@/lib/data/author-works";
+import {
+  authorWorks,
+  mergeAuthors,
+  relatedWorks,
+} from "@/lib/data/author-works";
 import { chapterTotal } from "@/lib/data/chapter-totals";
 import { displayTitle } from "@/lib/data/display-title";
 import { posterOptions } from "@/lib/data/entry-cover";
@@ -84,12 +94,16 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
 
   // Not awaited: both AniList sections below stream in behind Suspense, so a
   // slow or unreachable AniList costs those two hints and never the page.
+  // With Pro, the same request also carries each author's other works — one
+  // round trip to AniList either way.
   const anilist = getMediaExtras({
     anilistMediaId: title.anilist_media_id,
     malMediaId: title.mal_media_id,
+    withWorks: isPro,
   });
   // Live from MAL in one request: the chapter count, falling back to the
-  // synced one if MAL is unreachable, and the genres merged into the tags.
+  // synced one if MAL is unreachable, the genres merged into the tags, and
+  // the authors lined up against AniList's.
   // Null for an AniList-only title, which has nothing on MAL to read.
   const malLive =
     title.mal_media_id === null
@@ -129,6 +143,14 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
         <EntryHeader
           entry={entry}
           formatTag={formatTagFor(title, tags)}
+          // Both sites' credits, merged, once both have answered. Nothing
+          // until then: a half-list would name one author and then grow a
+          // second, which reads as the first being wrong.
+          authors={
+            <Suspense fallback={null}>
+              <AuthorsLine extras={anilist} malLive={malLive} />
+            </Suspense>
+          }
           // The stored covers first, then every poster both sites have once
           // they answer — so the picker opens at once and grows.
           coverAction={
@@ -204,6 +226,14 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
           </Suspense>
         ) : null}
 
+        {/* The same for the credits, and for the same reason only when MAL has
+            the title: with one site there is nothing to compare. */}
+        {title.mal_media_id !== null ? (
+          <Suspense fallback={null}>
+            <AuthorsCheck extras={anilist} malLive={malLive} />
+          </Suspense>
+        ) : null}
+
         {/* The stored count first, swapped for the higher of the two sites'
             once both have answered. */}
         <Suspense fallback={<ProgressEditor entry={entry} />}>
@@ -250,16 +280,11 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
         <EntryCollections titleId={title.id} collections={collections} />
 
         {/* After the reader's own filing: this looks outward, at titles they
-            may not track. Pro, and only asked of AniList for Pro — without it
-            the teaser needs nothing from anywhere. */}
+            may not track. Pro, and the works are only asked of AniList for
+            Pro — without it the teaser needs nothing from anywhere. */}
         {isPro ? (
           <Suspense fallback={null}>
-            <AuthorWorks
-              titleIds={{
-                anilistMediaId: title.anilist_media_id,
-                malMediaId: title.mal_media_id,
-              }}
-            />
+            <AuthorWorks extras={anilist} malLive={malLive} />
           </Suspense>
         ) : (
           <EntryAuthorWorks isPro={false} />
@@ -383,25 +408,53 @@ function formatTagFor(
   return formats.find((tag) => tag.slug === slug) ?? formats[0] ?? null;
 }
 
+/** Who made the title, for the header — both sites' credits, merged. */
+async function AuthorsLine({
+  extras,
+  malLive,
+}: {
+  extras: Promise<AniListMediaExtras | null>;
+  malLive: Promise<MalLiveDetails | null>;
+}) {
+  const [media, mal] = await Promise.all([extras, malLive]);
+  return <EntryAuthors authors={mergeAuthors(mal?.authors ?? null, media?.staff).authors} />;
+}
+
+/** Where MyAnimeList's credits and AniList's disagree. */
+async function AuthorsCheck({
+  extras,
+  malLive,
+}: {
+  extras: Promise<AniListMediaExtras | null>;
+  malLive: Promise<MalLiveDetails | null>;
+}) {
+  const [media, mal] = await Promise.all([extras, malLive]);
+  return <AuthorCheck mismatches={mergeAuthors(mal?.authors ?? null, media?.staff).mismatches} />;
+}
+
 /**
- * The title's authors and their other works, from AniList, each linked to its
- * entry page when the reader already tracks it.
+ * The authors' other works, from AniList, each linked to its entry page when
+ * the reader already tracks it and offered to add when they do not.
  *
- * Its own AniList request rather than a field on getMediaExtras: the staff
- * connection is the heaviest thing the page would ask for, and only Pro reads
- * it. Streams in behind Suspense like the other AniList sections, and an
- * unreachable AniList costs only this.
+ * Reads the same AniList response as the rest of the page — the works ride
+ * on it for Pro (see getMediaExtras) — so this costs one library query and
+ * no extra request to either site.
  */
 async function AuthorWorks({
-  titleIds,
+  extras,
+  malLive,
 }: {
-  titleIds: Parameters<typeof getMediaStaff>[0];
+  extras: Promise<AniListMediaExtras | null>;
+  malLive: Promise<MalLiveDetails | null>;
 }) {
-  const [staff, hideMature] = await Promise.all([
-    getMediaStaff(titleIds),
+  const [media, mal, hideMature, anilistConnection] = await Promise.all([
+    extras,
+    malLive,
     hidesMatureTitles(),
+    getAniListConnection(),
   ]);
-  const { authors, works } = authorWorks(staff);
+  const { authors } = mergeAuthors(mal?.authors ?? null, media?.staff);
+  const works = authorWorks(media);
 
   const library =
     works.length === 0
@@ -418,6 +471,7 @@ async function AuthorWorks({
       isPro
       authors={authors}
       works={relatedWorks(works, library, { hideMature })}
+      anilistConnected={anilistConnection?.status === "active"}
     />
   );
 }
