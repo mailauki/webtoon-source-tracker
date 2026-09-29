@@ -20,6 +20,7 @@
 import { ownsEveryChapter } from "@/lib/data/chapter-ranges";
 import { chapterTotal } from "@/lib/data/chapter-totals";
 import { displayTitle } from "@/lib/data/display-title";
+import { entryCover } from "@/lib/data/entry-cover";
 import type { CollectionItem } from "@/lib/data/collection-items";
 import type { LibraryRow } from "@/lib/data/entries";
 import { isMature } from "@/lib/data/nsfw";
@@ -103,7 +104,8 @@ export function entryView(row: LibraryRow): EntryView {
   return {
     titleId: title.id,
     name: displayTitle(title),
-    coverUrl: title.main_picture_url,
+    // The reader's own poster, when they picked one — see entry-cover.ts.
+    coverUrl: entryCover(row),
     malMediaId: title.mal_media_id,
     malTotal,
     total,

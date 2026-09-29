@@ -84,11 +84,19 @@ export async function getManga(client: MalClient, mangaId: number) {
 export type MalLiveDetails = {
   numChapters: number | null;
   genres: { id: number; name: string }[];
+  /**
+   * Every poster MAL has for the title — its main picture, then the rest of
+   * its gallery (later volumes, reprints) — largest size first. What the entry
+   * page's poster picker offers from MyAnimeList.
+   */
+  pictures: string[];
 };
 
+type MalPicture = { medium?: string; large?: string };
+
 /**
- * MAL's current chapter count and genres for a title, read live with the
- * app's client id, in one request.
+ * MAL's current chapter count, genres and pictures for a title, read live with
+ * the app's client id, in one request.
  *
  * The stored values are only as fresh as the last sync; the entry page's
  * chapter check and tags want today's. Null when MAL cannot be
@@ -101,8 +109,18 @@ export async function getMalLiveDetails(
     const raw = await malPublicRequest<{
       num_chapters?: number | null;
       genres?: { id: number; name: string }[];
-    }>(`/manga/${mangaId}`, { fields: "num_chapters,genres" });
-    return { numChapters: raw.num_chapters ?? null, genres: raw.genres ?? [] };
+      main_picture?: MalPicture;
+      pictures?: MalPicture[];
+    }>(`/manga/${mangaId}`, {
+      fields: "num_chapters,genres,main_picture,pictures",
+    });
+    return {
+      numChapters: raw.num_chapters ?? null,
+      genres: raw.genres ?? [],
+      pictures: [raw.main_picture, ...(raw.pictures ?? [])]
+        .map((picture) => picture?.large ?? picture?.medium)
+        .filter((url): url is string => Boolean(url)),
+    };
   } catch (cause) {
     console.error("[mal/live] failed:", cause);
     return null;

@@ -12,6 +12,7 @@ import { EntryRemove } from "@/components/entry-remove";
 import { EntrySyncStatus } from "@/components/entry-sync-status";
 import { EntrySourceEditor } from "@/components/entry-source-editor";
 import { EntryTags } from "@/components/entry-tags";
+import { PosterPicker } from "@/components/poster-picker";
 import { ProgressEditor } from "@/components/progress-editor";
 import { getMediaExtras } from "@/lib/anilist/endpoints";
 import { malGenresFor } from "@/lib/anilist/genres";
@@ -26,6 +27,7 @@ import {
 } from "@/lib/data/anilist-links";
 import { chapterTotal } from "@/lib/data/chapter-totals";
 import { displayTitle } from "@/lib/data/display-title";
+import { posterOptions } from "@/lib/data/entry-cover";
 import { getCollectionTargets } from "@/lib/data/collections";
 import { getEntry, type EntryDetail } from "@/lib/data/entries";
 import { getIsPro } from "@/lib/data/pro";
@@ -118,7 +120,37 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
       }
     >
       <div className="grid gap-8">
-        <EntryHeader entry={entry} formatTag={formatTagFor(title, tags)}>
+        <EntryHeader
+          entry={entry}
+          formatTag={formatTagFor(title, tags)}
+          // The stored covers first, then every poster both sites have once
+          // they answer — so the picker opens at once and grows.
+          coverAction={
+            <Suspense
+              fallback={
+                <PosterPicker
+                  entryId={entry.id}
+                  title={displayTitle(title)}
+                  catalog={title.main_picture_url}
+                  current={entry.cover_url}
+                  options={posterOptions({
+                    catalog: title.main_picture_url,
+                    current: entry.cover_url,
+                  })}
+                />
+              }
+            >
+              <PosterPickerWithLive
+                entryId={entry.id}
+                title={displayTitle(title)}
+                catalog={title.main_picture_url}
+                current={entry.cover_url}
+                extras={anilist}
+                malLive={malLive}
+              />
+            </Suspense>
+          }
+        >
           {/* The saved tags first, then merged with both sites' live genres
               once they answer — so a genre either site has added since the
               last sync shows without waiting for one. */}
@@ -276,6 +308,34 @@ async function EntryTagsWithLiveGenres({
       {...props}
       tags={mergeTags(saved, live)}
       savedTagIds={new Set(saved.map((tag) => tag.id))}
+    />
+  );
+}
+
+/** The poster picker, offering every poster MyAnimeList and AniList have. */
+async function PosterPickerWithLive({
+  extras,
+  malLive,
+  ...props
+}: {
+  entryId: number;
+  title: string;
+  catalog: string | null;
+  current: string | null;
+  extras: Promise<AniListMediaExtras | null>;
+  malLive: Promise<MalLiveDetails | null>;
+}) {
+  const [media, mal] = await Promise.all([extras, malLive]);
+
+  return (
+    <PosterPicker
+      {...props}
+      options={posterOptions({
+        catalog: props.catalog,
+        current: props.current,
+        myanimelist: mal?.pictures,
+        anilist: [media?.coverImage?.extraLarge ?? media?.coverImage?.large],
+      })}
     />
   );
 }

@@ -21,6 +21,7 @@ import { pickNext, selectByMode, type PickMode } from "@/lib/data/pick-random";
 import { readingLink } from "@/lib/data/source-links";
 import type { LibraryRow } from "@/lib/data/entries";
 import { displayTitle } from "@/lib/data/display-title";
+import { entryCover } from "@/lib/data/entry-cover";
 import { statusLabel } from "@/lib/data/entry-labels";
 import { cn } from "@/lib/utils";
 
@@ -244,7 +245,7 @@ function PickedTitle({
       <div className="flex gap-4">
         <div className="relative aspect-[3/4] w-24 shrink-0 overflow-hidden rounded-md bg-muted">
           <CoverImage
-            src={title.main_picture_url}
+            src={entryCover(entry)}
             title={displayTitle(title)}
             sizes="96px"
             className="object-cover"

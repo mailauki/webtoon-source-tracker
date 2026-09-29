@@ -456,6 +456,10 @@ const MEDIA_EXTRAS_QUERY = /* GraphQL */ `
       chapters
       status
       genres
+      coverImage {
+        extraLarge
+        large
+      }
       externalLinks {
         url
         site

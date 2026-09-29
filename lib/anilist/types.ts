@@ -170,6 +170,15 @@ export const anilistMediaExtrasSchema = z.object({
   // Optional: added after the rest, and a cached response without it should
   // still parse. Merged into the entry page's tags.
   genres: z.array(z.string()).nullable().optional(),
+  // Optional for the same reason. Offered by the entry page's poster picker;
+  // `extraLarge` is the one worth wearing on a card.
+  coverImage: z
+    .object({
+      extraLarge: z.string().nullable().optional(),
+      large: z.string().nullable().optional(),
+    })
+    .nullable()
+    .optional(),
   externalLinks: z
     .array(
       z.object({
