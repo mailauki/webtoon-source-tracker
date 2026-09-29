@@ -12,6 +12,7 @@ export const PRO_MESSAGES = {
   sync: "Syncing to both MyAnimeList and AniList is part of Pro.",
   pick: "Random pick is part of Pro.",
   poster: "Custom posters are part of Pro.",
+  authors: "More from the author is part of Pro.",
 } as const;
 
 export type ProFeature = keyof typeof PRO_MESSAGES;

@@ -5,6 +5,7 @@ import { AniListApiError } from "./errors";
 import {
   anilistListCollectionSchema,
   anilistMediaExtrasSchema,
+  anilistMediaStaffSchema,
   anilistGenresByMalPageSchema,
   anilistMediaIdPageSchema,
   anilistSearchMediaSchema,
@@ -13,6 +14,7 @@ import {
   type AniListListEntry,
   type AniListListStatus,
   type AniListMediaExtras,
+  type AniListMediaStaff,
   type AniListSearchMedia,
   type AniListViewer,
 } from "./types";
@@ -505,6 +507,85 @@ export async function getMediaExtras(ids: {
   } catch (cause) {
     if (!(cause instanceof AniListApiError)) {
       console.error("[anilist/extras] failed:", cause);
+    }
+    return null;
+  }
+}
+
+/**
+ * A title's staff, and each one's other manga.
+ *
+ * Staff only, not `characters` or `relations`: an author's credits are what
+ * "more from this author" means, and a sequel is already one link away on
+ * AniList. The bounds keep the nested connection inside AniList's
+ * query-complexity limit — a title rarely credits more than a handful of
+ * people ahead of its translators, and RELEVANCE puts the authors first.
+ */
+const MEDIA_STAFF_QUERY = /* GraphQL */ `
+  query ($id: Int, $idMal: Int) {
+    Media(id: $id, idMal: $idMal, type: MANGA) {
+      id
+      staff(sort: [RELEVANCE, ID], perPage: 8) {
+        edges {
+          role
+          node {
+            id
+            name {
+              full
+            }
+            siteUrl
+            staffMedia(type: MANGA, sort: POPULARITY_DESC, perPage: 25) {
+              nodes {
+                id
+                idMal
+                title {
+                  romaji
+                  english
+                }
+                format
+                isAdult
+                siteUrl
+                coverImage {
+                  large
+                  medium
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+/**
+ * A title's staff on AniList, each with the manga they are credited on, by
+ * whichever id the catalog row has. Anonymous, like getMediaExtras, and null
+ * on the same terms: no such title, or AniList cannot be reached — the entry
+ * page shows this beside everything else and must not lose anything to it.
+ */
+export async function getMediaStaff(ids: {
+  anilistMediaId: number | null;
+  malMediaId: number | null;
+}): Promise<AniListMediaStaff | null> {
+  const variables =
+    ids.anilistMediaId !== null
+      ? { id: ids.anilistMediaId }
+      : ids.malMediaId !== null
+        ? { idMal: ids.malMediaId }
+        : null;
+  if (!variables) return null;
+
+  try {
+    const raw = await anilistRequest<{ Media: unknown }>(
+      null,
+      MEDIA_STAFF_QUERY,
+      variables,
+    );
+    return raw.Media === null ? null : anilistMediaStaffSchema.parse(raw.Media);
+  } catch (cause) {
+    if (!(cause instanceof AniListApiError)) {
+      console.error("[anilist/staff] failed:", cause);
     }
     return null;
   }

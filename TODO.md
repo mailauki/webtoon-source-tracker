@@ -218,6 +218,14 @@ just narrowed it to them.
 
 ### `TODO(authors)` — "more from this author"
 
+**Partly shipped (Pro):** the entry page's "More from …" section reads the
+title's staff live from AniList — `Media.staff`, each with `staffMedia` — which
+answers the supply problem below without a catalog: AniList knows every credit,
+not just what somebody here tracks. Works the reader tracks link to their entry
+pages; the rest open on AniList. See `lib/data/author-works.ts`. What remains is
+below: the header still never names the author, and nothing is stored, so a
+title AniList does not have gets no section.
+
 **Where:** `lib/mal/endpoints.ts` (`LIST_FIELDS`), `lib/mal/types.ts`
 (`malMangaNodeSchema`), `app/entry/[id]/page.tsx`
 
