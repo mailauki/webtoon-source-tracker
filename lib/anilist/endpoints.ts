@@ -460,6 +460,7 @@ const MEDIA_EXTRAS_QUERY = /* GraphQL */ `
         extraLarge
         large
       }
+      bannerImage
       externalLinks {
         url
         site

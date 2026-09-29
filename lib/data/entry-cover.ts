@@ -30,7 +30,12 @@ export function entryCover(entry: CoverFields): string | null {
 }
 
 /** Where a candidate poster came from, which is what the picker labels it by. */
-export type PosterSource = "catalog" | "myanimelist" | "anilist" | "custom";
+export type PosterSource =
+  | "catalog"
+  | "myanimelist"
+  | "anilist"
+  | "anilist_banner"
+  | "custom";
 
 export type PosterOption = { url: string; source: PosterSource };
 
@@ -39,14 +44,18 @@ export const POSTER_SOURCE_LABELS: Record<PosterSource, string> = {
   catalog: "Default",
   myanimelist: "MyAnimeList",
   anilist: "AniList",
+  anilist_banner: "AniList banner",
   custom: "Custom",
 };
 
 /**
  * Every poster the picker can offer, deduplicated by URL, in a stable order:
  * the catalog's own first (it is what "reset" goes back to), then
- * MyAnimeList's gallery, then AniList's cover, then the reader's current
- * custom choice when it is none of those.
+ * MyAnimeList's gallery, then AniList's cover and banner, then the reader's
+ * current custom choice when it is none of those.
+ *
+ * The banner is last of the sites' because it is the worst fit: it is a wide
+ * strip, and a portrait card keeps only its middle.
  *
  * Any of the live lists may be empty — a site that could not be reached, or a
  * title only one of them has — and the picker still works with what is left.
@@ -56,11 +65,13 @@ export function posterOptions({
   current,
   myanimelist = [],
   anilist = [],
+  anilistBanner,
 }: {
   catalog: string | null;
   current: string | null;
   myanimelist?: (string | null | undefined)[];
   anilist?: (string | null | undefined)[];
+  anilistBanner?: string | null;
 }): PosterOption[] {
   const seen = new Set<string>();
   const options: PosterOption[] = [];
@@ -74,6 +85,7 @@ export function posterOptions({
   add(catalog, "catalog");
   for (const url of myanimelist) add(url, "myanimelist");
   for (const url of anilist) add(url, "anilist");
+  add(anilistBanner, "anilist_banner");
   add(current, "custom");
 
   return options;

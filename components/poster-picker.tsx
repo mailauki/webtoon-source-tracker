@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { setEntryCover, type EntryCoverState } from "@/app/actions/entry-cover";
 import { SubmitButton } from "@/components/auth/submit-button";
 import { CoverImage } from "@/components/cover-image";
+import { ProTeaser } from "@/components/pro-teaser";
 import {
   Dialog,
   DialogContent,
@@ -38,6 +39,12 @@ const CUSTOM = "custom";
  *
  * Only on the entry page, and only for a tracked title: the choice is kept on
  * the reader's own `user_entries` row, which a catalog title has none of.
+ *
+ * Choosing a poster is Pro. Without it the button still opens the dialog —
+ * that is where the feature is explained — but the dialog offers Get Pro in
+ * place of the grid, and, for a reader who chose a poster before losing Pro,
+ * a way back to the default. The database enforces the same line (see the
+ * entry_cover_override migration): setting is refused, clearing never is.
  */
 export function PosterPicker({
   entryId,
@@ -45,6 +52,7 @@ export function PosterPicker({
   catalog,
   current,
   options,
+  isPro,
 }: {
   entryId: number;
   /** The heading, for the dialog and the stand-in when there is no image. */
@@ -55,6 +63,11 @@ export function PosterPicker({
   current: string | null;
   /** Every alternative on offer. See posterOptions. */
   options: PosterOption[];
+  /**
+   * Required rather than optional, like the card's: the one caller reads it
+   * from getIsPro(), and a default would quietly pick a side.
+   */
+  isPro: boolean;
 }) {
   const id = useId();
   const [open, setOpen] = useState(false);
@@ -110,85 +123,111 @@ export function PosterPicker({
             </DialogDescription>
           </DialogHeader>
 
-          <form action={action} className="grid gap-4">
-            <input type="hidden" name="entry_id" value={entryId} />
-            <input type="hidden" name="cover_url" value={value} />
+          {isPro ? null : (
+            <div className="grid gap-3">
+              <ProTeaser feature="poster" />
+              {/* Only a reset: that is the one write a reader without Pro
+                  can make, and the one they need if a poster outlived it. */}
+              {current ? (
+                <form action={action} className="grid gap-2">
+                  <input type="hidden" name="entry_id" value={entryId} />
+                  <input type="hidden" name="cover_url" value={DEFAULT} />
+                  {state && !state.ok ? (
+                    <p role="alert" className="text-sm text-alert">
+                      {state.error}
+                    </p>
+                  ) : null}
+                  <DialogFooter>
+                    <SubmitButton className="rounded-pill border border-border bg-background text-foreground hover:bg-muted">
+                      Reset to default
+                    </SubmitButton>
+                  </DialogFooter>
+                </form>
+              ) : null}
+            </div>
+          )}
 
-            <fieldset className="grid max-h-[55vh] grid-cols-3 gap-2 overflow-y-auto p-1 sm:grid-cols-4">
-              <legend className="sr-only">Posters</legend>
+          {isPro ? (
+            <form action={action} className="grid gap-4">
+              <input type="hidden" name="entry_id" value={entryId} />
+              <input type="hidden" name="cover_url" value={value} />
 
-              <PosterTile
-                name={`${id}-poster`}
-                value={DEFAULT}
-                label={POSTER_SOURCE_LABELS.catalog}
-                src={catalog}
-                title={title}
-                checked={choice === DEFAULT}
-                onSelect={setChoice}
-              />
-              {alternatives.map((option) => (
+              <fieldset className="grid max-h-[55vh] grid-cols-3 gap-2 overflow-y-auto p-1 sm:grid-cols-4">
+                <legend className="sr-only">Posters</legend>
+
                 <PosterTile
-                  key={option.url}
                   name={`${id}-poster`}
-                  value={option.url}
-                  label={POSTER_SOURCE_LABELS[option.source]}
-                  detail={ordinal(alternatives, option)}
-                  src={option.url}
+                  value={DEFAULT}
+                  label={POSTER_SOURCE_LABELS.catalog}
+                  src={catalog}
                   title={title}
-                  checked={choice === option.url}
+                  checked={choice === DEFAULT}
                   onSelect={setChoice}
                 />
-              ))}
-              <PosterTile
-                name={`${id}-poster`}
-                value={CUSTOM}
-                label="Your link"
-                src={linkReady ? link.trim() : null}
-                title={title}
-                checked={choice === CUSTOM}
-                onSelect={setChoice}
-                empty
-              />
-            </fieldset>
+                {alternatives.map((option) => (
+                  <PosterTile
+                    key={option.url}
+                    name={`${id}-poster`}
+                    value={option.url}
+                    label={POSTER_SOURCE_LABELS[option.source]}
+                    detail={ordinal(alternatives, option)}
+                    src={option.url}
+                    title={title}
+                    checked={choice === option.url}
+                    onSelect={setChoice}
+                  />
+                ))}
+                <PosterTile
+                  name={`${id}-poster`}
+                  value={CUSTOM}
+                  label="Your link"
+                  src={linkReady ? link.trim() : null}
+                  title={title}
+                  checked={choice === CUSTOM}
+                  onSelect={setChoice}
+                  empty
+                />
+              </fieldset>
 
-            <div className="grid gap-2">
-              <Label htmlFor={`${id}-link`}>Image link</Label>
-              <Input
-                id={`${id}-link`}
-                type="url"
-                inputMode="url"
-                autoComplete="off"
-                placeholder="https://…"
-                maxLength={2048}
-                value={link}
-                onChange={(event) => {
-                  setLink(event.target.value);
-                  setChoice(CUSTOM);
-                }}
-                aria-invalid={choice === CUSTOM && link !== "" && !linkReady}
-              />
-              <p className="text-xs text-muted-foreground">
-                Paste a link to any image that starts with https://.
-              </p>
-            </div>
+              <div className="grid gap-2">
+                <Label htmlFor={`${id}-link`}>Image link</Label>
+                <Input
+                  id={`${id}-link`}
+                  type="url"
+                  inputMode="url"
+                  autoComplete="off"
+                  placeholder="https://…"
+                  maxLength={2048}
+                  value={link}
+                  onChange={(event) => {
+                    setLink(event.target.value);
+                    setChoice(CUSTOM);
+                  }}
+                  aria-invalid={choice === CUSTOM && link !== "" && !linkReady}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Paste a link to any image that starts with https://.
+                </p>
+              </div>
 
-            {state && !state.ok ? (
-              <p role="alert" className="text-sm text-alert">
-                {state.error}
-              </p>
-            ) : null}
+              {state && !state.ok ? (
+                <p role="alert" className="text-sm text-alert">
+                  {state.error}
+                </p>
+              ) : null}
 
-            <DialogFooter>
-              {/* Nothing to save when the choice is already what is stored,
-                  or the link is not one the server would take. */}
-              {choice === initial ||
-              (choice === CUSTOM && !linkReady) ? null : (
-                <SubmitButton className="rounded-pill bg-brand font-bold text-brand-foreground hover:bg-brand/90">
-                  Save poster
-                </SubmitButton>
-              )}
-            </DialogFooter>
-          </form>
+              <DialogFooter>
+                {/* Nothing to save when the choice is already what is stored,
+                    or the link is not one the server would take. */}
+                {choice === initial ||
+                (choice === CUSTOM && !linkReady) ? null : (
+                  <SubmitButton className="rounded-pill bg-brand font-bold text-brand-foreground hover:bg-brand/90">
+                    Save poster
+                  </SubmitButton>
+                )}
+              </DialogFooter>
+            </form>
+          ) : null}
         </DialogContent>
       </Dialog>
     </>

@@ -133,6 +133,7 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
                   title={displayTitle(title)}
                   catalog={title.main_picture_url}
                   current={entry.cover_url}
+                  isPro={isPro}
                   options={posterOptions({
                     catalog: title.main_picture_url,
                     current: entry.cover_url,
@@ -145,6 +146,7 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
                 title={displayTitle(title)}
                 catalog={title.main_picture_url}
                 current={entry.cover_url}
+                isPro={isPro}
                 extras={anilist}
                 malLive={malLive}
               />
@@ -312,7 +314,10 @@ async function EntryTagsWithLiveGenres({
   );
 }
 
-/** The poster picker, offering every poster MyAnimeList and AniList have. */
+/**
+ * The poster picker, offering every poster MyAnimeList and AniList have —
+ * AniList's banner included.
+ */
 async function PosterPickerWithLive({
   extras,
   malLive,
@@ -322,6 +327,7 @@ async function PosterPickerWithLive({
   title: string;
   catalog: string | null;
   current: string | null;
+  isPro: boolean;
   extras: Promise<AniListMediaExtras | null>;
   malLive: Promise<MalLiveDetails | null>;
 }) {
@@ -335,6 +341,7 @@ async function PosterPickerWithLive({
         current: props.current,
         myanimelist: mal?.pictures,
         anilist: [media?.coverImage?.extraLarge ?? media?.coverImage?.large],
+        anilistBanner: media?.bannerImage,
       })}
     />
   );

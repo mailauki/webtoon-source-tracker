@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { verifySession } from "@/lib/auth/dal";
 import { isPosterUrl } from "@/lib/data/entry-cover";
+import { isProRequired, PRO_MESSAGES } from "@/lib/pro";
 import { createClient } from "@/lib/supabase/server";
 
 export type EntryCoverState =
@@ -29,7 +30,8 @@ const coverSchema = z.object({
 });
 
 /**
- * Sets, or clears, the reader's own poster for one title.
+ * Sets, or clears, the reader's own poster for one title. Setting one is Pro;
+ * clearing one is not.
  *
  * Local only: neither MyAnimeList nor AniList has anywhere to put a
  * per-reader cover, so there is nothing to send them and nothing remote to
@@ -59,6 +61,9 @@ export async function setEntryCover(
     .eq("id", entryId)
     .select("id");
 
+  // Pro is enforced by the database (see the entry_cover_override
+  // migration), which refuses setting a poster but never clearing one.
+  if (isProRequired(error)) return { ok: false, error: PRO_MESSAGES.poster };
   if (error) return { ok: false, error: "Couldn't save the poster." };
   if (!data?.length) return { ok: false, error: "That title isn't on your shelf." };
 

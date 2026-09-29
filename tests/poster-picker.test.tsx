@@ -16,21 +16,24 @@ import { posterOptions } from "@/lib/data/entry-cover";
 const CATALOG = "https://cdn.myanimelist.net/a.jpg";
 const MAL_ALT = "https://cdn.myanimelist.net/b.jpg";
 const ANILIST = "https://s4.anilist.co/c.jpg";
+const BANNER = "https://s4.anilist.co/banner.jpg";
 
 afterEach(cleanup);
 
-function renderPicker(current: string | null = null) {
+function renderPicker(current: string | null = null, isPro = true) {
   render(
     <PosterPicker
       entryId={7}
       title="Tower of God"
       catalog={CATALOG}
       current={current}
+      isPro={isPro}
       options={posterOptions({
         catalog: CATALOG,
         current,
         myanimelist: [CATALOG, MAL_ALT],
         anilist: [ANILIST],
+        anilistBanner: BANNER,
       })}
     />,
   );
@@ -58,6 +61,7 @@ describe("PosterPicker", () => {
       "Default",
       "MyAnimeList",
       "AniList",
+      "AniList banner",
       "Your link",
     ]);
     // Nothing is saved yet, so the default is the choice and there is
@@ -70,8 +74,10 @@ describe("PosterPicker", () => {
     renderPicker();
     const user = await open();
 
-    await user.click(screen.getByRole("radio", { name: /anilist/i }));
+    await user.click(screen.getByRole("radio", { name: "AniList" }));
     expect(postedCover()).toBe(ANILIST);
+    await user.click(screen.getByRole("radio", { name: "AniList banner" }));
+    expect(postedCover()).toBe(BANNER);
     expect(screen.getByRole("button", { name: /save poster/i })).toBeVisible();
   });
 
@@ -103,7 +109,7 @@ describe("PosterPicker", () => {
     renderPicker();
     const user = await open();
 
-    await user.click(screen.getByRole("radio", { name: /anilist/i }));
+    await user.click(screen.getByRole("radio", { name: "AniList" }));
     await user.click(screen.getByRole("button", { name: /save poster/i }));
 
     const [, formData] = vi.mocked(setEntryCover).mock.calls.at(-1)!;
@@ -111,5 +117,31 @@ describe("PosterPicker", () => {
     expect(formData.get("cover_url")).toBe(ANILIST);
     expect(await screen.findByRole("button", { name: /change poster/i })).toBeVisible();
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});
+
+describe("PosterPicker without Pro", () => {
+  it("offers Get Pro instead of the posters", async () => {
+    renderPicker(null, false);
+    await open();
+
+    expect(screen.queryAllByRole("radio")).toHaveLength(0);
+    expect(screen.queryByLabelText("Image link")).toBeNull();
+    expect(screen.getByRole("link", { name: /get pro/i })).toHaveAttribute(
+      "href",
+      "/pro",
+    );
+    // Nothing chosen, so nothing to reset.
+    expect(screen.queryByRole("button", { name: /reset/i })).toBeNull();
+  });
+
+  it("can still go back to the default after losing Pro", async () => {
+    renderPicker(MAL_ALT, false);
+    const user = await open();
+
+    await user.click(screen.getByRole("button", { name: /reset to default/i }));
+
+    const [, formData] = vi.mocked(setEntryCover).mock.calls.at(-1)!;
+    expect(formData.get("cover_url")).toBe("");
   });
 });

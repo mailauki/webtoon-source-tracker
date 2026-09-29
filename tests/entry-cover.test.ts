@@ -86,6 +86,25 @@ describe("posterOptions", () => {
   });
 });
 
+describe("the AniList banner", () => {
+  it("is offered after the sites' posters, once", () => {
+    const banner = "https://s4.anilist.co/banner.jpg";
+    const options = posterOptions({
+      catalog: CATALOG,
+      current: banner,
+      anilist: ["https://s4.anilist.co/c.jpg"],
+      anilistBanner: banner,
+    });
+
+    // A saved banner stays labelled as the banner, not as a custom link.
+    expect(options.map((option) => option.source)).toEqual([
+      "catalog",
+      "anilist",
+      "anilist_banner",
+    ]);
+  });
+});
+
 describe("isPosterUrl", () => {
   it("accepts https links", () => {
     expect(isPosterUrl(CHOSEN)).toBe(true);
@@ -117,5 +136,26 @@ describe("the chosen poster survives a sync", () => {
   it("is read by both queries that draw a tracked title", async () => {
     const entries = await readFile("lib/data/entries.ts", "utf8");
     expect(entries.match(/^\s+cover_url,$/gm) ?? []).toHaveLength(2);
+  });
+});
+
+describe("choosing a poster is Pro", () => {
+  it("is refused by the database, but clearing one never is", async () => {
+    const migration = await readFile(
+      "supabase/migrations/20260929000000_entry_cover_override.sql",
+      "utf8",
+    );
+
+    // PT402 is what lib/pro.ts recognises and turns into the Get Pro message.
+    expect(migration).toContain("errcode = 'PT402'");
+    // Gated on a non-null poster, so a reader who lost Pro can still reset.
+    expect(migration).toMatch(/if new\.cover_url is not null/);
+    expect(migration).toContain("private.has_pro(new.user_id)");
+  });
+
+  it("is reported with the Pro message, not a generic failure", async () => {
+    const action = await readFile("app/actions/entry-cover.ts", "utf8");
+    expect(action).toContain("isProRequired(error)");
+    expect(action).toContain("PRO_MESSAGES.poster");
   });
 });

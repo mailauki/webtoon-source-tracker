@@ -179,6 +179,9 @@ export const anilistMediaExtrasSchema = z.object({
     })
     .nullable()
     .optional(),
+  // The wide strip across the top of AniList's page. Also offered as a
+  // poster, though a card shows only the middle of it.
+  bannerImage: z.string().nullable().optional(),
   externalLinks: z
     .array(
       z.object({

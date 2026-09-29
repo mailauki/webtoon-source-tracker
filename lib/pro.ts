@@ -11,6 +11,7 @@ export const PRO_MESSAGES = {
   owned: "Owned chapters are part of Pro.",
   sync: "Syncing to both MyAnimeList and AniList is part of Pro.",
   pick: "Random pick is part of Pro.",
+  poster: "Custom posters are part of Pro.",
 } as const;
 
 export type ProFeature = keyof typeof PRO_MESSAGES;

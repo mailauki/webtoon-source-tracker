@@ -11,6 +11,6 @@ describe("isProRequired", () => {
   });
 
   it("has a message for each gated feature", () => {
-    expect(Object.keys(PRO_MESSAGES).sort()).toEqual(["owned", "pick", "sync"]);
+    expect(Object.keys(PRO_MESSAGES).sort()).toEqual(["owned", "pick", "poster", "sync"]);
   });
 });
