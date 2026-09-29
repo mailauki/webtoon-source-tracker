@@ -46,6 +46,7 @@ export function EntryHeader({
   entry,
   formatTag,
   coverAction,
+  authors,
   children,
 }: {
   entry: EntryDetail;
@@ -60,6 +61,11 @@ export function EntryHeader({
    * rather than two chips saying the same thing.
    */
   formatTag?: Tag | null;
+  /**
+   * Who made the title. A slot rather than built here: the credits are read
+   * live from both sites, so they stream in after the header has painted.
+   */
+  authors?: React.ReactNode;
   /** The tag row, which is interactive and so cannot be built here. */
   children?: React.ReactNode;
 }) {
@@ -124,12 +130,9 @@ export function EntryHeader({
           {alsoKnownAs ? (
             <p className="text-sm text-muted-foreground">{alsoKnownAs}</p>
           ) : null}
+          {authors}
         </div>
 
-        {/* TODO(authors): the title's author is not shown here, because it is
-            not synced. "More from this author" reads it live from AniList
-            further down the page (components/entry-author-works.tsx); see
-            TODO.md for why storing it is still the open decision. */}
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="secondary" className="rounded-pill">
             {statusLabel(entry.list_status)}
