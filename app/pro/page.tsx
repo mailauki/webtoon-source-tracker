@@ -20,7 +20,7 @@ export default async function ProPage({ searchParams }: PageProps<"/pro">) {
           <li>More from the author: every title&apos;s authors, and what else they made</li>
         </ul>
         <p className="text-sm text-muted-foreground">
-          One payment, yours for good — on the web and in the iOS app.
+          One payment, yours for good — on the web and in the iOS app, on the same account.
         </p>
 
         {isPro ? (
@@ -37,9 +37,6 @@ export default async function ProPage({ searchParams }: PageProps<"/pro">) {
             <Button type="submit">Get Pro</Button>
           </form>
         )}
-        <p className="text-sm text-muted-foreground">
-          Also available as an in-app purchase in the iOS app.
-        </p>
       </div>
     </AppShell>
   );

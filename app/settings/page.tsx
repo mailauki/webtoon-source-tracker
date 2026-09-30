@@ -85,6 +85,24 @@ export default async function SettingsPage({
           <LinkedLogins identities={identities} />
         </section>
 
+        <section className="grid gap-3">
+          <div>
+            <h2 className="font-display text-lg font-semibold">Pro</h2>
+            <p className="text-sm text-muted-foreground">
+              {isPro
+                ? "Pro is on for this account — here and in the iOS app."
+                : "Owned chapters, syncing to both MyAnimeList and AniList, and more. One payment, yours for good."}
+            </p>
+          </div>
+          {isPro ? null : (
+            <div>
+              <Button asChild variant="outline" size="sm" className="rounded-pill">
+                <Link href="/pro">Get Pro</Link>
+              </Button>
+            </div>
+          )}
+        </section>
+
         {!hasPassword ? (
           <section className="grid gap-3">
             <div>
