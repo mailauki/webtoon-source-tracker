@@ -20,7 +20,8 @@ const writer: MergedAuthor = {
   name: "Writer",
   roles: ["Story"],
   mal: { id: 1, url: "https://myanimelist.net/people/1", roles: ["Story"] },
-  anilist: { id: 10, url: "https://anilist.co/staff/10", roles: ["Story"] },
+  anilist: { id: 10, name: "Writer", url: "https://anilist.co/staff/10", roles: ["Story"] },
+  matchedOn: "name",
 };
 
 function work(anilistId: number, entryId: number | null, malId: number | null = anilistId + 1000): RelatedWork {
@@ -87,13 +88,32 @@ describe("EntryAuthors", () => {
       name: "Artist",
       roles: ["Art"],
       mal: null,
-      anilist: { id: 20, url: "https://anilist.co/staff/20", roles: ["Art"] },
+      anilist: { id: 20, name: "Artist", url: "https://anilist.co/staff/20", roles: ["Art"] },
+      matchedOn: null,
     };
     render(<EntryAuthors authors={[writer, artist]} />);
 
     expect(screen.getByRole("link", { name: "Writer" })).toHaveAttribute("href", "https://myanimelist.net/people/1");
     expect(screen.getByRole("link", { name: "Artist" })).toHaveAttribute("href", "https://anilist.co/staff/20");
     expect(screen.getByText(/By/)).toHaveTextContent("By Writer (Story), Artist (Art)");
+  });
+
+  it("shows AniList's spelling on hover, only when the sites spell the name differently", () => {
+    const spelled: MergedAuthor = {
+      ...writer,
+      key: "mal:2",
+      name: "Sung-Lak Jang",
+      mal: { id: 2, url: "https://myanimelist.net/people/2", roles: ["Art"] },
+      anilist: { id: 20, name: "Seong-Rak Jang", url: "https://anilist.co/staff/20", roles: ["Art"] },
+      matchedOn: "spelling",
+    };
+    render(<EntryAuthors authors={[writer, spelled]} />);
+
+    expect(screen.getByRole("link", { name: "Sung-Lak Jang" })).toHaveAttribute(
+      "title",
+      "Spelled Seong-Rak Jang on AniList",
+    );
+    expect(screen.getByRole("link", { name: "Writer" })).not.toHaveAttribute("title");
   });
 
   it("renders nothing without authors", () => {

@@ -33,7 +33,14 @@ export type MergedAuthor = {
   /** The credit to show: MyAnimeList's where it has one, else AniList's. */
   roles: string[];
   mal: { id: number; url: string; roles: string[] } | null;
-  anilist: { id: number; url: string | null; roles: string[] } | null;
+  anilist: { id: number; name: string; url: string | null; roles: string[] } | null;
+  /**
+   * How the two sites' credits were lined up: the same name once case, accents,
+   * punctuation and word order are set aside, or — for a name the two sites
+   * romanise differently — the same sound. See mergeAuthors. Null for an
+   * author only one site credits.
+   */
+  matchedOn: "name" | "spelling" | null;
 };
 
 /** Somewhere the two sites' credits for this title disagree. */
@@ -97,6 +104,80 @@ export function nameKey(name: string): string {
 }
 
 /**
+ * Letters that romanisations swap for one another, folded to one. Korean is
+ * the main case: Revised Romanization and the older McCune–Reischauer write
+ * one syllable as "Seong" or "Sung", "Rak" or "Lak", "Gim" or "Kim", "Bak" or
+ * "Park" — and MyAnimeList and AniList each keep whichever spelling the
+ * contributor typed. Pinyin's z/zh/q against Wade–Giles's ch/ts is the same
+ * problem for Chinese names.
+ */
+const SOUND_FOLDS: Record<string, string> = {
+  r: "l",
+  b: "p",
+  f: "p",
+  v: "p",
+  g: "k",
+  q: "c",
+  d: "t",
+  j: "c",
+  z: "c",
+  x: "s",
+};
+
+/**
+ * A name's consonants, folded: what is left once the letters romanisations
+ * disagree about are gone. Vowels go entirely ("eo" against "u" is most of
+ * the variation), as do y, w and h, which romanisations add and drop freely
+ * ("Choi"/"Choe", "Hwang"/"Whang"), and a doubled letter counts once.
+ *
+ * Takes the whole name run together, so a syllable break the two sites place
+ * differently does not change what counts as "before a vowel".
+ */
+function consonants(part: string): string {
+  let out = "";
+  for (const [i, letter] of [...part].entries()) {
+    if (!/[a-z]/.test(letter) || "aeiouywh".includes(letter)) continue;
+    // An "r" with no vowel after it is spelling, not sound: "Park" is the
+    // same surname as "Bak" and "Pak". Before a vowel it is a real consonant
+    // ("Rak"), folded to "l" below.
+    if (letter === "r" && !"aeiou".includes(part[i + 1] ?? "")) continue;
+    const folded = SOUND_FOLDS[letter] ?? letter;
+    if (out.at(-1) !== folded) out += folded;
+  }
+  return out;
+}
+
+/**
+ * The keys a name can be lined up on by sound, for spellings `nameKey`
+ * cannot equate.
+ *
+ * Built from the whole name run together, so a syllable break the two sites
+ * place differently ("Sung Lak" against "Sung-lak") does not matter, in every
+ * rotation of its parts, so family-name-first and family-name-last are the
+ * same key ("Jang Sung-lak", "Sung-lak Jang"). Latin letters only: a native-
+ * script name has no romanisation to disagree about, and `nameKey` already
+ * matches it exactly. A key under three consonants is dropped — "Lee" and
+ * "Yi", or "Oda" and "Ueda", leave too little to tell people apart.
+ */
+export function soundKeys(name: string): Set<string> {
+  const parts = name
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .split(/[\s,]+/)
+    .map((part) => part.replace(/[^a-z]/g, ""))
+    .filter(Boolean);
+
+  const keys = new Set<string>();
+  for (let i = 0; i < parts.length; i++) {
+    const rotated = [...parts.slice(i), ...parts.slice(0, i)];
+    const key = consonants(rotated.join(""));
+    if (key.length >= 3) keys.add(key);
+  }
+  return keys;
+}
+
+/**
  * A credit reduced to what it means, for comparing across sites: "Story & Art"
  * and a "Story" credit plus an "Art" credit are the same claim. Parentheticals
  * ("Art (ch 1-40)") are detail one site records and the other does not.
@@ -118,7 +199,14 @@ function roleParts(roles: string[]): string {
 function anilistAuthors(staff: AniListStaff | null | undefined) {
   const byId = new Map<
     number,
-    { id: number; name: string; keys: Set<string>; url: string | null; roles: string[] }
+    {
+      id: number;
+      name: string;
+      keys: Set<string>;
+      sounds: Set<string>;
+      url: string | null;
+      roles: string[];
+    }
   >();
 
   for (const edge of staff?.edges ?? []) {
@@ -133,13 +221,12 @@ function anilistAuthors(staff: AniListStaff | null | undefined) {
     }
 
     const names = [node.name?.full, node.name?.native, ...(node.name?.alternative ?? [])];
-    const keys = new Set(
-      names.flatMap((name) => (name?.trim() ? [nameKey(name)] : [])),
-    );
+    const present = names.filter((name): name is string => Boolean(name?.trim()));
     byId.set(node.id, {
       id: node.id,
       name: node.name?.full?.trim() || node.name?.native?.trim() || "Unknown author",
-      keys,
+      keys: new Set(present.map(nameKey)),
+      sounds: new Set(present.flatMap((name) => [...soundKeys(name)])),
       url: node.siteUrl ?? null,
       roles: [role],
     });
@@ -151,15 +238,29 @@ function anilistAuthors(staff: AniListStaff | null | undefined) {
 /**
  * Lines up MyAnimeList's and AniList's authors for one title.
  *
- * Matched by name, since neither site records the other's person id: any of
- * AniList's names for a person (full, native, alternatives) against MAL's, as
- * `nameKey`s. Exact keys only — two people with near-identical romanised names
- * are more likely than a typo, and fusing them would hide a real disagreement.
+ * Matched by name, since neither site records the other's person id, in two
+ * passes — the same shape cross-search uses to line up titles:
+ *
+ * 1. **The same name**: any of AniList's names for a person (full, native,
+ *    alternatives) against MAL's, as `nameKey`s — case, accents, punctuation
+ *    and word order ignored, nothing else.
+ * 2. **The same sound**, for authors the first pass left over: the two sites
+ *    often romanise one Korean or Chinese name differently ("Sung-Lak Jang"
+ *    and "Seong-Rak Jang"), and without this the page named one person twice
+ *    and called the sites' credits different. Looser, so stricter about
+ *    everything else. A pair merges only when their `soundKeys` meet, their
+ *    roles do not contradict each other, and the match is unambiguous both
+ *    ways — exactly one AniList candidate for the MAL author, and that
+ *    candidate has no other MAL one. Two people whose names sound alike stay
+ *    two people.
  *
  * `mal` or `anilist` null means that site did not answer, or does not have the
  * title: its authors are then simply absent, and nothing is reported as a
  * disagreement, because silence is not a different answer. Only when both
- * answered does a one-sided or differently-credited author count as one.
+ * answered does a one-sided or differently-credited author count as one. A
+ * different spelling is not a disagreement about who made the title, so it is
+ * not reported as one; `anilist.name` keeps AniList's spelling for the page
+ * to show.
  *
  * Order: MyAnimeList's credits first, then any only AniList has — the same
  * precedence cross-search gives a merged row.
@@ -169,8 +270,6 @@ export function mergeAuthors(
   anilist: AniListStaff | null | undefined,
 ): { authors: MergedAuthor[]; mismatches: AuthorMismatch[] } {
   const fromAniList = anilistAuthors(anilist);
-  const claimed = new Set<number>();
-  const authors: MergedAuthor[] = [];
 
   // MAL lists "Story" and "Art" as separate rows for one person too.
   const malById = new Map<number, { id: number; name: string; roles: string[] }>();
@@ -183,14 +282,58 @@ export function mergeAuthors(
       malById.set(credit.id, { id: credit.id, name: credit.name, roles: role ? [role] : [] });
     }
   }
+  const malPeople = [...malById.values()];
 
-  for (const person of malById.values()) {
+  type AniListPerson = (typeof fromAniList)[number];
+  const links = new Map<number, { person: AniListPerson; on: "name" | "spelling" }>();
+  const claimed = new Set<number>();
+
+  // Pass 1: the same name.
+  for (const person of malPeople) {
     const key = nameKey(person.name);
     const match = fromAniList.find(
       (candidate) => !claimed.has(candidate.id) && candidate.keys.has(key),
     );
-    if (match) claimed.add(match.id);
+    if (!match) continue;
+    claimed.add(match.id);
+    links.set(person.id, { person: match, on: "name" });
+  }
 
+  // Pass 2: the same sound, over whoever pass 1 left unmatched on both sides.
+  const rolesAgree = (a: string[], b: string[]) => {
+    const left = roleParts(a);
+    const right = roleParts(b);
+    // An unrecorded role is not a contradicting one.
+    return !left || !right || left === right;
+  };
+  const candidates = new Map<number, AniListPerson[]>();
+  for (const person of malPeople) {
+    if (links.has(person.id)) continue;
+    const sounds = soundKeys(person.name);
+    candidates.set(
+      person.id,
+      fromAniList.filter(
+        (candidate) =>
+          !claimed.has(candidate.id) &&
+          [...sounds].some((key) => candidate.sounds.has(key)) &&
+          rolesAgree(person.roles, candidate.roles),
+      ),
+    );
+  }
+  for (const [malId, found] of candidates) {
+    if (found.length !== 1) continue;
+    const [match] = found;
+    // The other direction: no second MAL author claims this person too.
+    const rivals = [...candidates.values()].filter((list) => list.includes(match));
+    if (rivals.length !== 1) continue;
+    claimed.add(match.id);
+    links.set(malId, { person: match, on: "spelling" });
+  }
+
+  const authors: MergedAuthor[] = [];
+  for (const person of malPeople) {
+    const link = links.get(person.id);
+    const match = link?.person;
     authors.push({
       key: `mal:${person.id}`,
       name: person.name,
@@ -200,7 +343,10 @@ export function mergeAuthors(
         url: `https://myanimelist.net/people/${person.id}`,
         roles: person.roles,
       },
-      anilist: match ? { id: match.id, url: match.url, roles: match.roles } : null,
+      anilist: match
+        ? { id: match.id, name: match.name, url: match.url, roles: match.roles }
+        : null,
+      matchedOn: link?.on ?? null,
     });
   }
 
@@ -211,7 +357,8 @@ export function mergeAuthors(
       name: person.name,
       roles: person.roles,
       mal: null,
-      anilist: { id: person.id, url: person.url, roles: person.roles },
+      anilist: { id: person.id, name: person.name, url: person.url, roles: person.roles },
+      matchedOn: null,
     });
   }
 
