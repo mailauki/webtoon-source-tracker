@@ -5,8 +5,11 @@ import type { AuthorMismatch, MergedAuthor } from "@/lib/data/author-works";
  * credit them together (see mergeAuthors).
  *
  * Each name links to that person's page on MyAnimeList where it has one, else
- * on AniList — where the rest of their work is listed. Renders nothing when
- * neither site credits anyone, rather than an empty "By".
+ * on AniList — where the rest of their work is listed. Where the two sites
+ * spell the name differently, the other spelling is on hover: it is the same
+ * person, so it is not a disagreement worth the alert below, but it is how
+ * AniList will list them. Renders nothing when neither site credits anyone,
+ * rather than an empty "By".
  */
 export function EntryAuthors({ authors }: { authors: MergedAuthor[] }) {
   if (authors.length === 0) return null;
@@ -16,6 +19,10 @@ export function EntryAuthors({ authors }: { authors: MergedAuthor[] }) {
       By{" "}
       {authors.map((author, i) => {
         const url = author.mal?.url ?? author.anilist?.url ?? null;
+        const alsoSpelled =
+          author.matchedOn === "spelling" && author.anilist
+            ? `Spelled ${author.anilist.name} on AniList`
+            : undefined;
         return (
           <span key={author.key}>
             {i > 0 ? ", " : null}
@@ -24,12 +31,15 @@ export function EntryAuthors({ authors }: { authors: MergedAuthor[] }) {
                 href={url}
                 target="_blank"
                 rel="noopener noreferrer"
+                title={alsoSpelled}
                 className="font-medium text-foreground underline-offset-4 hover:underline"
               >
                 {author.name}
               </a>
             ) : (
-              <span className="font-medium text-foreground">{author.name}</span>
+              <span title={alsoSpelled} className="font-medium text-foreground">
+                {author.name}
+              </span>
             )}
             {author.roles.length > 0 ? ` (${author.roles.join(", ")})` : null}
           </span>

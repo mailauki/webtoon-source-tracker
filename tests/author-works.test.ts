@@ -7,6 +7,7 @@ import {
   mergeAuthors,
   nameKey,
   relatedWorks,
+  soundKeys,
   type LibraryMatch,
 } from "@/lib/data/author-works";
 
@@ -74,6 +75,26 @@ describe("nameKey", () => {
   });
 });
 
+describe("soundKeys", () => {
+  it("equates the spellings romanisations disagree about", () => {
+    const shared = (a: string, b: string) =>
+      [...soundKeys(a)].some((key) => soundKeys(b).has(key));
+
+    expect(shared("Sung-Lak Jang", "Seong-Rak Jang")).toBe(true);
+    // Family name first on one site, last on the other, with a different break.
+    expect(shared("Jang Sung-lak", "Seong Rak Jang")).toBe(true);
+    expect(shared("Park Tae-joon", "Bak Tae-jun")).toBe(true);
+    expect(shared("Choi Yong-je", "Choe Yong-jae")).toBe(true);
+    expect(shared("Sung-Lak Jang", "Sung-Min Jang")).toBe(false);
+  });
+
+  it("drops names too short to tell people apart, and native script", () => {
+    expect(soundKeys("Lee")).toEqual(new Set());
+    expect(soundKeys("Oda")).toEqual(new Set());
+    expect(soundKeys("장성락")).toEqual(new Set());
+  });
+});
+
 describe("mergeAuthors", () => {
   it("lines MAL's authors up with AniList's by any of AniList's names", () => {
     const { authors, mismatches } = mergeAuthors(
@@ -97,6 +118,51 @@ describe("mergeAuthors", () => {
     expect(authors[0].mal?.url).toBe("https://myanimelist.net/people/1");
     // "Original Creator" is AniList's word for the writer: no disagreement.
     expect(mismatches).toEqual([]);
+  });
+
+  it("lines up a name the two sites romanise differently, and says how", () => {
+    const { authors, mismatches } = mergeAuthors(
+      [
+        { id: 1, name: "Chugong", role: "Story" },
+        { id: 2, name: "Sung-Lak Jang", role: "Art" },
+      ],
+      { edges: [edge("Original Creator", 10, "Chugong"), edge("Art", 20, "Seong-Rak Jang")] },
+    );
+
+    expect(authors.map((a) => [a.name, a.anilist?.name, a.matchedOn])).toEqual([
+      ["Chugong", "Chugong", "name"],
+      ["Sung-Lak Jang", "Seong-Rak Jang", "spelling"],
+    ]);
+    // A spelling is not a disagreement about who made the title.
+    expect(mismatches).toEqual([]);
+  });
+
+  it("does not merge by sound when the roles contradict", () => {
+    const { authors, mismatches } = mergeAuthors(
+      [{ id: 2, name: "Sung-Lak Jang", role: "Story" }],
+      { edges: [edge("Art", 20, "Seong-Rak Jang")] },
+    );
+    expect(authors.map((a) => a.matchedOn)).toEqual([null, null]);
+    expect(mismatches.map((m) => m.kind)).toEqual(["missing", "missing"]);
+  });
+
+  it("does not merge by sound when the match is ambiguous either way", () => {
+    // Two AniList people who sound like the one MAL author.
+    const twoCandidates = mergeAuthors(
+      [{ id: 2, name: "Sung-Lak Jang", role: "Art" }],
+      { edges: [edge("Art", 20, "Seong-Rak Jang"), edge("Art", 21, "Sung-Rak Jang")] },
+    );
+    expect(twoCandidates.authors.every((a) => a.matchedOn === null)).toBe(true);
+
+    // Two MAL authors who sound like the one AniList person.
+    const twoClaimants = mergeAuthors(
+      [
+        { id: 2, name: "Sung-Lak Jang", role: "Art" },
+        { id: 3, name: "Seong-Lak Jang", role: "Art" },
+      ],
+      { edges: [edge("Art", 20, "Seong-Rak Jang")] },
+    );
+    expect(twoClaimants.authors.every((a) => a.matchedOn === null)).toBe(true);
   });
 
   it("folds one person's separate credits on either site", () => {
