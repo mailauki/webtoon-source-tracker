@@ -1,6 +1,9 @@
 import "server-only";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { createClient } from "@/lib/supabase/server";
+import type { Database } from "@/lib/supabase/types";
 import {
   rankSources,
   type RankedSource,
@@ -10,9 +13,12 @@ import {
 /**
  * The source catalog visible to the current user: every global source, plus
  * their own custom ones. RLS enforces that split — see sources_select_visible.
+ *
+ * Takes the caller's client when there is no session cookie to read — the
+ * iOS app's bearer-token requests.
  */
-export async function getSources() {
-  const supabase = await createClient();
+export async function getSources(client?: SupabaseClient<Database>) {
+  const supabase = client ?? (await createClient());
 
   const { data, error } = await supabase
     .from("sources")
