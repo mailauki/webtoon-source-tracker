@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { verifySession } from "@/lib/auth/dal";
+import { enforceRemovalRules } from "@/lib/entries/removal-rules";
 import {
   addSchema,
   deleteEntrySource,
@@ -42,7 +43,7 @@ export async function addEntrySource(
   _prev: EntrySourceState,
   formData: FormData,
 ): Promise<EntrySourceState> {
-  await verifySession();
+  const { userId } = await verifySession();
 
   const parsed = addSchema.safeParse({
     ...readFields(formData),
@@ -50,7 +51,14 @@ export async function addEntrySource(
   });
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
-  return insertEntrySource(await createClient(), parsed.data);
+  const supabase = await createClient();
+  const state = await insertEntrySource(supabase, parsed.data);
+  // The new source can make the title match a removal rule. The source is
+  // already saved, so a failure here must not report it as failed.
+  if (!state?.error) {
+    await enforceRemovalRules(supabase, userId, [parsed.data.entryId]).catch(() => null);
+  }
+  return state;
 }
 
 export async function updateEntrySource(

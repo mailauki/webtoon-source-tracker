@@ -1,4 +1,5 @@
 import { userClientFromBearer } from "@/lib/auth/app-link";
+import { enforceRemovalRules } from "@/lib/entries/removal-rules";
 import {
   addSchema,
   insertEntrySource,
@@ -29,5 +30,13 @@ export async function POST(
     return Response.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
 
-  return sourceReply(await insertEntrySource(user.supabase, parsed.data));
+  const state = await insertEntrySource(user.supabase, parsed.data);
+  // The new source can make the title match a removal rule. The source is
+  // already saved, so a failure here must not report it as failed.
+  if (!state?.error) {
+    await enforceRemovalRules(user.supabase, user.userId, [parsed.data.entryId]).catch(
+      () => null,
+    );
+  }
+  return sourceReply(state);
 }

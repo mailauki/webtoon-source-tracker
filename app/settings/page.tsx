@@ -8,6 +8,7 @@ import { CustomSources } from "@/components/settings/custom-sources";
 import { AgeRangeForm } from "@/components/settings/age-range-form";
 import { LinkedLogins } from "@/components/settings/linked-logins";
 import { MatureContent } from "@/components/settings/mature-content";
+import { RemovalRules } from "@/components/settings/removal-rules";
 import { SetPasswordForm } from "@/components/settings/set-password-form";
 import { Button } from "@/components/ui/button";
 import { ProTeaser } from "@/components/pro-teaser";
@@ -20,7 +21,7 @@ import {
   isAgeConfirmedAdult,
   verifySession,
 } from "@/lib/auth/dal";
-import { getSources } from "@/lib/data/sources";
+import { getGenres, getRemovalRules, getSources } from "@/lib/data/sources";
 import { getIsPro } from "@/lib/data/pro";
 import { formatLastSynced } from "@/lib/sync/staleness";
 
@@ -38,8 +39,18 @@ export default async function SettingsPage({
   const params = await searchParams;
   const error = typeof params.error === "string" ? params.error : undefined;
 
-  const [profile, identities, connection, anilist, catalog, hideMature, isAdult, isPro] =
-    await Promise.all([
+  const [
+    profile,
+    identities,
+    connection,
+    anilist,
+    catalog,
+    hideMature,
+    isAdult,
+    isPro,
+    removalRules,
+    genres,
+  ] = await Promise.all([
       getProfile(),
       getUserIdentities(),
       getMalConnection(),
@@ -48,6 +59,8 @@ export default async function SettingsPage({
       hidesMatureTitles(),
       isAgeConfirmedAdult(),
       getIsPro(),
+      getRemovalRules(),
+      getGenres(),
     ]);
 
   const malLinked = connection !== null && connection.status !== "disconnected";
@@ -244,6 +257,22 @@ export default async function SettingsPage({
             </p>
           </div>
           <CustomSources sources={customSources} />
+        </section>
+
+        <section className="grid gap-3">
+          <div>
+            <h2 className="font-display text-lg font-semibold">Removal rules</h2>
+            <p className="text-sm text-muted-foreground">
+              Remove every title with a status, source or genre — the ones in
+              your library now, and any that match later.
+            </p>
+          </div>
+          <RemovalRules
+            rules={removalRules}
+            sources={catalog.map((s) => ({ id: s.id, name: s.name }))}
+            genres={genres}
+            canSeeNsfw={isAdult}
+          />
         </section>
       </div>
     </AppShell>

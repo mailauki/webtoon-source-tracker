@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
 import { describeMirror, mirrorToAniList } from "@/lib/anilist/mirror";
+import { enforceRemovalRules } from "@/lib/entries/removal-rules";
 import { MalClient } from "@/lib/mal/client";
 import { updateListStatus } from "@/lib/mal/endpoints";
 import { MalAuthError, MalRateLimitError } from "@/lib/mal/errors";
@@ -54,6 +55,20 @@ export type ProgressInput = z.infer<typeof patchSchema>;
  * than what we sent, because MAL clamps (e.g. chapters capped at num_chapters).
  */
 export async function saveProgress(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: ProgressInput,
+): Promise<ProgressState> {
+  const state = await writeProgress(supabase, userId, input);
+  // A new status can make the title match a removal rule. The save has
+  // already happened, so a failure here must not report it as failed.
+  if (state?.ok && input.listStatus) {
+    await enforceRemovalRules(supabase, userId, [input.entryId]).catch(() => null);
+  }
+  return state;
+}
+
+async function writeProgress(
   supabase: SupabaseClient<Database>,
   userId: string,
   { entryId, numChaptersRead, listStatus, score, total }: ProgressInput,

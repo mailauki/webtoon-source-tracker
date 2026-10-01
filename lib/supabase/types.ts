@@ -494,6 +494,47 @@ export type Database = {
           },
         ]
       }
+      removal_rules: {
+        Row: {
+          created_at: string
+          from_anilist: boolean
+          from_library: boolean
+          from_mal: boolean
+          id: number
+          kind: string
+          user_id: string
+          value: string
+        }
+        Insert: {
+          created_at?: string
+          from_anilist?: boolean
+          from_library?: boolean
+          from_mal?: boolean
+          id?: never
+          kind: string
+          user_id: string
+          value: string
+        }
+        Update: {
+          created_at?: string
+          from_anilist?: boolean
+          from_library?: boolean
+          from_mal?: boolean
+          id?: never
+          kind?: string
+          user_id?: string
+          value?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "removal_rules_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sources: {
         Row: {
           base_url: string | null
