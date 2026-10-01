@@ -282,7 +282,9 @@ export type Database = {
         Row: {
           hide_hiatus: boolean
           hide_nsfw: boolean
+          hide_paid: boolean
           layout: string | null
+          official: string | null
           owned_only: boolean
           publication: string | null
           search_include_nsfw: boolean
@@ -296,7 +298,9 @@ export type Database = {
         Insert: {
           hide_hiatus?: boolean
           hide_nsfw?: boolean
+          hide_paid?: boolean
           layout?: string | null
+          official?: string | null
           owned_only?: boolean
           publication?: string | null
           search_include_nsfw?: boolean
@@ -310,7 +314,9 @@ export type Database = {
         Update: {
           hide_hiatus?: boolean
           hide_nsfw?: boolean
+          hide_paid?: boolean
           layout?: string | null
+          official?: string | null
           owned_only?: boolean
           publication?: string | null
           search_include_nsfw?: boolean
