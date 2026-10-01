@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
 
 describe("removal keeps what cannot be rebuilt", () => {
   it("archives rather than deleting, so entry_sources survives", async () => {
-    const source = await readFile("app/actions/remove-entry.ts", "utf8");
+    const source = await readFile("lib/entries/remove-entry.ts", "utf8");
 
     // A hard delete would cascade to entry_sources: hand-entered URLs,
     // per-source progress and notes that no re-sync can reconstruct.
@@ -21,7 +21,7 @@ describe("removal keeps what cannot be rebuilt", () => {
   });
 
   it("writes to the remote lists before touching the local row", async () => {
-    const source = await readFile("app/actions/remove-entry.ts", "utf8");
+    const source = await readFile("lib/entries/remove-entry.ts", "utf8");
 
     // The same ordering addEntry and updateProgress document: the local row is
     // a cache, so it must never claim something the services have not agreed
@@ -37,7 +37,7 @@ describe("removal keeps what cannot be rebuilt", () => {
   });
 
   it("stops syncing a title removed from a site but kept locally", async () => {
-    const source = await readFile("app/actions/remove-entry.ts", "utf8");
+    const source = await readFile("lib/entries/remove-entry.ts", "utf8");
 
     // Without this the next sync reads the title's absence on that site as
     // news and either re-adds it or removes it locally — neither of which the
