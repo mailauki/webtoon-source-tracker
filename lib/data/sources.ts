@@ -60,3 +60,25 @@ export async function getTopSources(): Promise<RankedSource[]> {
   if (error) return [];
   return rankSources(data ?? []);
 }
+
+/** MAL's genres, for the removal rules' genre picker. */
+export async function getGenres() {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("tags")
+    .select("id, name")
+    .eq("kind", "genre")
+    .eq("is_active", true)
+    .order("name");
+  return data ?? [];
+}
+
+/** The user's removal rules, oldest first. RLS scopes them to the caller. */
+export async function getRemovalRules() {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("removal_rules")
+    .select("id, kind, value, from_library, from_mal, from_anilist")
+    .order("created_at");
+  return data ?? [];
+}

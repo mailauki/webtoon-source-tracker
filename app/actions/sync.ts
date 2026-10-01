@@ -4,9 +4,11 @@ import { revalidatePath } from "next/cache";
 
 import { AniListAuthError, AniListRateLimitError } from "@/lib/anilist/errors";
 import { verifySession } from "@/lib/auth/dal";
+import { enforceRemovalRules } from "@/lib/entries/removal-rules";
 import { MalAuthError, MalRateLimitError } from "@/lib/mal/errors";
 import { syncAniListList } from "@/lib/sync/sync-anilist";
 import { syncMalList, type SyncResult } from "@/lib/sync/sync-list";
+import { createClient } from "@/lib/supabase/server";
 
 export type SyncState =
   | { ok: true; result: SyncResult; message: string }
@@ -76,6 +78,13 @@ export async function runSync(
     }
   }
 
+  // After both pulls, so titles either site just brought in, statuses that
+  // changed there and genres the sync added are all checked against the
+  // user's removal rules. A failure here must not hide what the sync did.
+  const rules = await enforceRemovalRules(await createClient(), userId).catch(
+    () => null,
+  );
+
   revalidatePath("/library");
   revalidatePath("/settings");
 
@@ -96,6 +105,7 @@ export async function runSync(
     if (mal.removed > 0) parts.push(`${mal.removed} removed`);
   }
   if (anilistAdded > 0) parts.push(`${anilistAdded} added from AniList`);
+  if (rules?.removed) parts.push(`${rules.removed} removed by your rules`);
 
   // Everything connected was already fresh, and nothing failed.
   if (parts.length === 0 && !malError && !anilistError) {
