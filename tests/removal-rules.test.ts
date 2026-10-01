@@ -24,7 +24,12 @@ function entry(over: Partial<RuleCandidate> = {}): RuleCandidate {
     list_status: "dropped",
     sync_to_mal: true,
     sync_to_anilist: true,
-    media_titles: { mal_media_id: 1, anilist_media_id: 2, title_tags: [{ tag_id: 7 }] },
+    media_titles: {
+      mal_media_id: 1,
+      anilist_media_id: 2,
+      nsfw: "white",
+      title_tags: [{ tag_id: 7 }],
+    },
     entry_sources: [{ source_id: 3 }],
     ...over,
   };
@@ -41,6 +46,17 @@ describe("removalTargets", () => {
     expect(removalTargets([rule({ kind: "genre", value: "7" })], entry())).not.toBeNull();
     expect(removalTargets([rule({ kind: "genre", value: "8" })], entry())).toBeNull();
     expect(removalTargets([rule({ value: "reading" })], entry())).toBeNull();
+  });
+
+  it("matches adult titles by rating, as Hide adult titles does", () => {
+    const mature = [rule({ kind: "mature", value: "adult" })];
+    const rated = (nsfw: string | null) =>
+      entry({ media_titles: { mal_media_id: 1, anilist_media_id: 2, nsfw, title_tags: [] } });
+    expect(removalTargets(mature, rated("gray"))).not.toBeNull();
+    expect(removalTargets(mature, rated("black"))).not.toBeNull();
+    expect(removalTargets(mature, rated("white"))).toBeNull();
+    // Unrated reads as safe.
+    expect(removalTargets(mature, rated(null))).toBeNull();
   });
 
   it("unions the targets of every matching rule", () => {
@@ -64,7 +80,9 @@ describe("removalTargets", () => {
     expect(
       removalTargets(
         remoteOnly,
-        entry({ media_titles: { mal_media_id: null, anilist_media_id: 2, title_tags: [] } }),
+        entry({
+          media_titles: { mal_media_id: null, anilist_media_id: 2, nsfw: null, title_tags: [] },
+        }),
       ),
     ).toEqual({ fromLibrary: false, fromMal: false, fromAniList: true });
   });

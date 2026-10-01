@@ -26,7 +26,9 @@ const KINDS = [
   { value: "status", label: "Status" },
   { value: "source", label: "Source" },
   { value: "genre", label: "Genre" },
+  { value: "mature", label: "Adult titles" },
 ] as const;
+type Kind = (typeof KINDS)[number]["value"];
 
 const selectClass =
   "h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -40,12 +42,16 @@ export function RemovalRules({
   rules,
   sources,
   genres,
+  canSeeNsfw,
 }: {
   rules: Rule[];
   sources: Option[];
   genres: Option[];
+  /** Adult titles are only offered to an account confirmed 18 or over. */
+  canSeeNsfw: boolean;
 }) {
-  const [kind, setKind] = useState<"status" | "source" | "genre">("status");
+  const [kind, setKind] = useState<Kind>("status");
+  const kinds = KINDS.filter((k) => k.value !== "mature" || canSeeNsfw);
   const [remote, setRemote] = useState({ mal: false, anilist: false });
   const [state, action] = useActionState<RemovalRuleState, FormData>(
     createRemovalRule,
@@ -56,12 +62,22 @@ export function RemovalRules({
   const options: { value: string; label: string }[] =
     kind === "status"
       ? Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label }))
-      : (kind === "source" ? sources : genres).map((o) => ({
-          value: String(o.id),
-          label: o.name,
-        }));
+      : kind === "mature"
+        ? []
+        : (kind === "source" ? sources : genres).map((o) => ({
+            value: String(o.id),
+            label: o.name,
+          }));
 
   function describe(rule: Rule) {
+    const where = [
+      rule.from_library && "library",
+      rule.from_mal && "MyAnimeList",
+      rule.from_anilist && "AniList",
+    ].filter(Boolean);
+    if (rule.kind === "mature") {
+      return { title: "Adult titles", where: `From ${where.join(", ")}` };
+    }
     const kindLabel = KINDS.find((k) => k.value === rule.kind)?.label ?? rule.kind;
     const value =
       rule.kind === "status"
@@ -69,11 +85,6 @@ export function RemovalRules({
         : ((rule.kind === "source" ? sources : genres).find(
             (o) => String(o.id) === rule.value,
           )?.name ?? "Unknown");
-    const where = [
-      rule.from_library && "library",
-      rule.from_mal && "MyAnimeList",
-      rule.from_anilist && "AniList",
-    ].filter(Boolean);
     return { title: `${kindLabel}: ${value}`, where: `From ${where.join(", ")}` };
   }
 
@@ -121,22 +132,27 @@ export function RemovalRules({
             aria-label="Match by"
             className={selectClass}
             value={kind}
-            onChange={(e) => setKind(e.target.value as typeof kind)}
+            onChange={(e) => setKind(e.target.value as Kind)}
           >
-            {KINDS.map((k) => (
+            {kinds.map((k) => (
               <option key={k.value} value={k.value}>
                 {k.label}
               </option>
             ))}
           </select>
-          {/* Keyed on the kind so switching resets to that kind's first option. */}
-          <select key={kind} name="value" aria-label="Value" className={`${selectClass} min-w-40`}>
-            {options.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
+          {kind === "mature" ? (
+            // Adult titles have no value to choose: the rating decides.
+            <input type="hidden" name="value" value="adult" />
+          ) : (
+            // Keyed on the kind so switching resets to that kind's first option.
+            <select key={kind} name="value" aria-label="Value" className={`${selectClass} min-w-40`}>
+              {options.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         <fieldset className="grid gap-2 text-sm">

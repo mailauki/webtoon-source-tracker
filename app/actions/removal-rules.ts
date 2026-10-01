@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { verifySession } from "@/lib/auth/dal";
+import { isAgeConfirmedAdult, verifySession } from "@/lib/auth/dal";
 import { enforceRemovalRules } from "@/lib/entries/removal-rules";
 import { MAL_LIST_STATUSES } from "@/lib/mal/types";
 import { createClient } from "@/lib/supabase/server";
@@ -15,6 +15,7 @@ const ruleSchema = z
     z.object({ kind: z.literal("status"), value: z.enum(MAL_LIST_STATUSES) }),
     z.object({ kind: z.literal("source"), value: z.coerce.number().int().positive() }),
     z.object({ kind: z.literal("genre"), value: z.coerce.number().int().positive() }),
+    z.object({ kind: z.literal("mature"), value: z.literal("adult") }),
   ])
   .and(
     z.object({
@@ -44,6 +45,11 @@ export async function createRemovalRule(
   if (!parsed.success) return { error: "Choose what to remove and where from." };
 
   const { kind, value, fromLibrary, fromMal, fromAniList } = parsed.data;
+  // Only offered to an account that may see adult titles; anyone else never
+  // has them on the shelf, so the form doesn't show it.
+  if (kind === "mature" && !(await isAgeConfirmedAdult())) {
+    return { error: "Choose what to remove and where from." };
+  }
   if (!fromLibrary && !fromMal && !fromAniList) {
     return { error: "Choose where to remove matching titles from." };
   }

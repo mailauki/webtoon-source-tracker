@@ -2,13 +2,15 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { isMature } from "@/lib/data/nsfw";
 import { readAllRows } from "@/lib/data/pagination";
 import { removeEntryFor, type RemoveInput } from "@/lib/entries/remove-entry";
 import type { Database } from "@/lib/supabase/types";
 
 /*
  * Standing removal rules (supabase/migrations/*_removal_rules.sql): take every
- * title with a status, a source or a genre off the shelf, and optionally off
+ * title with a status, a source or a genre, or every adult-rated one, off the
+ * shelf, and optionally off
  * MyAnimeList and AniList — now, and whenever another title comes to match.
  *
  * Enforced from the places a title can start matching: when a rule is saved,
@@ -18,7 +20,7 @@ import type { Database } from "@/lib/supabase/types";
  * first, archive last) and every per-title check hold unchanged.
  */
 
-export type RuleKind = "status" | "source" | "genre";
+export type RuleKind = "status" | "source" | "genre" | "mature";
 export type RemovalRule = Pick<
   Database["public"]["Tables"]["removal_rules"]["Row"],
   "id" | "kind" | "value" | "from_library" | "from_mal" | "from_anilist"
@@ -33,6 +35,7 @@ export type RuleCandidate = {
   media_titles: {
     mal_media_id: number | null;
     anilist_media_id: number | null;
+    nsfw: string | null;
     title_tags: { tag_id: number }[];
   };
   entry_sources: { source_id: number }[];
@@ -46,6 +49,9 @@ export function matchesRule(rule: RemovalRule, entry: RuleCandidate): boolean {
       return entry.entry_sources.some((es) => String(es.source_id) === rule.value);
     case "genre":
       return entry.media_titles.title_tags.some((t) => String(t.tag_id) === rule.value);
+    case "mature":
+      // The same line as the shelf's "Hide adult titles"; see lib/data/nsfw.ts.
+      return isMature(entry.media_titles);
     default:
       return false;
   }
@@ -117,7 +123,7 @@ export async function enforceRemovalRules(
   if (rulesError || !rules?.length) return result;
 
   const select = `id, list_status, sync_to_mal, sync_to_anilist,
-    media_titles!inner ( mal_media_id, anilist_media_id, title_tags ( tag_id ) ),
+    media_titles!inner ( mal_media_id, anilist_media_id, nsfw, title_tags ( tag_id ) ),
     entry_sources ( source_id )`;
 
   const rows = entryIds

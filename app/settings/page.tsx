@@ -271,6 +271,7 @@ export default async function SettingsPage({
             rules={removalRules}
             sources={catalog.map((s) => ({ id: s.id, name: s.name }))}
             genres={genres}
+            canSeeNsfw={isAdult}
           />
         </section>
       </div>
