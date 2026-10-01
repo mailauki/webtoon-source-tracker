@@ -1,4 +1,5 @@
 import { after, NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { AniListRateLimitError } from "@/lib/anilist/errors";
 import { anilistAltTitles } from "@/lib/anilist/catalog";
@@ -7,7 +8,9 @@ import {
   isAniListNovel,
   searchManga as searchAniList,
 } from "@/lib/anilist/endpoints";
+import { userClientFromBearer } from "@/lib/auth/app-link";
 import { getOptionalSession, isAgeConfirmedAdult } from "@/lib/auth/dal";
+import { isAdult } from "@/lib/data/age";
 import { rememberNameMatches } from "@/lib/data/catalog-links";
 import {
   mergeResults,
@@ -26,6 +29,7 @@ import { MalClient } from "@/lib/mal/client";
 import { searchManga as searchMal } from "@/lib/mal/endpoints";
 import { MalApiError, MalAuthError, MalRateLimitError } from "@/lib/mal/errors";
 import { createClient } from "@/lib/supabase/server";
+import type { Database } from "@/lib/supabase/types";
 
 /**
  * Searches both catalogs at once and merges the answers.
@@ -65,7 +69,11 @@ export async function GET(request: Request) {
   // Route handlers are reachable directly, so this check is load-bearing.
   // getOptionalSession, not verifySession: an expired cookie should read as
   // 401 JSON to a fetch() caller, not a redirect to /auth/clear-session.
-  const session = await getOptionalSession();
+  //
+  // The iOS app calls it too, with its Supabase access token as a bearer
+  // header in place of the session cookie.
+  const app = await userClientFromBearer(request);
+  const session = app ?? (await getOptionalSession());
   if (!session) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
   }
@@ -81,7 +89,9 @@ export async function GET(request: Request) {
   // a disabled control in the UI is not a check. Applies to both catalogs:
   // adding a second source of adult titles must not open a second way around
   // the gate.
-  const includeMature = askedForMature && (await isAgeConfirmedAdult());
+  const includeMature =
+    askedForMature &&
+    (app ? await isAdultViaApp(app.supabase, app.userId) : await isAgeConfirmedAdult());
   // Unrecognised values resolve to the default side rather than 400ing — a
   // stale client asking for a side this version dropped should still search.
   const kind = resolveMediaKind(params.get("kind"));
@@ -105,7 +115,11 @@ export async function GET(request: Request) {
     );
   }
 
-  const owned = await ownedIds(malOutcome.hits, anilistOutcome.hits);
+  const owned = await ownedIds(
+    app?.supabase ?? (await createClient()),
+    malOutcome.hits,
+    anilistOutcome.hits,
+  );
 
   const all = mergeResults(malOutcome.hits, anilistOutcome.hits);
 
@@ -311,6 +325,7 @@ async function fetchAniList(
  * shelf, and counting it would hide it with no way to find it again.
  */
 async function ownedIds(
+  supabase: SupabaseClient<Database>,
   malHits: MalHit[],
   anilistHits: AniListHit[],
 ): Promise<{ mal: Set<number>; anilist: Set<number> }> {
@@ -327,7 +342,6 @@ async function ownedIds(
   const owned = { mal: new Set<number>(), anilist: new Set<number>() };
   if (malIds.length === 0 && anilistIds.length === 0) return owned;
 
-  const supabase = await createClient();
   const [malRows, anilistRows] = await Promise.all([
     malIds.length === 0
       ? { data: [] }
@@ -359,4 +373,17 @@ async function ownedIds(
   }
 
   return owned;
+}
+
+/** isAgeConfirmedAdult for a bearer caller, which has no cookie to read. */
+async function isAdultViaApp(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+): Promise<boolean> {
+  const { data } = await supabase
+    .from("profiles")
+    .select("age_range")
+    .eq("id", userId)
+    .maybeSingle();
+  return isAdult(data?.age_range);
 }

@@ -1,0 +1,182 @@
+import "server-only";
+
+import { revalidatePath } from "next/cache";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { z } from "zod";
+
+import { describeMirror, mirrorToAniList } from "@/lib/anilist/mirror";
+import { anilistIdPatch } from "@/lib/data/cross-search";
+import { malAltTitles } from "@/lib/mal/alt-titles";
+import { MalClient } from "@/lib/mal/client";
+import { getManga, updateListStatus } from "@/lib/mal/endpoints";
+import { MalAuthError, MalRateLimitError } from "@/lib/mal/errors";
+import { MAL_LIST_STATUSES } from "@/lib/mal/types";
+import { createAdminClient } from "@/lib/supabase/admin";
+import type { Database } from "@/lib/supabase/types";
+
+export type AddEntryState =
+  | { ok: true; message: string; entryId: number }
+  | { ok: false; error: string; needsReauth?: boolean }
+  | null;
+
+const addSchema = z.object({
+  malMediaId: z.coerce.number().int().positive(),
+  listStatus: z.enum(MAL_LIST_STATUSES).default("plan_to_read"),
+  /**
+   * The AniList id the search already resolved for this title, if it found one.
+   *
+   * Optional, and only ever a head start: the cross-catalog search matches on
+   * AniList's own `idMal`, so by the time a result is on screen the mapping
+   * mirrorToAniList would otherwise go looking for is already known. Passing it
+   * through saves that lookup — which matters beyond one request, because the
+   * lookup needs a connected AniList account and the search does not. A title
+   * added before AniList is connected would otherwise reach mirrorToAniList
+   * with nothing cached and no client to resolve it with.
+   *
+   * Empty string coerces to undefined rather than 0: the hidden input is always
+   * present in the form, and carries "" when the search found no counterpart.
+   */
+  anilistMediaId: z.coerce.number().int().positive().optional(),
+});
+
+/**
+ * Adds a MyAnimeList title to the user's list, then mirrors it locally.
+ *
+ * Same non-negotiable ordering as updateProgress: MAL is the source of truth,
+ * so the write goes THERE first. A local-only row would be silently deleted by
+ * the next sync — sync-list.ts removes entries MAL doesn't know about — so a
+ * failed MAL write must leave nothing behind locally.
+ *
+ * The catalog row is upserted with the admin client because `media_titles` is
+ * a shared catalog owned by nobody; the user's own `user_entries` row goes
+ * through the RLS-scoped client, which is what ties it to them.
+ */
+export async function addMalEntry(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: { malMediaId: unknown; listStatus?: unknown; anilistMediaId?: unknown },
+): Promise<AddEntryState> {
+  const parsed = addSchema.safeParse(input);
+
+  if (!parsed.success) {
+    return { ok: false, error: "That title couldn't be added." };
+  }
+
+  const { malMediaId, listStatus, anilistMediaId } = parsed.data;
+
+  // --- MAL first -----------------------------------------------------------
+  // Re-fetch the node rather than trusting the client's posted fields: this is
+  // an untrusted entry point, and the catalog row must reflect MAL, not a
+  // payload someone hand-crafted.
+  let node;
+  let echoed;
+  try {
+    const client = new MalClient(userId);
+    node = await getManga(client, malMediaId);
+    echoed = await updateListStatus(client, malMediaId, { status: listStatus });
+  } catch (cause) {
+    if (cause instanceof MalAuthError) {
+      revalidatePath("/library");
+      return {
+        ok: false,
+        needsReauth: true,
+        error: "Your MyAnimeList connection expired. Please reconnect.",
+      };
+    }
+    if (cause instanceof MalRateLimitError) {
+      return {
+        ok: false,
+        error: "MyAnimeList is rate limiting us. Try again shortly.",
+      };
+    }
+    // Nothing written locally — the cache stays behind MAL, never ahead.
+    return {
+      ok: false,
+      error: `MyAnimeList rejected the add: ${(cause as Error).message}`,
+    };
+  }
+
+  // --- then mirror it ------------------------------------------------------
+  const now = new Date().toISOString();
+  const admin = createAdminClient();
+
+  const { data: title, error: catalogError } = await admin
+    .from("media_titles")
+    .upsert(
+      {
+        media_type: "manga",
+        mal_media_id: node.id,
+        title: node.title,
+        title_en: node.alternative_titles?.en || null,
+        alt_titles: malAltTitles(node),
+        main_picture_url:
+          node.main_picture?.large ?? node.main_picture?.medium ?? null,
+        mal_media_kind: node.media_type ?? null,
+        num_chapters: node.num_chapters ?? null,
+        num_volumes: node.num_volumes ?? null,
+        mal_status: node.status ?? null,
+        // Kept for the same reason sync-list.ts keeps it: this is the other
+        // path that writes a catalog row, and a title added from search must
+        // carry its rating or it would be invisible to the hide-adult switch.
+        nsfw: node.nsfw ?? null,
+        // Only ever written when the search resolved one — see anilistIdPatch,
+        // which is careful never to blank an id already on the row.
+        ...anilistIdPatch(anilistMediaId),
+        synced_at: now,
+      },
+      { onConflict: "media_type,mal_media_id" },
+    )
+    .select("id, mal_media_id, anilist_media_id")
+    .single();
+
+  if (catalogError || !title) {
+    return {
+      ok: false,
+      error: "Added to MyAnimeList, but the local copy didn't save. Sync to catch up.",
+    };
+  }
+
+  const { data: entry, error: entryError } = await supabase
+    .from("user_entries")
+    .upsert(
+      {
+        user_id: userId,
+        title_id: title.id,
+        list_status: echoed.status,
+        num_chapters_read: echoed.num_chapters_read,
+        num_volumes_read: echoed.num_volumes_read,
+        score: echoed.score,
+        is_rereading: echoed.is_rereading,
+        mal_updated_at: echoed.updated_at ?? now,
+        synced_at: now,
+        // Re-adding a title the user removed lands on their archived row, and
+        // an upsert leaves columns it does not name alone — so without this
+        // the add would report success and the title would stay hidden.
+        archived_at: null,
+      },
+      { onConflict: "user_id,title_id" },
+    )
+    .select("id")
+    .single();
+
+  if (entryError || !entry) {
+    // MAL succeeded, so the user's data is safe; only our cache is stale.
+    return {
+      ok: false,
+      error: "Added to MyAnimeList, but the local copy didn't save. Sync to catch up.",
+    };
+  }
+
+  // Best-effort, and only once MAL and the local copy both have it.
+  const mirrored = describeMirror(await mirrorToAniList(userId, title, echoed));
+
+  revalidatePath("/library");
+
+  return {
+    ok: true,
+    entryId: entry.id,
+    message: mirrored
+      ? `Added ${node.title} to your list. ${mirrored}`
+      : `Added ${node.title} to your list.`,
+  };
+}
