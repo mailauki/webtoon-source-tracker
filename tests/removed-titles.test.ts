@@ -26,8 +26,8 @@ describe("removed titles", () => {
 
   it("are restored when added again, from either site", async () => {
     const [mal, anilist] = await Promise.all([
-      readFile("app/actions/add-entry.ts", "utf8"),
-      readFile("app/actions/add-anilist-entry.ts", "utf8"),
+      readFile("lib/entries/add-entry.ts", "utf8"),
+      readFile("lib/entries/add-anilist-entry.ts", "utf8"),
     ]);
 
     for (const source of [mal, anilist]) {

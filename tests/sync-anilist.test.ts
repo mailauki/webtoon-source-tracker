@@ -58,7 +58,7 @@ describe("AniList catalog writes", () => {
     // import.meta.url is not a file URL under this config.
     const [sync, action] = await Promise.all([
       readFile("lib/sync/sync-anilist.ts", "utf8"),
-      readFile("app/actions/add-anilist-entry.ts", "utf8"),
+      readFile("lib/entries/add-anilist-entry.ts", "utf8"),
     ]);
 
     for (const source of [sync, action]) {
@@ -81,7 +81,7 @@ describe("AniList writes set the sort timestamp", () => {
   it("is stamped by the pull, the add action and the progress edit", async () => {
     const [sync, add, progress] = await Promise.all([
       readFile("lib/sync/sync-anilist.ts", "utf8"),
-      readFile("app/actions/add-anilist-entry.ts", "utf8"),
+      readFile("lib/entries/add-anilist-entry.ts", "utf8"),
       readFile("lib/progress/save-progress.ts", "utf8"),
     ]);
 
