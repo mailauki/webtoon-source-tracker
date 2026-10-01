@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getMediaExtras } from "@/lib/anilist/endpoints";
+import { userClientFromBearer } from "@/lib/auth/app-link";
 import { getOptionalSession } from "@/lib/auth/dal";
 import { catalogLinks, suggestSourceLinks } from "@/lib/data/anilist-links";
 import { getSources } from "@/lib/data/sources";
@@ -23,15 +24,18 @@ import { createClient } from "@/lib/supabase/server";
  * Reply: `{ add: { sourceId, name, url }[], fill: LinkSuggestion[] }`. Empty
  * lists when AniList has nothing or cannot be reached — the menu then keeps
  * its own shortcuts, so an outage costs the links and nothing else.
+ *
+ * The iOS app calls it too, with its Supabase access token as a bearer
+ * header in place of the session cookie.
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: RouteContext<"/api/entries/[id]/anilist-links">,
 ) {
   // Reachable directly, so the check is load-bearing — and a 401 in JSON, not
   // a redirect, for the same reason the catalog search gives.
-  const session = await getOptionalSession();
-  if (!session) {
+  const app = await userClientFromBearer(request);
+  if (!app && !(await getOptionalSession())) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
   }
 
@@ -41,7 +45,7 @@ export async function GET(
   }
 
   // RLS scopes this to the caller: someone else's entry reads as missing.
-  const supabase = await createClient();
+  const supabase = app?.supabase ?? (await createClient());
   const { data: entry } = await supabase
     .from("user_entries")
     .select(
@@ -70,7 +74,8 @@ export async function GET(
       anilistMediaId: title.anilist_media_id,
       malMediaId: title.mal_media_id,
     }),
-    getSources(),
+    // The caller's client, so their own sources are in the catalog too.
+    getSources(supabase),
   ]);
 
   if (!media) return NextResponse.json({ add: [], fill: [] });
