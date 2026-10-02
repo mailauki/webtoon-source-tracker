@@ -59,7 +59,39 @@ export type AccountSyncResult = {
   excluded: number;
   /** Writes a service rejected outright. */
   failed: number;
+  /** The titles behind `unmatched`, so the settings page can list them. */
+  unmatchedTitles: UnmatchedTitle[];
 };
+
+/**
+ * A title on one site's list that the sync could not pair with the other.
+ *
+ * `onlyOn` is the site it was found on, and `id` is that site's id for it, so
+ * the settings page can link to the title where it is and search for it where
+ * it is missing.
+ */
+export type UnmatchedTitle = {
+  onlyOn: "mal" | "anilist";
+  id: number;
+  title: string;
+};
+
+/**
+ * How far a running sync has got, streamed to the settings page.
+ *
+ * `value` runs 0 to 1 across the whole run, not per step, so the page can
+ * draw one bar without knowing how the steps are weighted.
+ */
+export type AccountSyncProgress = {
+  step: string;
+  value: number;
+};
+
+/** One line of the account-sync stream (newline-delimited JSON). */
+export type AccountSyncEvent =
+  | ({ type: "progress" } & AccountSyncProgress)
+  | { type: "done"; result: AccountSyncResult; message: string }
+  | { type: "error"; error: string };
 
 export type AccountSyncPlan = {
   writes: PlannedWrite[];
@@ -189,7 +221,7 @@ export function describeAccountSync(result: AccountSyncResult): string {
   if (result.inSync > 0) parts.push(`${result.inSync} already matched.`);
   if (result.unmatched > 0) {
     parts.push(
-      `${result.unmatched} ${plural(result.unmatched)} couldn't be matched between the two sites and ${result.unmatched === 1 ? "was" : "were"} skipped.`,
+      `${result.unmatched} ${plural(result.unmatched)} couldn't be matched between the two sites and ${result.unmatched === 1 ? "was" : "were"} skipped — see the list below.`,
     );
   }
   if (result.failed > 0) {

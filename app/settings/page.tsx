@@ -24,11 +24,12 @@ import {
 import { getGenres, getRemovalRules, getSources } from "@/lib/data/sources";
 import { getIsPro } from "@/lib/data/pro";
 import { formatLastSynced } from "@/lib/sync/staleness";
+import { parseUnmatchedTitles } from "@/lib/sync/unmatched-titles";
 
 export const metadata = { title: "Settings" };
 
-// Applies to the server actions this page runs, the account sync among them —
-// see MAL_WRITE_BUDGET_MS in lib/sync/account-sync.ts, which is sized to fit.
+// Applies to the server actions this page runs. The account sync is a route
+// handler (app/api/account-sync) and sets its own.
 export const maxDuration = 60;
 
 export default async function SettingsPage({
@@ -200,8 +201,9 @@ export default async function SettingsPage({
                 the two sites — the Sync button on Library only brings titles
                 in. It brings both lists into agreement on status, chapters,
                 volumes and score. Titles are matched by their MyAnimeList id,
-                so one that only exists on AniList is skipped, and nothing is
-                ever deleted from either site.
+                so one that only exists on one site is skipped — and listed
+                below, so you can add or link it there — and nothing is ever
+                deleted from either site.
               </p>
               <p className="text-sm text-muted-foreground">
                 A large library is copied a few hundred titles at a time, so
@@ -215,6 +217,7 @@ export default async function SettingsPage({
                   ? formatLastSynced(anilist.last_synced_at)
                   : "Never synced"
               }
+              unmatchedTitles={parseUnmatchedTitles(anilist.unmatched_titles)}
             />
           </section>
         ) : null}
