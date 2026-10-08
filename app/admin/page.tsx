@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { Layers, Tags } from "lucide-react";
+import { Inbox, Layers, Tags } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { getAdminCounts } from "@/lib/data/admin";
+import { countPendingSuggestions } from "@/lib/data/suggestions";
 
 export const metadata = { title: "Admin" };
 
@@ -25,7 +26,10 @@ export const metadata = { title: "Admin" };
  * is one cheap count instead of a distinct scan.
  */
 export default async function AdminPage() {
-  const counts = await getAdminCounts();
+  const [counts, pending] = await Promise.all([
+    getAdminCounts(),
+    countPendingSuggestions(),
+  ]);
 
   return (
     <AppShell>
@@ -77,6 +81,22 @@ export default async function AdminPage() {
           <p className="text-sm text-muted-foreground">
             {counts.taggedTitles} tag assignment
             {counts.taggedTitles === 1 ? "" : "s"} across the catalog.
+          </p>
+        </Link>
+
+        <Link
+          href="/admin/suggestions"
+          className="grid gap-3 rounded-lg border border-border p-5 transition-colors hover:border-brand/50 hover:bg-accent/50"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Inbox className="size-4 text-muted-foreground" />
+              <h2 className="font-display text-base font-bold">Suggestions</h2>
+            </div>
+            <span className="text-2xl font-bold tabular-nums">{pending}</span>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Tags and collections readers have suggested, waiting for review.
           </p>
         </Link>
         </div>

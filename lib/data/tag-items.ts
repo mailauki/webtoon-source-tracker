@@ -87,7 +87,7 @@ export function slugify(name: string): string {
 }
 
 /** Editorial order first, then alphabetical. Returns a new array. */
-export function sortTags(tags: Tag[]): Tag[] {
+export function sortTags<T extends Tag>(tags: T[]): T[] {
   return [...tags].sort(
     (a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name),
   );

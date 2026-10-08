@@ -176,14 +176,19 @@ export async function getTaggedTitleCounts(): Promise<Map<number, number>> {
   return counts;
 }
 
-/** Active tags on one title, for the entry page's chips. */
-export async function getTagsForTitle(titleId: number): Promise<Tag[]> {
+/**
+ * Active tags on one title, for the entry page's chips. `from_api` marks a
+ * genre MyAnimeList or AniList gave it, which can't be removed.
+ */
+export async function getTagsForTitle(
+  titleId: number,
+): Promise<(Tag & { from_api: boolean })[]> {
   const supabase = await createClient();
 
   const [{ data, error }, hideMature] = await Promise.all([
     supabase
       .from("title_tags")
-      .select(`tags!inner ( ${TAG_COLUMNS} )`)
+      .select(`from_api, tags!inner ( ${TAG_COLUMNS} )`)
       .eq("title_id", titleId)
       .is("owner_id", null),
     hidesMatureTitles(),
@@ -196,8 +201,8 @@ export async function getTagsForTitle(titleId: number): Promise<Tag[]> {
   // page would render an Ecchi chip linking to a page that now 404s — the
   // one remaining way a gated category could still be seen and clicked.
   return sortTags(
-    ((data ?? []) as unknown as { tags: Tag }[])
-      .map((row) => row.tags)
+    ((data ?? []) as unknown as { from_api: boolean; tags: Tag }[])
+      .map((row) => ({ ...row.tags, from_api: row.from_api }))
       .filter((tag) => tag.is_active)
       .filter((tag) => !(hideMature && isExplicitKind(tag.kind))),
   );

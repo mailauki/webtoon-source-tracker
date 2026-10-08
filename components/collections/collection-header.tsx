@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useRef, useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Globe, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -10,6 +10,10 @@ import {
   updateCollection,
   type CollectionState,
 } from "@/app/actions/collections";
+import {
+  suggestCollection,
+  type SuggestionState,
+} from "@/app/actions/suggestions";
 import { SubmitButton } from "@/components/auth/submit-button";
 import {
   AlertDialog,
@@ -41,13 +45,19 @@ import { Label } from "@/components/ui/label";
  * unrecoverable-by-resync data the TODO(confirm-destructive) note is about.
  * The titles are untouched: a collection holds catalog references, so deleting
  * one never takes anything out of the library.
+ *
+ * "Suggest for Discover" asks an admin to publish a copy as a curated shelf
+ * (see reviewCollectionSuggestion); once pending it stays disabled.
  */
 export function CollectionHeader({
   collection,
   itemCount,
+  suggested,
 }: {
   collection: { id: number; name: string; description: string | null };
   itemCount: number;
+  /** Whether a suggestion for this collection is waiting on an admin. */
+  suggested: boolean;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -66,6 +76,16 @@ export function CollectionHeader({
     CollectionState,
     FormData
   >(deleteCollection, null);
+
+  const [suggestState, suggestAction, suggesting] = useActionState<
+    SuggestionState,
+    FormData
+  >(suggestCollection, null);
+
+  useEffect(() => {
+    if (suggestState?.error) toast.error(suggestState.error);
+    else if (suggestState?.message) toast.success(suggestState.message);
+  }, [suggestState]);
 
   // Navigating away has to wait for the delete to land, and the action's
   // state persists once it has — so this fires once rather than on every
@@ -100,6 +120,22 @@ export function CollectionHeader({
       </div>
 
       <div className="flex shrink-0 items-center gap-1">
+        <form action={suggestAction}>
+          <input type="hidden" name="collection_id" value={collection.id} />
+          <Button
+            type="submit"
+            variant="ghost"
+            size="sm"
+            className="rounded-pill"
+            // An empty shelf has nothing to show on Discover.
+            disabled={suggested || suggesting || itemCount === 0}
+          >
+            <Globe data-icon="inline-start" />
+            <span className="max-sm:sr-only">
+              {suggested ? "Suggested" : "Suggest for Discover"}
+            </span>
+          </Button>
+        </form>
         <Button
           type="button"
           variant="ghost"

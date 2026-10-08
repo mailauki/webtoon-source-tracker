@@ -21,7 +21,7 @@ export function TaggedTitleList({
   titles,
 }: {
   tagId: number;
-  titles: CollectionTitle[];
+  titles: (CollectionTitle & { fromApi: boolean })[];
 }) {
   if (titles.length === 0) {
     return (
@@ -54,7 +54,7 @@ function TaggedTitleRow({
   title,
 }: {
   tagId: number;
-  title: CollectionTitle;
+  title: CollectionTitle & { fromApi: boolean };
 }) {
   const router = useRouter();
 
@@ -92,22 +92,27 @@ function TaggedTitleRow({
       <span className="min-w-0 flex-1 truncate text-sm font-medium">
         {title.title}
       </span>
-      <form action={action}>
-        <input type="hidden" name="tag_id" value={tagId} />
-        <input type="hidden" name="title_id" value={title.id} />
-        <button
-          type="submit"
-          disabled={pending}
-          aria-label={`Remove tag from ${title.title}`}
-          className="inline-flex size-8 items-center justify-center rounded-pill text-muted-foreground transition-colors hover:bg-muted hover:text-alert disabled:opacity-60"
-        >
-          {pending ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <X className="size-4" />
-          )}
-        </button>
-      </form>
+      {/* A genre from MyAnimeList or AniList can't be removed. */}
+      {title.fromApi ? (
+        <span className="text-xs text-muted-foreground">From API</span>
+      ) : (
+        <form action={action}>
+          <input type="hidden" name="tag_id" value={tagId} />
+          <input type="hidden" name="title_id" value={title.id} />
+          <button
+            type="submit"
+            disabled={pending}
+            aria-label={`Remove tag from ${title.title}`}
+            className="inline-flex size-8 items-center justify-center rounded-pill text-muted-foreground transition-colors hover:bg-muted hover:text-alert disabled:opacity-60"
+          >
+            {pending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <X className="size-4" />
+            )}
+          </button>
+        </form>
+      )}
     </div>
   );
 }

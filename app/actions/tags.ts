@@ -244,6 +244,8 @@ export async function tagTitle(
     // Explicitly null: curated. The insert policy requires it, and a private
     // user tag is a later feature with its own action.
     owner_id: null,
+    // By hand, so removable. The insert policy refuses true from a user.
+    from_api: false,
   });
 
   if (error) {
@@ -275,14 +277,21 @@ export async function untagTitle(
 
   const supabase = await createClient();
 
-  const { error } = await supabase
+  // A genre from MyAnimeList or AniList (from_api) is never removable: RLS
+  // refuses it, and the filter makes that an empty delete we can name.
+  const { data, error } = await supabase
     .from("title_tags")
     .delete()
     .eq("tag_id", parsed.data.tagId)
     .eq("title_id", parsed.data.titleId)
-    .is("owner_id", null);
+    .is("owner_id", null)
+    .eq("from_api", false)
+    .select("id");
 
   if (error) return { error: error.message };
+  if (data.length === 0) {
+    return { error: "Genres from MyAnimeList or AniList can't be removed." };
+  }
 
   revalidatePath(`/admin/tags/${parsed.data.tagId}`);
   await revalidateTagPage(supabase, parsed.data.tagId);

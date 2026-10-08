@@ -19,6 +19,13 @@ vi.mock("@/app/actions/tags", () => ({
   deleteTag: vi.fn(async () => ({ message: "Tag deleted." })),
 }));
 
+const { suggestTag } = vi.hoisted(() => ({
+  suggestTag: vi.fn<(prev: unknown, formData: FormData) => Promise<unknown>>(
+    async () => ({ message: "Suggested." }),
+  ),
+}));
+vi.mock("@/app/actions/suggestions", () => ({ suggestTag }));
+
 const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }));
 vi.mock("sonner", () => ({
   toast: { error: toastError, success: vi.fn() },
@@ -53,6 +60,7 @@ afterEach(() => {
   cleanup();
   tagTitle.mockClear();
   untagTitle.mockClear();
+  suggestTag.mockClear();
   toastError.mockClear();
   refresh.mockClear();
 });
@@ -337,5 +345,58 @@ describe("tags on the entry page", () => {
     expect(
       screen.queryByRole("button", { name: "Remove tag Isekai" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("lets a reader suggest a tag, shows pending ones dashed, and never tags directly", async () => {
+    const user = userEvent.setup();
+    render(
+      <EntryTags
+        titleId={TITLE_ID}
+        tags={[]}
+        allTags={[ROMANCE, ISEKAI]}
+        suggestedTags={[ROMANCE]}
+        isAdmin={false}
+      />,
+    );
+
+    expect(screen.getByText("Romance")).toHaveAttribute(
+      "title",
+      "Suggested — waiting for an admin",
+    );
+
+    await user.click(screen.getByRole("button", { name: /suggest/i }));
+    const select = screen.getByRole("combobox", { name: /suggest a tag/i });
+    // Already suggested, so not offered again.
+    expect(select).not.toHaveTextContent("Romance");
+
+    await user.selectOptions(select, String(ISEKAI.id));
+    await user.click(screen.getByRole("button", { name: /^Suggest$/ }));
+
+    expect(tagTitle).not.toHaveBeenCalled();
+    expect(suggestTag).toHaveBeenCalledOnce();
+    const formData = suggestTag.mock.calls[0][1] as FormData;
+    expect(formData.get("tag_id")).toBe(String(ISEKAI.id));
+    expect(formData.get("title_id")).toBe(String(TITLE_ID));
+  });
+
+  it("never offers to remove a genre from MyAnimeList or AniList, even to an admin", async () => {
+    const user = userEvent.setup();
+    render(
+      <EntryTags
+        titleId={TITLE_ID}
+        tags={[ROMANCE, ISEKAI]}
+        lockedTagIds={new Set([ROMANCE.id])}
+        allTags={[ROMANCE, ISEKAI]}
+        isAdmin
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /^Edit$/ }));
+
+    expect(
+      screen.queryByRole("button", { name: /remove tag romance/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /remove tag isekai/i }),
+    ).toBeInTheDocument();
   });
 });

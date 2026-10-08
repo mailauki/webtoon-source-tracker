@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useRef, useState } from "react";
-import { Check, Loader2, Pencil, Tag as TagIcon, X } from "lucide-react";
+import { Check, Lightbulb, Loader2, Pencil, Tag as TagIcon, X } from "lucide-react";
 import { toast } from "sonner";
 
+import { suggestTag } from "@/app/actions/suggestions";
 import { tagTitle, untagTitle, type TagState } from "@/app/actions/tags";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,14 +34,17 @@ import type { Tag } from "@/lib/data/tag-items";
  *      is reading. A mode you opt into keeps it off the path of someone who
  *      came here to check a chapter number.
  *
- * The button is rendered only when isAdmin — a reader never sees the control,
- * not even disabled.
+ * A reader gets the same toggle as "Suggest" instead: the picker files a
+ * suggestion an admin approves on /admin/suggestions, and the reader's
+ * pending ones show as dashed chips until then.
  */
 export function EntryTags({
   titleId,
   tags,
   savedTagIds,
+  lockedTagIds,
   allTags,
+  suggestedTags = [],
   isAdmin,
 }: {
   titleId: number;
@@ -55,8 +59,15 @@ export function EntryTags({
    * remove. Omitted means every tag is saved.
    */
   savedTagIds?: ReadonlySet<number>;
-  /** Every active tag, for the admin's "add a tag" picker. Empty for a reader. */
+  /**
+   * Genres MyAnimeList or AniList give this title. Shown in edit mode but
+   * never removable — the server refuses it too (see untagTitle).
+   */
+  lockedTagIds?: ReadonlySet<number>;
+  /** Every active tag, for the "add a tag" / "suggest a tag" picker. */
   allTags: Tag[];
+  /** The viewer's own pending suggestions for this title. */
+  suggestedTags?: Tag[];
   isAdmin: boolean;
 }) {
   // Hooks run before the early return: a component may not call fewer hooks on
@@ -69,12 +80,21 @@ export function EntryTags({
   const shown = tags.filter(
     (tag) =>
       tag.kind !== "format" &&
-      (!editing || !savedTagIds || savedTagIds.has(tag.id)),
+      (!editing || !isAdmin || !savedTagIds || savedTagIds.has(tag.id)),
   );
 
-  if (shown.length === 0 && !isAdmin) return null;
+  const pending = isAdmin ? [] : suggestedTags;
 
-  const taggedIds = new Set(tags.map((tag) => tag.id));
+  if (
+    shown.length === 0 &&
+    pending.length === 0 &&
+    allTags.length === 0 &&
+    !isAdmin
+  ) {
+    return null;
+  }
+
+  const taggedIds = new Set([...tags, ...pending].map((tag) => tag.id));
   const untagged = allTags.filter(
     (tag) => !taggedIds.has(tag.id) && tag.kind !== "format",
   );
@@ -82,11 +102,11 @@ export function EntryTags({
   return (
     <section className="grid gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        {shown.length > 0 ? (
+        {shown.length > 0 || pending.length > 0 ? (
           <ul className="flex flex-wrap gap-2">
             {shown.map((tag) => (
               <li key={tag.id}>
-                {editing ? (
+                {editing && isAdmin && !lockedTagIds?.has(tag.id) ? (
                   <RemovableTagChip titleId={titleId} tag={tag} />
                 ) : (
                   <Link href={`/discover/tag/${tag.slug}`}>
@@ -97,34 +117,50 @@ export function EntryTags({
                 )}
               </li>
             ))}
+            {pending.map((tag) => (
+              <li key={tag.id}>
+                <Badge
+                  variant="outline"
+                  title="Suggested — waiting for an admin"
+                  className="border-dashed text-muted-foreground"
+                >
+                  {tag.name}
+                </Badge>
+              </li>
+            ))}
           </ul>
         ) : null}
 
-        {/* Rendered only for an admin — a reader never gets the control, not
-            even disabled. aria-pressed rather than a label that says "on":
-            this is a toggle, and that is the attribute a screen reader
-            already knows how to announce. */}
-        {isAdmin ? (
-          <Button
-            type="button"
-            size="sm"
-            variant={editing ? "secondary" : "ghost"}
-            aria-pressed={editing}
-            onClick={() => setEditing((on) => !on)}
-            className="rounded-pill"
-          >
-            {editing ? (
-              <Check className="size-3.5" />
-            ) : (
-              <Pencil className="size-3.5" />
-            )}
-            {editing ? "Done" : "Edit"}
-          </Button>
-        ) : null}
+        {/* aria-pressed rather than a label that says "on": this is a
+            toggle, and that is the attribute a screen reader already knows
+            how to announce. */}
+        <Button
+          type="button"
+          size="sm"
+          variant={editing ? "secondary" : "ghost"}
+          aria-pressed={editing}
+          onClick={() => setEditing((on) => !on)}
+          className="rounded-pill"
+        >
+          {editing ? (
+            <Check className="size-3.5" />
+          ) : isAdmin ? (
+            <Pencil className="size-3.5" />
+          ) : (
+            <Lightbulb className="size-3.5" />
+          )}
+          {editing ? "Done" : isAdmin ? "Edit" : "Suggest"}
+        </Button>
       </div>
 
-      {isAdmin && editing ? (
-        <AddTagPicker titleId={titleId} options={untagged} />
+      {editing ? (
+        <AddTagPicker
+          titleId={titleId}
+          options={untagged}
+          action={isAdmin ? tagTitle : suggestTag}
+          verb={isAdmin ? "Tag" : "Suggest"}
+          label={isAdmin ? "Add a tag" : "Suggest a tag"}
+        />
       ) : null}
     </section>
   );
@@ -189,11 +225,12 @@ function RemovableTagChip({ titleId, tag }: { titleId: number; tag: Tag }) {
 }
 
 /**
- * The admin's "add a tag" control: a native select plus a submit button.
+ * The "add a tag" control: a native select plus a submit button. The admin's
+ * tags the title outright; a reader's files a suggestion.
  *
  * A native <select>, not the Radix one, for the same reason TagForm's kind
  * field is native: it is already a form control that lands in FormData on its
- * own, and this control's whole job is to produce FormData for tagTitle.
+ * own, and this control's whole job is to produce FormData for its action.
  *
  * Nothing to pick from (every active tag is already applied, or none exist)
  * collapses to a quiet hint rather than a disabled control with nothing to say.
@@ -201,14 +238,20 @@ function RemovableTagChip({ titleId, tag }: { titleId: number; tag: Tag }) {
 function AddTagPicker({
   titleId,
   options,
+  action: submit,
+  verb,
+  label,
 }: {
   titleId: number;
   options: Tag[];
+  action: (prev: TagState, formData: FormData) => Promise<TagState>;
+  verb: string;
+  label: string;
 }) {
   const router = useRouter();
 
   const [state, action, pending] = useActionState<TagState, FormData>(
-    tagTitle,
+    submit,
     null,
   );
 
@@ -247,12 +290,12 @@ function AddTagPicker({
         // list on refresh.
         key={options.map((tag) => tag.id).join(",")}
         name="tag_id"
-        aria-label="Add a tag"
+        aria-label={label}
         defaultValue=""
         className="h-8 rounded-md border border-input bg-transparent px-2 text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
       >
         <option value="" disabled>
-          Add a tag…
+          {label}…
         </option>
         {options.map((tag) => (
           <option key={tag.id} value={tag.id}>
@@ -268,7 +311,7 @@ function AddTagPicker({
         className="rounded-pill"
       >
         {pending ? <Loader2 className="size-3.5 animate-spin" /> : <TagIcon className="size-3.5" />}
-        Tag
+        {verb}
       </Button>
     </form>
   );

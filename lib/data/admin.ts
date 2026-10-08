@@ -260,13 +260,13 @@ export async function getTagForAdmin(id: number): Promise<Tag | null> {
  */
 export async function getTaggedTitlesForAdmin(
   tagId: number,
-): Promise<CollectionTitle[]> {
+): Promise<(CollectionTitle & { fromApi: boolean })[]> {
   const supabase = await createClient();
 
   const { data, error } = await supabase
     .from("title_tags")
     .select(
-      `media_titles!inner (
+      `from_api, media_titles!inner (
          id, mal_media_id, title, title_en, main_picture_url,
          mal_media_kind, num_chapters, mal_status
        )`,
@@ -276,8 +276,13 @@ export async function getTaggedTitlesForAdmin(
 
   if (error) throw new Error(`Failed to load titles: ${error.message}`);
 
-  return ((data ?? []) as unknown as { media_titles: CollectionTitle }[])
-    .map((row) => row.media_titles)
+  return (
+    (data ?? []) as unknown as {
+      from_api: boolean;
+      media_titles: CollectionTitle;
+    }[]
+  )
+    .map((row) => ({ ...row.media_titles, fromApi: row.from_api }))
     .sort((a, b) => a.title.localeCompare(b.title));
 }
 

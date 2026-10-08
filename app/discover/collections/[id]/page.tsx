@@ -11,6 +11,7 @@ import { verifySession } from "@/lib/auth/dal";
 import { getLibraryTitles, getMyCollection } from "@/lib/data/collections";
 import { getIsPro } from "@/lib/data/pro";
 import { getSources } from "@/lib/data/sources";
+import { isCollectionSuggested } from "@/lib/data/suggestions";
 
 export async function generateMetadata({
   params,
@@ -39,11 +40,12 @@ export default async function MyCollectionPage({
   const collectionId = Number(id);
   if (!Number.isInteger(collectionId) || collectionId <= 0) notFound();
 
-  const [collection, library, sources, isPro] = await Promise.all([
+  const [collection, library, sources, isPro, suggested] = await Promise.all([
     getMyCollection(collectionId),
     getLibraryTitles(),
     getSources(),
     getIsPro(),
+    isCollectionSuggested(collectionId),
   ]);
 
   // RLS makes "does not exist" and "belongs to someone else" indistinguishable,
@@ -81,6 +83,7 @@ export default async function MyCollectionPage({
             description: collection.description,
           }}
           itemCount={collection.items.length}
+          suggested={suggested}
         />
 
         {collection.items.length === 0 ? (

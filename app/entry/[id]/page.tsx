@@ -15,6 +15,7 @@ import { EntryRemove } from "@/components/entry-remove";
 import { EntrySyncStatus } from "@/components/entry-sync-status";
 import { EntrySourceEditor } from "@/components/entry-source-editor";
 import { EntryTags } from "@/components/entry-tags";
+import { getMyTagSuggestions } from "@/lib/data/suggestions";
 import { PosterPicker } from "@/components/poster-picker";
 import { ProgressEditor } from "@/components/progress-editor";
 import { getMediaExtras } from "@/lib/anilist/endpoints";
@@ -117,11 +118,12 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
       ? Promise.resolve(null)
       : malLive.then((live) => live?.numChapters ?? title.num_chapters);
 
-  // allTags is only fetched for an admin — a reader never sees the picker, so
-  // there is nothing for the full tag vocabulary to do on their render.
-  const [tags, allTags] = await Promise.all([
+  // Everyone gets the tag picker: an admin's tags the title, a reader's
+  // suggests a tag. Only a reader has pending suggestions to show.
+  const [tags, allTags, suggestedTags] = await Promise.all([
     getTagsForTitle(title.id),
-    admin ? getActiveTags() : Promise.resolve([]),
+    getActiveTags(),
+    admin ? Promise.resolve([]) : getMyTagSuggestions(title.id),
   ]);
 
   return (
@@ -192,7 +194,9 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
               <EntryTags
                 titleId={title.id}
                 tags={tags}
+                lockedTagIds={apiTagIds(tags)}
                 allTags={allTags}
+                suggestedTags={suggestedTags}
                 isAdmin={admin}
               />
             }
@@ -201,6 +205,7 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
               titleId={title.id}
               saved={tags}
               allTags={allTags}
+              suggestedTags={suggestedTags}
               isAdmin={admin}
               extras={anilist}
               malLive={malLive}
@@ -354,8 +359,9 @@ async function EntryTagsWithLiveGenres({
   ...props
 }: {
   titleId: number;
-  saved: Tag[];
+  saved: (Tag & { from_api: boolean })[];
   allTags: Tag[];
+  suggestedTags: Tag[];
   isAdmin: boolean;
   extras: Promise<AniListMediaExtras | null>;
   malLive: Promise<MalLiveDetails | null>;
@@ -371,6 +377,9 @@ async function EntryTagsWithLiveGenres({
       {...props}
       tags={mergeTags(saved, live)}
       savedTagIds={new Set(saved.map((tag) => tag.id))}
+      // What either site gives right now counts as the API's too, even
+      // before a sync has marked the saved link.
+      lockedTagIds={new Set([...apiTagIds(saved), ...live.map((tag) => tag.id)])}
     />
   );
 }
@@ -563,4 +572,9 @@ async function SourceEditorWithLinks({
       anilistLinks={catalogLinks(media?.externalLinks, props.catalog)}
     />
   );
+}
+
+/** The saved tags MyAnimeList or AniList put on the title. */
+function apiTagIds(tags: (Tag & { from_api: boolean })[]): Set<number> {
+  return new Set(tags.filter((tag) => tag.from_api).map((tag) => tag.id));
 }
