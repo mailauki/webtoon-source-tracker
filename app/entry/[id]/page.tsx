@@ -10,6 +10,7 @@ import { AuthorCheck, EntryAuthors } from "@/components/entry-authors";
 import { Button } from "@/components/ui/button";
 import { EntryCollections } from "@/components/entry-collections";
 import { EntryHeader } from "@/components/entry-header";
+import { EntryMalLink } from "@/components/entry-mal-link";
 import { EntryRemove } from "@/components/entry-remove";
 import { EntrySyncStatus } from "@/components/entry-sync-status";
 import { EntrySourceEditor } from "@/components/entry-source-editor";
@@ -20,6 +21,7 @@ import { getMediaExtras } from "@/lib/anilist/endpoints";
 import { malGenresFor } from "@/lib/anilist/genres";
 import type { AniListMediaExtras } from "@/lib/anilist/types";
 import { getMalLiveDetails, type MalLiveDetails } from "@/lib/mal/endpoints";
+import { getPersonManga } from "@/lib/mal/jikan";
 import {
   getAniListConnection,
   hidesMatureTitles,
@@ -36,6 +38,7 @@ import {
   authorWorks,
   mergeAuthors,
   relatedWorks,
+  withMalWorks,
 } from "@/lib/data/author-works";
 import { chapterTotal } from "@/lib/data/chapter-totals";
 import { displayTitle } from "@/lib/data/display-title";
@@ -218,6 +221,17 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
           archived={entry.archived_at !== null}
         />
 
+        {/* Only for a title only AniList has: how to link it to MyAnimeList.
+            Streams in, since finding the MyAnimeList twin is a live search. */}
+        {title.mal_media_id === null && title.anilist_media_id !== null ? (
+          <Suspense fallback={null}>
+            <EntryMalLink
+              entryId={entry.id}
+              title={{ ...title, anilist_media_id: title.anilist_media_id }}
+            />
+          </Suspense>
+        ) : null}
+
         {/* Only for a MAL-backed title: an AniList-only row's num_chapters
             already came from AniList, so there is nothing to compare. */}
         {title.mal_media_id !== null ? (
@@ -284,7 +298,7 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
             Pro — without it the teaser needs nothing from anywhere. */}
         {isPro ? (
           <Suspense fallback={null}>
-            <AuthorWorks extras={anilist} malLive={malLive} />
+            <AuthorWorks extras={anilist} malLive={malLive} malMediaId={title.mal_media_id} />
           </Suspense>
         ) : (
           <EntryAuthorWorks isPro={false} />
@@ -433,19 +447,22 @@ async function AuthorsCheck({
 }
 
 /**
- * The authors' other works, from AniList, each linked to its entry page when
- * the reader already tracks it and offered to add when they do not.
+ * The authors' other works, from AniList and MyAnimeList, each linked to its
+ * entry page when the reader already tracks it and offered to add when they
+ * do not.
  *
- * Reads the same AniList response as the rest of the page — the works ride
- * on it for Pro (see getMediaExtras) — so this costs one library query and
- * no extra request to either site.
+ * AniList's ride on the response the rest of the page already reads (see
+ * getMediaExtras). MyAnimeList's cost one Jikan request per MAL-credited
+ * author, cached for a day — see lib/mal/jikan.ts.
  */
 async function AuthorWorks({
   extras,
   malLive,
+  malMediaId,
 }: {
   extras: Promise<AniListMediaExtras | null>;
   malLive: Promise<MalLiveDetails | null>;
+  malMediaId: number | null;
 }) {
   const [media, mal, hideMature, anilistConnection] = await Promise.all([
     extras,
@@ -454,13 +471,22 @@ async function AuthorWorks({
     getAniListConnection(),
   ]);
   const { authors } = mergeAuthors(mal?.authors ?? null, media?.staff);
-  const works = authorWorks(media);
+  // Capped: Jikan allows about three requests a second.
+  const malWorks = await Promise.all(
+    authors
+      .flatMap((author) => (author.mal ? [author.mal.id] : []))
+      .slice(0, 3)
+      .map(getPersonManga),
+  );
+  const works = withMalWorks(authorWorks(media), malWorks.flat(), malMediaId);
 
   const library =
     works.length === 0
       ? []
       : await getLibraryMatches({
-          anilistIds: works.map((work) => work.anilistId),
+          anilistIds: works.flatMap((work) =>
+            work.anilistId === null ? [] : [work.anilistId],
+          ),
           malIds: works.flatMap((work) =>
             work.malId === null ? [] : [work.malId],
           ),

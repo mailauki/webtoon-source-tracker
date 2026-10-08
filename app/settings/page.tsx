@@ -5,6 +5,7 @@ import { AccountSync } from "@/components/settings/account-sync";
 import { AniListDisconnect } from "@/components/settings/anilist-disconnect";
 import { MalDisconnect } from "@/components/settings/mal-disconnect";
 import { CustomSources } from "@/components/settings/custom-sources";
+import { DuplicateTitles } from "@/components/settings/duplicate-titles";
 import { AgeRangeForm } from "@/components/settings/age-range-form";
 import { LinkedLogins } from "@/components/settings/linked-logins";
 import { MatureContent } from "@/components/settings/mature-content";
@@ -22,6 +23,8 @@ import {
   verifySession,
 } from "@/lib/auth/dal";
 import { getGenres, getRemovalRules, getSources } from "@/lib/data/sources";
+import { findDuplicates } from "@/lib/data/duplicates";
+import { getLibrary } from "@/lib/data/entries";
 import { getIsPro } from "@/lib/data/pro";
 import { formatLastSynced } from "@/lib/sync/staleness";
 import { parseUnmatchedTitles } from "@/lib/sync/unmatched-titles";
@@ -51,6 +54,7 @@ export default async function SettingsPage({
     isPro,
     removalRules,
     genres,
+    library,
   ] = await Promise.all([
       getProfile(),
       getUserIdentities(),
@@ -62,7 +66,9 @@ export default async function SettingsPage({
       getIsPro(),
       getRemovalRules(),
       getGenres(),
+      getLibrary(),
     ]);
+  const duplicates = findDuplicates(library);
 
   const malLinked = connection !== null && connection.status !== "disconnected";
   const anilistLinked = anilist !== null && anilist.status !== "disconnected";
@@ -219,6 +225,24 @@ export default async function SettingsPage({
               }
               unmatchedTitles={parseUnmatchedTitles(anilist.unmatched_titles)}
             />
+          </section>
+        ) : null}
+
+        {/* Only once both sites are in play: a duplicate is an AniList-only
+            title and a MyAnimeList one, so with one site there are none. */}
+        {malLinked && anilistLinked ? (
+          <section id="duplicates" className="grid gap-3 scroll-mt-24">
+            <div>
+              <h2 className="font-display text-lg font-semibold">
+                Possible duplicates
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Titles in your library from AniList and from MyAnimeList that
+                share a name but aren&rsquo;t linked to each other. Merging
+                links them on both sites and keeps one entry.
+              </p>
+            </div>
+            <DuplicateTitles pairs={duplicates} />
           </section>
         ) : null}
 

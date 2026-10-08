@@ -18,6 +18,7 @@ import {
   verifySession,
 } from "@/lib/auth/dal";
 import { countUnmatchedToAniList } from "@/lib/data/cross-search";
+import { findDuplicates } from "@/lib/data/duplicates";
 import { getLibrary, getStatusCounts } from "@/lib/data/entries";
 import {
   resolveActiveChip,
@@ -153,6 +154,10 @@ export default async function LibraryPage() {
     ? countUnmatchedToAniList(entries)
     : 0;
 
+  // From the rows already on the page. Reviewed on /settings, not here: a
+  // merge is a deliberate act, not something to do from the shelf.
+  const duplicateCount = findDuplicates(entries).length;
+
   // Named in the order they are authoritative: MyAnimeList owns any title it
   // has, AniList covers the rest.
   const linkedLabel = [
@@ -248,6 +253,17 @@ export default async function LibraryPage() {
                 copy them to AniList
               </Link>{" "}
               from Settings.
+            </p>
+          ) : null}
+
+          {duplicateCount > 0 ? (
+            <p className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+              {duplicateCount}{" "}
+              {duplicateCount === 1 ? "title may be" : "titles may be"} in your
+              library twice, once from each site.{" "}
+              <Link href="/settings#duplicates" className="font-medium underline">
+                Review
+              </Link>
             </p>
           ) : null}
 

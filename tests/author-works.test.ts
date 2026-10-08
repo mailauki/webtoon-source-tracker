@@ -8,6 +8,7 @@ import {
   nameKey,
   relatedWorks,
   soundKeys,
+  withMalWorks,
   type LibraryMatch,
 } from "@/lib/data/author-works";
 
@@ -269,5 +270,50 @@ describe("relatedWorks", () => {
 
   it("caps the list", () => {
     expect(relatedWorks(works, [], { hideMature: false, limit: 2 })).toHaveLength(2);
+  });
+});
+
+describe("withMalWorks", () => {
+  const anilist = authorWorks({ id: 1, staff });
+
+  it("adds MyAnimeList's works AniList's list does not hold, after AniList's", () => {
+    const merged = withMalWorks(
+      anilist,
+      [
+        { malId: 1004, title: "Already listed by AniList", cover: null },
+        { malId: 7000, title: "Only on MyAnimeList", cover: "https://mal/7000.jpg" },
+        { malId: 7000, title: "Credited twice", cover: null },
+        { malId: 1, title: "This title", cover: null },
+      ],
+      1,
+    );
+    expect(merged.slice(0, anilist.length)).toEqual(anilist);
+    expect(merged.slice(anilist.length)).toEqual([
+      {
+        anilistId: null,
+        malId: 7000,
+        title: "Only on MyAnimeList",
+        format: null,
+        cover: "https://mal/7000.jpg",
+        isAdult: null,
+      },
+    ]);
+  });
+
+  it("links a MyAnimeList work the reader tracks, by MAL id", () => {
+    const [work] = relatedWorks(
+      withMalWorks([], [{ malId: 7000, title: "W", cover: null }], null),
+      [{ entryId: 9, anilistMediaId: null, malMediaId: 7000, title: "Mine", cover: null }],
+      { hideMature: false },
+    );
+    expect(work).toMatchObject({ entryId: 9, title: "Mine" });
+  });
+
+  // Jikan does not say how a work is rated, so it cannot be shown to a reader
+  // who hides adult titles.
+  it("drops works of unknown rating when the reader hides adult titles", () => {
+    const works = withMalWorks([], [{ malId: 7000, title: "W", cover: null }], null);
+    expect(relatedWorks(works, [], { hideMature: true })).toEqual([]);
+    expect(relatedWorks(works, [], { hideMature: false })).toHaveLength(1);
   });
 });
