@@ -142,6 +142,8 @@ const MEDIA_BY_MAL_QUERY = /* GraphQL */ `
 export async function findMediaByMalIds(
   client: AniListClient,
   malIds: number[],
+  /** Called after each batch of 50 with how many ids have been looked up. */
+  onProgress?: (looked: number, total: number) => void,
 ): Promise<Map<number, number>> {
   const found = new Map<number, number>();
   const unique = [...new Set(malIds)];
@@ -164,6 +166,7 @@ export async function findMediaByMalIds(
       }
       if (!parsed.pageInfo.hasNextPage) break;
     }
+    onProgress?.(i + ids.length, unique.length);
   }
 
   return found;
@@ -285,6 +288,8 @@ const SAVE_BATCH_SIZE = 10;
 export async function saveListEntries(
   client: AniListClient,
   writes: AniListEntryWrite[],
+  /** Called after each batch with how many writes have been attempted. */
+  onProgress?: (attempted: number) => void,
 ): Promise<{ saved: number; failed: AniListEntryWrite[] }> {
   let saved = 0;
   const failed: AniListEntryWrite[] = [];
@@ -295,6 +300,7 @@ export async function saveListEntries(
     try {
       await client.request(saveMutation(batch.length), saveVariables(batch));
       saved += batch.length;
+      onProgress?.(i + batch.length);
       continue;
     } catch (cause) {
       if (!(cause instanceof AniListApiError)) throw cause;
@@ -309,6 +315,7 @@ export async function saveListEntries(
         failed.push(write);
       }
     }
+    onProgress?.(i + batch.length);
   }
 
   return { saved, failed };

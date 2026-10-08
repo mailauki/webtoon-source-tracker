@@ -73,6 +73,7 @@ export type Database = {
           connected_at: string
           last_synced_at: string | null
           status: string
+          unmatched_titles: Json
           updated_at: string
           user_id: string
         }
@@ -83,6 +84,7 @@ export type Database = {
           connected_at?: string
           last_synced_at?: string | null
           status?: string
+          unmatched_titles?: Json
           updated_at?: string
           user_id: string
         }
@@ -93,6 +95,7 @@ export type Database = {
           connected_at?: string
           last_synced_at?: string | null
           status?: string
+          unmatched_titles?: Json
           updated_at?: string
           user_id?: string
         }

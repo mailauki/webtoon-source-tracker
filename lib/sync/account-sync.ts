@@ -16,10 +16,12 @@ import {
   fromAniListEntry,
   fromMalEntry,
   planAccountSync,
+  type AccountSyncProgress,
   type AccountSyncResult,
   type ListState,
   type PlannedWrite,
   type SyncDirection,
+  type UnmatchedTitle,
 } from "./plan-account-sync";
 import { fetchMalList, syncMalList } from "./sync-list";
 
@@ -61,9 +63,25 @@ const MAL_WRITE_BUDGET_MS = 30_000;
 
 const BATCH_SIZE = 500;
 
+/** Must match SAVE_BATCH_SIZE and the lookup page in lib/anilist/endpoints.ts. */
+const ANILIST_SAVE_BATCH = 10;
+const ANILIST_LOOKUP_BATCH = 50;
+
+/**
+ * Rough relative cost of each kind of request, for the progress bar only.
+ *
+ * MAL writes are one request each with a pause between; an AniList save or
+ * lookup is one request for ten or fifty titles. The refresh afterwards is a
+ * full MAL list read plus database writes.
+ */
+const WEIGHT = { lookup: 2, anilistSave: 2, malWrite: 1, refresh: 6 } as const;
+
+/** Where the bar sits once both lists are read and compared. */
+const PLANNED_AT = 0.15;
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export type { AccountSyncResult };
+export type { AccountSyncProgress, AccountSyncResult };
 
 /** Thrown when either connection is missing or not active. */
 export class AccountSyncUnavailableError extends Error {
@@ -71,6 +89,23 @@ export class AccountSyncUnavailableError extends Error {
     super(message);
     this.name = "AccountSyncUnavailableError";
   }
+}
+
+/** The name AniList shows first, in the order its own site prefers. */
+function anilistTitle(media: {
+  id: number;
+  title?: { english: string | null; romaji: string | null; native?: string | null };
+}): string {
+  return (
+    media.title?.english ??
+    media.title?.romaji ??
+    media.title?.native ??
+    `AniList #${media.id}`
+  );
+}
+
+function byTitle(a: UnmatchedTitle, b: UnmatchedTitle): number {
+  return a.title.localeCompare(b.title, undefined, { sensitivity: "base" });
 }
 
 function toAniListWrite(mediaId: number, state: ListState): AniListEntryWrite {
@@ -86,8 +121,11 @@ function toAniListWrite(mediaId: number, state: ListState): AniListEntryWrite {
 export async function syncAccounts(
   userId: string,
   direction: SyncDirection,
+  onProgress?: (progress: AccountSyncProgress) => void,
 ): Promise<AccountSyncResult> {
   const admin = createAdminClient();
+  const report = (step: string, value: number) =>
+    onProgress?.({ step, value: Math.max(0, Math.min(1, value)) });
 
   const [{ data: mal }, { data: anilist }] = await Promise.all([
     admin.from("mal_connections").select("status").eq("user_id", userId).maybeSingle(),
@@ -109,27 +147,38 @@ export async function syncAccounts(
   const anilistClient = new AniListClient(userId);
 
   // --- 1. Read both lists --------------------------------------------------
+  report("Reading your lists", 0.02);
   const [malList, anilistList] = await Promise.all([
     fetchMalList(malClient),
     getAniListMangaList(anilistClient, anilist.anilist_user_id),
   ]);
 
+  report("Comparing your lists", 0.1);
+
   const malStates = new Map<number, ListState>();
+  const malTitles = new Map<number, string>();
   for (const entry of malList.entries) {
     const state = fromMalEntry(entry);
     if (state) malStates.set(entry.node.id, state);
+    malTitles.set(entry.node.id, entry.node.title);
   }
 
   const anilistStates = new Map<number, ListState>();
   // MAL id -> AniList id, for the titles AniList already has on the list.
   const anilistIds = new Map<number, number>();
-  let unmatched = 0;
+  // Kept by title, not just counted, so the settings page can list them for
+  // the user to add or link on the other site by hand.
+  const unmatchedTitles: UnmatchedTitle[] = [];
 
   for (const entry of anilistList.entries) {
     // No MAL counterpart: nothing to match it against, and no way to write it
-    // to MAL. Counted so the result can say so rather than hide it.
+    // to MAL. Recorded so the result can say so rather than hide it.
     if (entry.media.idMal === null) {
-      unmatched++;
+      unmatchedTitles.push({
+        onlyOn: "anilist",
+        id: entry.media.id,
+        title: anilistTitle(entry.media),
+      });
       continue;
     }
     const state = fromAniListEntry(entry);
@@ -197,12 +246,39 @@ export async function syncAccounts(
   // AniList id looked up (50 per request). Resolved before the cap is
   // applied, so titles AniList has no entry for never take up a run's slots —
   // otherwise enough of them at the front would stall every later run.
-  const unknown = toAniList
-    .map((w) => w.malId)
-    .filter((malId) => !anilistIds.has(malId));
+  const unknown = [
+    ...new Set(
+      toAniList.map((w) => w.malId).filter((malId) => !anilistIds.has(malId)),
+    ),
+  ];
+
+  // The bar from here on is shared out by the work the plan calls for. The
+  // AniList save count is an upper bound until the lookup says how many of
+  // the unknown titles AniList has; `total` is corrected once it does.
+  const malBatch = toMal.slice(0, MAX_WRITES_PER_SIDE);
+  const saveUnits = (writes: number) =>
+    Math.ceil(Math.min(writes, MAX_WRITES_PER_SIDE) / ANILIST_SAVE_BATCH) *
+    WEIGHT.anilistSave;
+  const lookupUnits =
+    Math.ceil(unknown.length / ANILIST_LOOKUP_BATCH) * WEIGHT.lookup;
+  const malUnits = malBatch.length * WEIGHT.malWrite;
+  const refreshUnits = malBatch.length > 0 ? WEIGHT.refresh : 0;
+  let total = lookupUnits + saveUnits(toAniList.length) + malUnits + refreshUnits;
+  let done = 0;
+  const at = (units: number) =>
+    PLANNED_AT + (1 - PLANNED_AT) * (total > 0 ? units / total : 1);
+  const advance = (step: string, units: number) => {
+    done += units;
+    report(step, at(done));
+  };
+
+  report("Comparing your lists", PLANNED_AT);
 
   if (unknown.length > 0) {
-    const resolved = await findMediaByMalIds(anilistClient, unknown);
+    // Each callback is one more request done.
+    const resolved = await findMediaByMalIds(anilistClient, unknown, (n) =>
+      advance(`Finding titles on AniList (${n} of ${unknown.length})`, WEIGHT.lookup),
+    );
     for (const [malId, anilistId] of resolved) anilistIds.set(malId, anilistId);
   }
 
@@ -211,24 +287,36 @@ export async function syncAccounts(
   for (const write of toAniList) {
     const mediaId = anilistIds.get(write.malId);
     if (mediaId === undefined) {
-      unmatched++;
+      unmatchedTitles.push({
+        onlyOn: "mal",
+        id: write.malId,
+        title: malTitles.get(write.malId) ?? `MyAnimeList #${write.malId}`,
+      });
       continue;
     }
     anilistWrites.push(toAniListWrite(mediaId, write.state));
   }
 
+  total += saveUnits(anilistWrites.length) - saveUnits(toAniList.length);
+
   const anilistBatch = anilistWrites.slice(0, MAX_WRITES_PER_SIDE);
-  const anilistResult = await saveListEntries(anilistClient, anilistBatch);
+  const anilistResult = await saveListEntries(anilistClient, anilistBatch, (n) =>
+    advance(`Saving to AniList (${n} of ${anilistBatch.length})`, WEIGHT.anilistSave),
+  );
   let remaining = anilistWrites.length - anilistBatch.length;
   let failed = anilistResult.failed.length;
 
   // --- 4. Write to MAL -----------------------------------------------------
-  const malBatch = toMal.slice(0, MAX_WRITES_PER_SIDE);
   remaining += toMal.length - malBatch.length;
   let malSaved = 0;
   const malDeadline = Date.now() + MAL_WRITE_BUDGET_MS;
 
   for (let i = 0; i < malBatch.length; i++) {
+    report(
+      `Saving to MyAnimeList (${i + 1} of ${malBatch.length})`,
+      at(done + i * WEIGHT.malWrite),
+    );
+
     if (Date.now() > malDeadline) {
       remaining += malBatch.length - i;
       break;
@@ -277,6 +365,7 @@ export async function syncAccounts(
   // turn the result into an error: the library's own Sync button (or its
   // staleness check) catches the mirror up later.
   if (malSaved > 0) {
+    report("Refreshing your library", at(total - refreshUnits));
     try {
       await syncMalList(userId, { force: true });
     } catch (error) {
@@ -284,19 +373,35 @@ export async function syncAccounts(
     }
   }
 
+  unmatchedTitles.sort(byTitle);
+
   await admin
     .from("anilist_connections")
     .update({ last_synced_at: new Date().toISOString() })
     .eq("user_id", userId);
 
+  // Separate from the timestamp above so a database that has not had the
+  // column added yet still records that the sync ran. Best-effort for the
+  // same reason as the id cache: the sync itself already succeeded.
+  const { error: unmatchedError } = await admin
+    .from("anilist_connections")
+    .update({ unmatched_titles: unmatchedTitles })
+    .eq("user_id", userId);
+  if (unmatchedError) {
+    console.error("[account-sync] saving unmatched titles failed:", unmatchedError);
+  }
+
+  report("Done", 1);
+
   return {
     toMal: malSaved,
     toAniList: anilistResult.saved,
     inSync: plan.inSync,
-    unmatched,
+    unmatched: unmatchedTitles.length,
     remaining,
     excluded,
     failed,
+    unmatchedTitles,
   };
 }
 

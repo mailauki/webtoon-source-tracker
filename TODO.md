@@ -111,8 +111,9 @@ the library, and making that outbound link type-aware.
 **Where:** `lib/sync/account-sync.ts`, `supabase/migrations/…_anilist_connections.sql`
 
 The account sync matches titles by MAL id (AniList's `idMal`). A title with no
-MAL counterpart is counted as "couldn't be matched" and skipped — and for a
-webtoon tracker that is not rare: plenty of Korean and Chinese webtoons are on
+MAL counterpart is reported as "couldn't be matched" and skipped — the
+settings page lists them from the last run so they can be added or linked by
+hand — and for a webtoon tracker that is not rare: plenty of Korean and Chinese webtoons are on
 AniList only. They also cannot appear in the library, which mirrors MAL.
 
 Supporting them means `media_titles.mal_media_id` becoming nullable (with
@@ -127,7 +128,7 @@ connect CTA and its sync button are MAL-only for the same reason.
 
 ### `TODO(anilist-scheduled-sync)` — the account sync only runs on a click
 
-**Where:** `app/actions/account-sync.ts`
+**Where:** `app/api/account-sync/route.ts`
 
 Per-edit mirroring keeps AniList current for changes made *in this app*.
 Changes made directly on either site only cross over when the user runs Sync

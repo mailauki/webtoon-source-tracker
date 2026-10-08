@@ -219,6 +219,7 @@ describe("describeAccountSync", () => {
     remaining: 0,
     excluded: 0,
     failed: 0,
+    unmatchedTitles: [],
   };
 
   it("says when there was nothing to do", () => {
@@ -248,10 +249,11 @@ describe("describeAccountSync", () => {
         remaining: 20,
         excluded: 0,
         failed: 2,
+        unmatchedTitles: [],
       }),
     ).toBe(
       "3 titles updated on AniList, 1 title updated on MyAnimeList. 10 already matched. " +
-        "1 title couldn't be matched between the two sites and was skipped. " +
+        "1 title couldn't be matched between the two sites and was skipped — see the list below. " +
         "2 titles couldn't be saved. 20 more to go — run it again to continue.",
     );
   });
