@@ -10,7 +10,8 @@ import type { MergedAuthor, RelatedWork } from "@/lib/data/author-works";
  *
  * A title the reader tracks opens its entry page; anything else can be added
  * from here, the same as from a discover shelf. The works come from AniList
- * (see lib/data/author-works.ts), so a title nobody here tracks still shows.
+ * and MyAnimeList (see lib/data/author-works.ts), so a title nobody here
+ * tracks still shows.
  *
  * Pro. Without it the section is only the teaser, and the page never asks
  * AniList for the works it would have shown.
@@ -52,7 +53,7 @@ export function EntryAuthorWorks(
     >
       <p className="text-sm text-muted-foreground">
         {works.length === 0
-          ? "Nothing else of theirs on AniList."
+          ? "Nothing else of theirs on MyAnimeList or AniList."
           : tracked > 0
             ? `${tracked} in your library.`
             : "None in your library yet."}
@@ -61,7 +62,7 @@ export function EntryAuthorWorks(
       {works.length > 0 ? (
         <ul className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2">
           {works.map((work) => (
-            <li key={work.anilistId} className="grid w-[110px] shrink-0 snap-start content-start gap-1.5">
+            <li key={work.anilistId ?? `mal-${work.malId}`} className="grid w-[110px] shrink-0 snap-start content-start gap-1.5">
               <WorkCard work={work} anilistConnected={anilistConnected} />
             </li>
           ))}

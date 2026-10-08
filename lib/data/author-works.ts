@@ -8,12 +8,12 @@
  *   lined up by name — neither site records the other's person id — and where
  *   they disagree, about who is credited or for what, the page says so, the
  *   same way it flags a chapter-count disagreement.
- * - **What else they made** comes from AniList alone. MAL's v2 API has no way
- *   to list a person's works, and `media_titles` holds only what somebody
+ * - **What else they made** comes from both: AniList's staff credits, and
+ *   MyAnimeList's through Jikan (MAL's own v2 API cannot list a person's
+ *   works — see lib/mal/jikan.ts). `media_titles` holds only what somebody
  *   tracks, so a shelf built from it would imply the author wrote nothing
- *   else. AniList's staff credits carry every title. The library only decides
- *   what each one offers: a title the reader tracks opens its entry page,
- *   anything else can be added.
+ *   else. The library only decides what each one offers: a title the reader
+ *   tracks opens its entry page, anything else can be added.
  *
  * Deliberately not `server-only`: the tests call these directly, and nothing
  * here reads anything.
@@ -50,12 +50,14 @@ export type AuthorMismatch =
 
 /** A title one of the authors is credited on, not yet matched to the library. */
 export type AuthorWork = {
-  anilistId: number;
+  /** Null for a work only MyAnimeList listed. */
+  anilistId: number | null;
   malId: number | null;
   title: string;
   format: string | null;
   cover: string | null;
-  isAdult: boolean;
+  /** Null when unknown: Jikan does not say how a work is rated. */
+  isAdult: boolean | null;
 };
 
 /** A title on the reader's shelf, as far as matching needs it. */
@@ -426,6 +428,35 @@ export function authorWorks(
 }
 
 /**
+ * AniList's works with MyAnimeList's added: every work MAL credits the
+ * authors with that AniList's list did not already hold (by MAL id), and that
+ * is not the title itself. AniList's come first, in its order, then MAL's.
+ */
+export function withMalWorks(
+  works: AuthorWork[],
+  malWorks: { malId: number; title: string; cover: string | null }[],
+  selfMalId: number | null,
+): AuthorWork[] {
+  const seen = new Set(works.flatMap((work) => (work.malId === null ? [] : [work.malId])));
+  if (selfMalId !== null) seen.add(selfMalId);
+
+  const added: AuthorWork[] = [];
+  for (const work of malWorks) {
+    if (seen.has(work.malId)) continue;
+    seen.add(work.malId);
+    added.push({
+      anilistId: null,
+      malId: work.malId,
+      title: work.title,
+      format: null,
+      cover: work.cover,
+      isAdult: null,
+    });
+  }
+  return [...works, ...added];
+}
+
+/**
  * Lines the works up against the reader's shelf.
  *
  * A match on either id counts — a title synced from MyAnimeList may not have
@@ -435,7 +466,9 @@ export function authorWorks(
  * holds.
  *
  * Adult works are dropped when the reader hides them, tracked or not: this is
- * a browsing surface, the same as the shelf, which hides them too.
+ * a browsing surface, the same as the shelf, which hides them too. A work of
+ * unknown rating (MyAnimeList's, via Jikan) is dropped too, since it cannot
+ * be shown to be safe.
  */
 export function relatedWorks(
   works: AuthorWork[],
@@ -450,10 +483,10 @@ export function relatedWorks(
   }
 
   const resolved = works
-    .filter((work) => !(hideMature && work.isAdult))
+    .filter((work) => !(hideMature && work.isAdult !== false))
     .map((work): RelatedWork => {
       const match =
-        byAniList.get(work.anilistId) ??
+        (work.anilistId !== null ? byAniList.get(work.anilistId) : undefined) ??
         (work.malId !== null ? byMal.get(work.malId) : undefined);
       if (!match) return { ...work, entryId: null };
       return {

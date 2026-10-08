@@ -151,7 +151,7 @@ export function findMismatches(mal: MalHit, anilist: AniListHit): Mismatch[] {
  * "Oz" are one title's name on one site and another's on the other, and a
  * native-script title that short is rare enough not to be worth the risk.
  */
-function nameKeys(hit: {
+export function nameKeys(hit: {
   title: string;
   title_en: string | null;
   alt_titles?: string[];
@@ -175,7 +175,7 @@ function nameKeys(hit: {
  * pass: the kind check is what keeps a novel from fusing with its own
  * adaptation, which share every name.
  */
-function kindsCompatible(mal: string | null, anilist: string | null): boolean {
+export function kindsCompatible(mal: string | null, anilist: string | null): boolean {
   if (!mal || !anilist) return false;
   const prose = (kind: string) => kind === "novel" || kind === "light_novel";
   if (prose(mal) || prose(anilist)) return prose(mal) && prose(anilist);
