@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { UnmatchedTitles } from "@/components/settings/unmatched-titles";
+import { SyncProgressBar } from "@/components/sync-progress";
 import { readSyncEvents } from "@/lib/sync/read-sync-events";
 import type {
   AccountSyncProgress,
@@ -144,8 +145,6 @@ export function AccountSync({
     }
   }
 
-  const percent = progress ? Math.round(progress.value * 100) : 0;
-
   return (
     <div className="grid gap-3 rounded-xl border border-border p-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -185,26 +184,7 @@ export function AccountSync({
       </div>
 
       {progress ? (
-        <div className="grid gap-1.5">
-          <div
-            role="progressbar"
-            aria-label="Copy progress"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={percent}
-            aria-valuetext={`${percent}% — ${progress.step}`}
-            className="h-2 overflow-hidden rounded-full bg-muted"
-          >
-            <div
-              className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out motion-reduce:transition-none"
-              style={{ width: `${percent}%` }}
-            />
-          </div>
-          <p className="flex justify-between gap-2 text-sm text-muted-foreground">
-            <span>{progress.step}…</span>
-            <span className="tabular-nums">{percent}%</span>
-          </p>
-        </div>
+        <SyncProgressBar label="Copy progress" progress={progress} />
       ) : (
         <p aria-live="polite" className="text-sm text-muted-foreground">
           {summary ?? lastSyncedLabel}
