@@ -161,6 +161,42 @@ export type Database = {
           },
         ]
       }
+      collection_suggestions: {
+        Row: {
+          collection_id: number
+          created_at: string
+          id: number
+          user_id: string
+        }
+        Insert: {
+          collection_id: number
+          created_at?: string
+          id?: never
+          user_id?: string
+        }
+        Update: {
+          collection_id?: number
+          created_at?: string
+          id?: never
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "collection_suggestions_collection_id_fkey"
+            columns: ["collection_id"]
+            isOneToOne: true
+            referencedRelation: "collections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "collection_suggestions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       collections: {
         Row: {
           created_at: string
@@ -490,6 +526,7 @@ export type Database = {
           created_at: string
           display_name: string | null
           id: string
+          theme: string | null
           updated_at: string
         }
         Insert: {
@@ -500,6 +537,7 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           id: string
+          theme?: string | null
           updated_at?: string
         }
         Update: {
@@ -510,6 +548,7 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           id?: string
+          theme?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -680,9 +719,56 @@ export type Database = {
         }
         Relationships: []
       }
+      tag_suggestions: {
+        Row: {
+          created_at: string
+          id: number
+          tag_id: number
+          title_id: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: never
+          tag_id: number
+          title_id: number
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: never
+          tag_id?: number
+          title_id?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tag_suggestions_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "tags"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tag_suggestions_title_id_fkey"
+            columns: ["title_id"]
+            isOneToOne: false
+            referencedRelation: "media_titles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tag_suggestions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       title_tags: {
         Row: {
           created_at: string
+          from_api: boolean
           id: number
           owner_id: string | null
           tag_id: number
@@ -690,6 +776,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          from_api?: boolean
           id?: never
           owner_id?: string | null
           tag_id: number
@@ -697,6 +784,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          from_api?: boolean
           id?: never
           owner_id?: string | null
           tag_id?: number
@@ -804,6 +892,10 @@ export type Database = {
     }
     Functions: {
       anilist_tokens_delete: { Args: { p_user_id: string }; Returns: undefined }
+      approve_collection_suggestion: {
+        Args: { p_slug: string; p_suggestion_id: number }
+        Returns: number
+      }
       anilist_tokens_get: {
         Args: { p_user_id: string }
         Returns: {

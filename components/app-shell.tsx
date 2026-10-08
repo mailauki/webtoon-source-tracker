@@ -1,11 +1,12 @@
-import { Compass, LibraryBig, LogOut, Search, Settings, ShieldUser } from "lucide-react";
+import { Compass, LibraryBig, LogOut, Search, Settings } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
 import { PullToRefresh } from "@/components/pull-to-refresh";
+import { ThemeDefault } from "@/components/theme-default";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
-import { getProfile, isAdmin } from "@/lib/auth/dal";
+import { getProfile } from "@/lib/auth/dal";
 import NavLink from "./nav-link";
 
 /**
@@ -50,10 +51,10 @@ export async function AppShell({
   tertiaryRow?: React.ReactNode;
 }) {
   const profile = await getProfile();
-  const admin = await isAdmin();
 
   return (
     <div className="flex min-h-screen flex-col">
+      <ThemeDefault theme={profile?.theme ?? null} />
       <header className="fixed w-full top-0 z-40 border-b border-border bg-background/80 backdrop-blur px-4">
         <div className="h-[60px] mx-auto flex max-w-6xl items-center justify-between gap-4 py-3 pl-2">
 					<div className="flex items-center gap-3 max-sm:gap-6">
@@ -97,7 +98,6 @@ export async function AppShell({
 							<NavLink icon={<Search data-icon="inline-start" />} label="Search" url="/search" />
 							<NavLink icon={<Compass data-icon="inline-start" />} label="Discover" url="/discover" />
 							<NavLink icon={<Settings data-icon="inline-start" />} label="Settings" url="/settings" />
-							{admin && <NavLink icon={<ShieldUser data-icon="inline-start" />} label="Admin" url="/admin" />}
 						</nav>
 					</div>
 					<div className="flex items-center gap-1">

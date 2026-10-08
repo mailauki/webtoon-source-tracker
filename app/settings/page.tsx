@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ShieldUser } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { AccountSync } from "@/components/settings/account-sync";
@@ -11,6 +12,7 @@ import { LinkedLogins } from "@/components/settings/linked-logins";
 import { MatureContent } from "@/components/settings/mature-content";
 import { RemovalRules } from "@/components/settings/removal-rules";
 import { SetPasswordForm } from "@/components/settings/set-password-form";
+import { ThemePreference } from "@/components/settings/theme-preference";
 import { Button } from "@/components/ui/button";
 import { ProTeaser } from "@/components/pro-teaser";
 import {
@@ -19,6 +21,7 @@ import {
   getProfile,
   getUserIdentities,
   hidesMatureTitles,
+  isAdmin,
   isAgeConfirmedAdult,
   verifySession,
 } from "@/lib/auth/dal";
@@ -56,6 +59,7 @@ export default async function SettingsPage({
     genres,
     library,
     dismissed,
+    admin,
   ] = await Promise.all([
       getProfile(),
       getUserIdentities(),
@@ -69,6 +73,7 @@ export default async function SettingsPage({
       getGenres(),
       getLibrary(),
       getDismissedDuplicates(),
+      isAdmin(),
     ]);
   const duplicates = findDuplicates(library, dismissed);
 
@@ -106,6 +111,37 @@ export default async function SettingsPage({
           </div>
           <LinkedLogins identities={identities} />
         </section>
+
+        <section className="grid gap-3">
+          <div>
+            <h2 className="font-display text-lg font-semibold">Theme</h2>
+            <p className="text-sm text-muted-foreground">
+              Saved to your account and used on every device you sign in on.
+              The switch in the top bar changes just the device you&rsquo;re
+              on.
+            </p>
+          </div>
+          <ThemePreference saved={profile?.theme ?? null} />
+        </section>
+
+        {admin ? (
+          <section className="grid gap-3">
+            <div>
+              <h2 className="font-display text-lg font-semibold">Admin</h2>
+              <p className="text-sm text-muted-foreground">
+                Curated collections, tags, and reader suggestions.
+              </p>
+            </div>
+            <div>
+              <Button asChild variant="outline" size="sm" className="rounded-pill">
+                <Link href="/admin">
+                  <ShieldUser data-icon="inline-start" />
+                  Open admin
+                </Link>
+              </Button>
+            </div>
+          </section>
+        ) : null}
 
         <section className="grid gap-3">
           <div>
@@ -290,7 +326,7 @@ export default async function SettingsPage({
 
         <section className="grid gap-3">
           <div>
-            <h2 className="font-display text-lg font-semibold">Removal rules</h2>
+            <h2 className="font-display text-lg font-semibold">Exclusion rules</h2>
             <p className="text-sm text-muted-foreground">
               Remove every title with a status, source or genre — the ones in
               your library now, and any that match later.
