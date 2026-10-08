@@ -19,7 +19,11 @@ import {
 } from "@/lib/auth/dal";
 import { countUnmatchedToAniList } from "@/lib/data/cross-search";
 import { findDuplicates } from "@/lib/data/duplicates";
-import { getLibrary, getStatusCounts } from "@/lib/data/entries";
+import {
+  getDismissedDuplicates,
+  getLibrary,
+  getStatusCounts,
+} from "@/lib/data/entries";
 import {
   resolveActiveChip,
   resolveLayout,
@@ -115,13 +119,15 @@ export default async function LibraryPage() {
   const canSeeNsfw = await isAgeConfirmedAdult();
   const hideNsfw = canSeeNsfw && (prefs?.hide_nsfw ?? false);
 
-  const [entries, statusCounts, sources, topSources, isPro] = await Promise.all([
-    getLibrary(),
-    getStatusCounts(),
-    getSources(),
-    getTopSources(),
-    getIsPro(),
-  ]);
+  const [entries, statusCounts, sources, topSources, isPro, dismissed] =
+    await Promise.all([
+      getLibrary(),
+      getStatusCounts(),
+      getSources(),
+      getTopSources(),
+      getIsPro(),
+      getDismissedDuplicates(),
+    ]);
   // Whichever sites are linked, the shelf is stale when ANY of them is due —
   // one button refreshes from them all, so it should flag a refresh as due if
   // there is anything for it to do. The label follows the oldest of the two
@@ -156,7 +162,7 @@ export default async function LibraryPage() {
 
   // From the rows already on the page. Reviewed on /settings, not here: a
   // merge is a deliberate act, not something to do from the shelf.
-  const duplicateCount = findDuplicates(entries).length;
+  const duplicateCount = findDuplicates(entries, dismissed).length;
 
   // Named in the order they are authoritative: MyAnimeList owns any title it
   // has, AniList covers the rest.

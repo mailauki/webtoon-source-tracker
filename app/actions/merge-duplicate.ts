@@ -46,7 +46,7 @@ export async function mergeDuplicate(
   const { data: rows, error } = await supabase
     .from("user_entries")
     .select(
-      "id, media_titles!inner (mal_media_id, anilist_media_id, title, title_en, alt_titles, mal_media_kind)",
+      "id, media_titles!inner (id, mal_media_id, anilist_media_id, title, title_en, alt_titles, mal_media_kind)",
     )
     .in("id", [parsed.data.anilistEntryId, parsed.data.malEntryId])
     .is("archived_at", null);

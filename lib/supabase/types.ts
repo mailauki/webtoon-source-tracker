@@ -205,6 +205,49 @@ export type Database = {
           },
         ]
       }
+      dismissed_duplicates: {
+        Row: {
+          anilist_title_id: number
+          created_at: string
+          mal_title_id: number
+          user_id: string
+        }
+        Insert: {
+          anilist_title_id: number
+          created_at?: string
+          mal_title_id: number
+          user_id: string
+        }
+        Update: {
+          anilist_title_id?: number
+          created_at?: string
+          mal_title_id?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dismissed_duplicates_anilist_title_id_fkey"
+            columns: ["anilist_title_id"]
+            isOneToOne: false
+            referencedRelation: "media_titles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dismissed_duplicates_mal_title_id_fkey"
+            columns: ["mal_title_id"]
+            isOneToOne: false
+            referencedRelation: "media_titles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dismissed_duplicates_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       entry_sources: {
         Row: {
           chapters_owned: string | null

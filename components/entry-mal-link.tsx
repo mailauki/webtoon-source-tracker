@@ -1,11 +1,13 @@
 import { ExternalLink } from "lucide-react";
 
 import { CopyButton } from "@/components/copy-button";
+import { DismissDuplicateButton } from "@/components/dismiss-duplicate-button";
 import { MergeDuplicateButton } from "@/components/merge-duplicate-button";
 import { Button } from "@/components/ui/button";
 import { kindsCompatible, nameKeys } from "@/lib/data/cross-search";
 import { displayTitle } from "@/lib/data/display-title";
 import { findDuplicates, type DuplicateRow } from "@/lib/data/duplicates";
+import { getDismissedDuplicates } from "@/lib/data/entries";
 import { malAltTitles } from "@/lib/mal/alt-titles";
 import { searchManga } from "@/lib/mal/endpoints";
 import { searchOtherSiteUrl } from "@/lib/sync/unmatched-titles";
@@ -64,19 +66,26 @@ export async function EntryMalLink({
 
   // The library copy, if any, and only when it passes the same check the
   // merge action makes — so the button is never offered to be refused.
-  let twin: { id: number; title: string } | null = null;
+  let twin: { id: number; titleId: number; title: string } | null = null;
   if (found) {
     const supabase = await createClient();
     const { data } = await supabase
       .from("user_entries")
       .select(
-        "id, media_titles!inner (mal_media_id, anilist_media_id, title, title_en, alt_titles, mal_media_kind)",
+        "id, media_titles!inner (id, mal_media_id, anilist_media_id, title, title_en, alt_titles, mal_media_kind)",
       )
       .is("archived_at", null)
       .eq("media_titles.mal_media_id", found.id);
-    const [pair] = findDuplicates([{ id: entryId, media_titles: title }, ...(data ?? [])]);
+    const [pair] = findDuplicates(
+      [{ id: entryId, media_titles: title }, ...(data ?? [])],
+      await getDismissedDuplicates(),
+    );
     if (pair?.anilist.id === entryId) {
-      twin = { id: pair.mal.id, title: displayTitle(pair.mal.media_titles) };
+      twin = {
+        id: pair.mal.id,
+        titleId: pair.mal.media_titles.id,
+        title: displayTitle(pair.mal.media_titles),
+      };
     }
   }
 
@@ -149,13 +158,16 @@ export async function EntryMalLink({
           <p className="text-muted-foreground">
             “{twin.title}” is also in your library, from MyAnimeList.
           </p>
-          <MergeDuplicateButton
-            anilistEntryId={entryId}
-            malEntryId={twin.id}
-            anilistTitle={title.title}
-            malTitle={twin.title}
-            openAfter
-          />
+          <div className="flex items-center gap-1">
+            <DismissDuplicateButton anilistTitleId={title.id} malTitleId={twin.titleId} />
+            <MergeDuplicateButton
+              anilistEntryId={entryId}
+              malEntryId={twin.id}
+              anilistTitle={title.title}
+              malTitle={twin.title}
+              openAfter
+            />
+          </div>
         </div>
       ) : null}
     </section>

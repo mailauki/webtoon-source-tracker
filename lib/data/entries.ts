@@ -3,6 +3,7 @@ import "server-only";
 import { hidesMatureTitles } from "@/lib/auth/dal";
 import type { LibraryMatch } from "@/lib/data/author-works";
 import { displayTitle } from "@/lib/data/display-title";
+import { duplicateKey } from "@/lib/data/duplicates";
 import { entryCover } from "@/lib/data/entry-cover";
 import { MATURE_RATINGS, screenMature } from "@/lib/data/nsfw";
 import { readAllRows } from "@/lib/data/pagination";
@@ -258,3 +259,23 @@ export async function getEntry(entryId: number) {
 
 export type EntryDetail = NonNullable<Awaited<ReturnType<typeof getEntry>>>;
 
+
+/**
+ * The possible duplicates this user has said are not duplicates, as
+ * duplicateKey()s for findDuplicates. Empty on failure: a dismissed pair
+ * showing again is a nuisance, not a reason to fail the page.
+ */
+export async function getDismissedDuplicates(): Promise<Set<string>> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("dismissed_duplicates")
+    .select("anilist_title_id, mal_title_id");
+
+  if (error) {
+    console.error("[entries/dismissed-duplicates] failed:", error.message);
+    return new Set();
+  }
+  return new Set(
+    (data ?? []).map((row) => duplicateKey(row.anilist_title_id, row.mal_title_id)),
+  );
+}

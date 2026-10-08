@@ -4,6 +4,8 @@ import { kindsCompatible, nameKeys } from "./cross-search";
 export type DuplicateRow = {
   id: number;
   media_titles: {
+    /** The catalog row's id: what a dismissal is keyed on. */
+    id: number;
     mal_media_id: number | null;
     anilist_media_id: number | null;
     title: string;
@@ -19,6 +21,11 @@ export type DuplicatePair<Row extends DuplicateRow = DuplicateRow> = {
   mal: Row;
 };
 
+/** How a dismissed pair is looked up: the two catalog ids. */
+export function duplicateKey(anilistTitleId: number, malTitleId: number): string {
+  return `${anilistTitleId}:${malTitleId}`;
+}
+
 /**
  * Library entries that look like one work held twice: an AniList-only title
  * and a MyAnimeList title that has no AniList id, matched by name.
@@ -29,9 +36,12 @@ export type DuplicatePair<Row extends DuplicateRow = DuplicateRow> = {
  * case, accents and spacing are ignored, compatible kinds, and exactly one
  * candidate on each side. Anything looser stays two titles — merging moves
  * every user's entries, so a wrong pair is worse than a missed one.
+ *
+ * Pairs the user dismissed (keys from duplicateKey) are left out.
  */
 export function findDuplicates<Row extends DuplicateRow>(
   rows: Row[],
+  dismissed: ReadonlySet<string> = new Set(),
 ): DuplicatePair<Row>[] {
   const malByKey = new Map<string, Row[]>();
   for (const row of rows) {
@@ -66,5 +76,9 @@ export function findDuplicates<Row extends DuplicateRow>(
   }
 
   // Two AniList-only titles pointing at one MyAnimeList title is ambiguity.
-  return pairs.filter((pair) => claims.get(pair.mal.id) === 1);
+  return pairs.filter(
+    (pair) =>
+      claims.get(pair.mal.id) === 1 &&
+      !dismissed.has(duplicateKey(pair.anilist.media_titles.id, pair.mal.media_titles.id)),
+  );
 }

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { DismissDuplicateButton } from "@/components/dismiss-duplicate-button";
 import { MergeDuplicateButton } from "@/components/merge-duplicate-button";
 import { displayTitle } from "@/lib/data/display-title";
 import type { DuplicatePair } from "@/lib/data/duplicates";
@@ -31,12 +32,18 @@ export function DuplicateTitles({ pairs }: { pairs: DuplicatePair<LibraryRow>[] 
               <span className="text-xs text-muted-foreground">AniList</span>
             </Link>
           </div>
-          <MergeDuplicateButton
-            anilistEntryId={anilist.id}
-            malEntryId={mal.id}
-            anilistTitle={displayTitle(anilist.media_titles)}
-            malTitle={displayTitle(mal.media_titles)}
-          />
+          <div className="flex items-center gap-1">
+            <DismissDuplicateButton
+              anilistTitleId={anilist.media_titles.id}
+              malTitleId={mal.media_titles.id}
+            />
+            <MergeDuplicateButton
+              anilistEntryId={anilist.id}
+              malEntryId={mal.id}
+              anilistTitle={displayTitle(anilist.media_titles)}
+              malTitle={displayTitle(mal.media_titles)}
+            />
+          </div>
         </li>
       ))}
     </ul>

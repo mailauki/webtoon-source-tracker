@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { findDuplicates, type DuplicateRow } from "@/lib/data/duplicates";
+import { duplicateKey, findDuplicates, type DuplicateRow } from "@/lib/data/duplicates";
 
 function row(
   id: number,
@@ -12,6 +12,7 @@ function row(
   return {
     id,
     media_titles: {
+      id: id * 100,
       mal_media_id: ids.mal ?? null,
       anilist_media_id: ids.anilist ?? null,
       title,
@@ -90,5 +91,16 @@ describe("findDuplicates", () => {
     expect(
       findDuplicates([row(1, { anilist: 900 }, "Oz"), row(2, { mal: 500 }, "Oz")]),
     ).toEqual([]);
+  });
+
+  it("leaves out a pair the user dismissed, and only that pair", () => {
+    const rows = [
+      row(1, { anilist: 900 }, "First Title"),
+      row(2, { mal: 500 }, "First Title"),
+      row(3, { anilist: 901 }, "Second Title"),
+      row(4, { mal: 501 }, "Second Title"),
+    ];
+    // Fixture catalog ids are the entry id times 100.
+    expect(ids(findDuplicates(rows, new Set([duplicateKey(100, 200)])))).toEqual([[3, 4]]);
   });
 });

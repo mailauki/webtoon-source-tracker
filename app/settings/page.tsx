@@ -24,7 +24,7 @@ import {
 } from "@/lib/auth/dal";
 import { getGenres, getRemovalRules, getSources } from "@/lib/data/sources";
 import { findDuplicates } from "@/lib/data/duplicates";
-import { getLibrary } from "@/lib/data/entries";
+import { getDismissedDuplicates, getLibrary } from "@/lib/data/entries";
 import { getIsPro } from "@/lib/data/pro";
 import { formatLastSynced } from "@/lib/sync/staleness";
 import { parseUnmatchedTitles } from "@/lib/sync/unmatched-titles";
@@ -55,6 +55,7 @@ export default async function SettingsPage({
     removalRules,
     genres,
     library,
+    dismissed,
   ] = await Promise.all([
       getProfile(),
       getUserIdentities(),
@@ -67,8 +68,9 @@ export default async function SettingsPage({
       getRemovalRules(),
       getGenres(),
       getLibrary(),
+      getDismissedDuplicates(),
     ]);
-  const duplicates = findDuplicates(library);
+  const duplicates = findDuplicates(library, dismissed);
 
   const malLinked = connection !== null && connection.status !== "disconnected";
   const anilistLinked = anilist !== null && anilist.status !== "disconnected";
