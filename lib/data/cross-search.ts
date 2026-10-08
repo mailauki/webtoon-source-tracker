@@ -363,7 +363,7 @@ export function anilistIdPatch(
 /**
  * How many library rows have never been matched to an AniList title.
  *
- * Drives the notice on /library. The Sync button there only ever pulls —
+ * Drives the notice on /library. Refresh library there only ever pulls —
  * MyAnimeList into the app, AniList into the app — while copying the library
  * *out* to AniList is a bulk write that lives behind the confirmation dialog
  * on /settings. Without this count the button quietly does half of what

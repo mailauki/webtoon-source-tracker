@@ -107,7 +107,7 @@ export function describeMirror(outcome: MirrorOutcome): string | null {
     case "needs_reauth":
       return "AniList wasn't updated — reconnect it in Settings.";
     case "failed":
-      return "AniList didn't update — run Sync accounts in Settings to catch it up.";
+      return "AniList didn't update — run Copy between sites in Settings to catch it up.";
     case "not_connected":
       return null;
   }

@@ -191,16 +191,16 @@ export default async function SettingsPage({
         </section>
 
         {canSyncAccounts ? (
-          <section className="grid gap-3">
+          <section id="copy-between-sites" className="grid gap-3 scroll-mt-24">
             <div>
               <h2 className="font-display text-lg font-semibold">
-                Sync accounts
+                Copy between MyAnimeList and AniList
               </h2>
               <p className="text-sm text-muted-foreground">
                 This is the only thing that writes your library <em>out</em> to
-                the two sites — the Sync button on Library only brings titles
-                in. It brings both lists into agreement on status, chapters,
-                volumes and score. Titles are matched by their MyAnimeList id,
+                the two sites. Refresh library, on the Library page, only
+                brings changes in. Copying brings both lists into agreement on
+                status, chapters, volumes and score. Titles are matched by their MyAnimeList id,
                 so one that only exists on one site is skipped — and listed
                 below, so you can add or link it there — and nothing is ever
                 deleted from either site.

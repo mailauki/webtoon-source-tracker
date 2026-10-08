@@ -65,17 +65,17 @@ afterEach(() => {
 });
 
 async function confirmSync(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole("button", { name: /sync accounts/i }));
-  await user.click(await screen.findByRole("button", { name: "Sync" }));
+  await user.click(screen.getByRole("button", { name: /copy between sites/i }));
+  await user.click(await screen.findByRole("button", { name: "Copy" }));
 }
 
 describe("AccountSync", () => {
   // It writes to two accounts the app does not own; a stray click must not.
-  it("asks before syncing, and does nothing on cancel", async () => {
+  it("asks before copying, and does nothing on cancel", async () => {
     const user = userEvent.setup();
     render(<AccountSync lastSyncedLabel="Never synced" unmatchedTitles={[]} />);
 
-    await user.click(screen.getByRole("button", { name: /sync accounts/i }));
+    await user.click(screen.getByRole("button", { name: /copy between sites/i }));
     expect(await screen.findByRole("alertdialog")).toHaveTextContent(
       "Nothing is deleted from either site.",
     );
@@ -89,7 +89,7 @@ describe("AccountSync", () => {
     render(<AccountSync lastSyncedLabel="Never synced" unmatchedTitles={[]} />);
 
     await user.selectOptions(screen.getByLabelText("Sync direction"), "anilist_to_mal");
-    await user.click(screen.getByRole("button", { name: /sync accounts/i }));
+    await user.click(screen.getByRole("button", { name: /copy between sites/i }));
 
     const dialog = await screen.findByRole("alertdialog");
     expect(dialog).toHaveTextContent("Copy AniList to MyAnimeList?");
@@ -118,7 +118,7 @@ describe("AccountSync", () => {
     const bar = await screen.findByRole("progressbar");
     await waitFor(() => expect(bar).toHaveAttribute("aria-valuenow", "42"));
     expect(screen.getByText("Saving to AniList (10 of 40)…")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /syncing/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /copying/i })).toBeDisabled();
 
     await act(async () => {
       stream.send(DONE);
@@ -129,7 +129,7 @@ describe("AccountSync", () => {
       await screen.findByText("2 titles updated on AniList. 5 already matched."),
     ).toBeInTheDocument();
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
-    expect(toast.success).toHaveBeenCalledWith("Accounts synced.");
+    expect(toast.success).toHaveBeenCalledWith("MyAnimeList and AniList copied.");
     expect(refresh).toHaveBeenCalled();
 
     // The run's unmatched titles replace whatever the page loaded with.
@@ -158,7 +158,7 @@ describe("AccountSync", () => {
         "AniList is rate limiting us. Try again in a minute.",
       ),
     );
-    expect(screen.getByRole("button", { name: /sync accounts/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /copy between sites/i })).toBeEnabled();
   });
 
   it("says so when the stream ends without finishing", async () => {
@@ -176,7 +176,7 @@ describe("AccountSync", () => {
 
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith(
-        "The sync was cut off before it finished. Run it again to continue.",
+        "The copy was cut off before it finished. Run it again to continue.",
       ),
     );
   });

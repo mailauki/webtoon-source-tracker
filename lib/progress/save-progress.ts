@@ -185,7 +185,7 @@ async function writeProgress(
     if (anilistWriteError) {
       return {
         ok: false,
-        error: "Saved to AniList, but the local copy didn't refresh. Sync to catch up.",
+        error: "Saved to AniList, but the local copy didn't refresh. Refresh your library to catch up.",
       };
     }
 
@@ -291,7 +291,7 @@ async function writeProgress(
     // MAL succeeded, so the user's data is safe; only our cache is stale.
     return {
       ok: false,
-      error: "Saved to MyAnimeList, but the local copy didn't refresh. Sync to catch up.",
+      error: "Saved to MyAnimeList, but the local copy didn't refresh. Refresh your library to catch up.",
     };
   }
 

@@ -33,7 +33,7 @@ const DIRECTIONS: {
   {
     value: "two_way",
     label: "Both ways — newest edit wins",
-    title: "Sync both ways?",
+    title: "Copy both ways?",
     confirm:
       "Each title is compared on both sites, and whichever was edited more recently is copied to the other. Titles on only one site are added to the other.",
   },
@@ -54,10 +54,14 @@ const DIRECTIONS: {
 ];
 
 /**
- * The MyAnimeList <-> AniList sync on /settings.
+ * "Copy between sites": the MyAnimeList <-> AniList sync on /settings.
  *
- * Confirmed through an AlertDialog before it runs: unlike the library's Sync
- * button, which only reads, this writes to two accounts the app does not own,
+ * Named apart from the library's "Refresh library" on purpose. The two used
+ * to both be "Sync", which hid the one difference that matters: Refresh only
+ * reads from the sites, and this writes to them.
+ *
+ * Confirmed through an AlertDialog before it runs: unlike Refresh library,
+ * which only reads, this writes to two accounts the app does not own,
  * and an overwrite there has no undo. The dialog says which side can be
  * overwritten for the direction picked, and that nothing is ever deleted.
  *
@@ -107,7 +111,7 @@ export function AccountSync({
         const body = (await response.json().catch(() => null)) as {
           error?: string;
         } | null;
-        fail(body?.error ?? "The sync could not start. Please try again.");
+        fail(body?.error ?? "The copy could not start. Please try again.");
         return;
       }
 
@@ -118,7 +122,7 @@ export function AccountSync({
           finished = true;
           setSummary(event.message);
           setUnmatched(event.result.unmatchedTitles);
-          toast.success("Accounts synced.");
+          toast.success("MyAnimeList and AniList copied.");
         } else {
           fail(event.error);
         }
@@ -127,10 +131,10 @@ export function AccountSync({
       // The stream closed without a last word: the server ran out of time.
       // Whatever was written stays written, and the next run carries on.
       if (!finished) {
-        fail("The sync was cut off before it finished. Run it again to continue.");
+        fail("The copy was cut off before it finished. Run it again to continue.");
       }
     } catch {
-      if (!finished) fail("The connection dropped during the sync. Run it again to continue.");
+      if (!finished) fail("The connection dropped during the copy. Run it again to continue.");
     } finally {
       running.current = false;
       setProgress(null);
@@ -176,7 +180,7 @@ export function AccountSync({
           ) : (
             <ArrowLeftRight aria-hidden data-icon="inline-start" />
           )}
-          {pending ? "Syncing…" : "Sync accounts"}
+          {pending ? "Copying…" : "Copy between sites"}
         </Button>
       </div>
 
@@ -184,7 +188,7 @@ export function AccountSync({
         <div className="grid gap-1.5">
           <div
             role="progressbar"
-            aria-label="Account sync progress"
+            aria-label="Copy progress"
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={percent}
@@ -225,7 +229,7 @@ export function AccountSync({
                 void run();
               }}
             >
-              Sync
+              Copy
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

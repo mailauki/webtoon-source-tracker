@@ -96,10 +96,21 @@ function setup({
   );
 }
 
-const roll = () => screen.getByRole("button", { name: /surprise me/i });
-const neglected = () =>
-  screen.getByRole("button", { name: /haven't read in a while/i });
-const planPick = () => screen.getByRole("button", { name: /from plan to read/i });
+/**
+ * Opens the dice menu and returns one of its modes.
+ *
+ * The three questions live in a menu off one button in the library's control
+ * row, so each has to be opened to before it can be pressed or inspected.
+ */
+async function mode(name: RegExp) {
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: /pick something to read/i }));
+  return screen.getByRole("menuitem", { name });
+}
+
+const roll = () => mode(/surprise me/i);
+const neglected = () => mode(/haven't read in a while/i);
+const planPick = () => mode(/from plan to read/i);
 const dialogTitle = () =>
   within(screen.getByRole("dialog")).getByTestId("picked-title").textContent;
 
@@ -110,7 +121,7 @@ describe("RandomPick", () => {
   it("offers Pro instead of the dice to a free account", () => {
     setup({ isPro: false });
 
-    expect(screen.queryByRole("button", { name: /surprise me|haven't read|from plan/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /pick something to read/i })).toBeNull();
     expect(screen.getByRole("link", { name: /get pro/i })).toHaveAttribute("href", "/pro");
   });
 
@@ -118,7 +129,7 @@ describe("RandomPick", () => {
     const user = userEvent.setup();
     setup();
 
-    await user.click(roll());
+    await user.click(await roll());
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect([
@@ -132,7 +143,7 @@ describe("RandomPick", () => {
     const user = userEvent.setup();
     setup({ status: "completed", entries: [...ROWS, row(4, "completed", [], "Bastard")] });
 
-    await user.click(roll());
+    await user.click(await roll());
 
     expect(["Lore Olympus", "Bastard"]).toContain(dialogTitle());
   });
@@ -142,7 +153,7 @@ describe("RandomPick", () => {
     const extra = row(4, "reading", [], "Bastard");
     setup({ source: "none", entries: [...ROWS, extra] });
 
-    await user.click(roll());
+    await user.click(await roll());
 
     expect(["Omniscient Reader", "Bastard"]).toContain(dialogTitle());
   });
@@ -169,7 +180,7 @@ describe("RandomPick", () => {
     ];
     setup({ entries: shelf, status: "reading" });
 
-    await user.click(roll());
+    await user.click(await roll());
     const drawn = [dialogTitle()];
 
     for (let i = 1; i < shelf.length; i++) {
@@ -189,7 +200,7 @@ describe("RandomPick", () => {
     const user = userEvent.setup();
     setup({ status: "reading", entries: [ROWS[0], ROWS[1]] });
 
-    await user.click(roll());
+    await user.click(await roll());
 
     const id = dialogTitle() === "Solo Leveling" ? 1 : 2;
     expect(screen.getByRole("link", { name: /open/i })).toHaveAttribute(
@@ -198,18 +209,18 @@ describe("RandomPick", () => {
     );
   });
 
-  it("is disabled when the filters leave nothing to pick from", () => {
+  it("is disabled when the filters leave nothing to pick from", async () => {
     setup({ status: "dropped" });
 
-    expect(roll()).toBeDisabled();
+    expect(await roll()).toHaveAttribute("aria-disabled", "true");
   });
 
   // Rolling a die over one title is theatre: it can only ever return that
   // title, so the button says so instead of pretending to choose.
-  it("is disabled when the filters leave only one title", () => {
+  it("is disabled when the filters leave only one title", async () => {
     setup({ status: "completed" });
 
-    expect(roll()).toBeDisabled();
+    expect(await roll()).toHaveAttribute("aria-disabled", "true");
   });
 });
 
@@ -236,7 +247,7 @@ describe("the pick's read link", () => {
       ]),
     );
 
-    await user.click(roll());
+    await user.click(await roll());
 
     expect(dialogTitle()).toBe("Solo Leveling");
     expect(readLink()).toHaveAttribute("href", "https://webtoon.test/sl");
@@ -247,7 +258,7 @@ describe("the pick's read link", () => {
     const user = userEvent.setup();
     setup(shelf([{ slug: "webtoon", url: "https://webtoon.test/sl" }]));
 
-    await user.click(roll());
+    await user.click(await roll());
 
     expect(readLink()).toHaveAttribute("target", "_blank");
     expect(readLink()).toHaveAttribute("rel", "noopener noreferrer");
@@ -269,7 +280,7 @@ describe("the pick's read link", () => {
       ]),
     );
 
-    await user.click(roll());
+    await user.click(await roll());
 
     expect(readLink()).toHaveAttribute("href", "https://webtoon.test/sl");
   });
@@ -280,7 +291,7 @@ describe("the pick's read link", () => {
     const user = userEvent.setup();
     setup(shelf(["webtoon"]));
 
-    await user.click(roll());
+    await user.click(await roll());
 
     expect(readLink()).not.toBeInTheDocument();
     // The entry page is still one click away, which is where a URL gets added.
@@ -291,7 +302,7 @@ describe("the pick's read link", () => {
     const user = userEvent.setup();
     setup(shelf([]));
 
-    await user.click(roll());
+    await user.click(await roll());
 
     expect(readLink()).not.toBeInTheDocument();
   });
@@ -317,7 +328,7 @@ describe("the mode buttons", () => {
     const user = userEvent.setup();
     setup({ entries: SHELF });
 
-    await user.click(planPick());
+    await user.click(await planPick());
 
     expect(["Tower of God", "Bastard"]).toContain(dialogTitle());
   });
@@ -326,7 +337,7 @@ describe("the mode buttons", () => {
     const user = userEvent.setup();
     setup({ entries: SHELF });
 
-    await user.click(neglected());
+    await user.click(await neglected());
 
     expect(["Solo Leveling", "Omniscient Reader"]).toContain(dialogTitle());
   });
@@ -338,7 +349,7 @@ describe("the mode buttons", () => {
     const user = userEvent.setup();
     setup({ entries: SHELF, status: "reading" });
 
-    await user.click(planPick());
+    await user.click(await planPick());
 
     expect(["Tower of God", "Bastard"]).toContain(dialogTitle());
   });
@@ -351,14 +362,14 @@ describe("the mode buttons", () => {
       status: "plan_to_read",
     });
 
-    await user.click(roll());
+    await user.click(await roll());
 
     expect(["Tower of God", "Bastard", "Noblesse"]).toContain(dialogTitle());
   });
 
   // Each button answers for its own pool. A shelf with nothing parked should
   // disable the neglected button while the others stay live.
-  it("disables only the mode that has nothing to draw from", () => {
+  it("disables only the mode that has nothing to draw from", async () => {
     setup({
       entries: [
         row(1, "plan_to_read", [], "Tower of God", 10),
@@ -366,11 +377,14 @@ describe("the mode buttons", () => {
       ],
     });
 
-    expect(neglected()).toBeDisabled();
-    expect(planPick()).toBeEnabled();
+    expect(await neglected()).toHaveAttribute("aria-disabled", "true");
+    // Same menu, already open: read the sibling rather than toggling it shut.
+    expect(
+      screen.getByRole("menuitem", { name: /from plan to read/i }),
+    ).not.toHaveAttribute("aria-disabled");
   });
 
-  it("disables a mode holding only one title", () => {
+  it("disables a mode holding only one title", async () => {
     // One candidate can only ever return itself — the same reasoning the
     // plain roll already follows.
     setup({
@@ -381,7 +395,7 @@ describe("the mode buttons", () => {
       ],
     });
 
-    expect(planPick()).toBeDisabled();
+    expect(await planPick()).toHaveAttribute("aria-disabled", "true");
   });
 
   // Each mode is its own draw. Carrying the exclusions across would make a
@@ -402,11 +416,11 @@ describe("the mode buttons", () => {
     // Exhaust the neglected pool, then switch. With `seen` carried over, the
     // plan pool would be drawn from a set already holding ids 1 and 2 — the
     // switch has to clear it.
-    await user.click(neglected());
+    await user.click(await neglected());
     await user.click(screen.getByRole("button", { name: /roll again/i }));
     await user.keyboard("{Escape}");
 
-    await user.click(planPick());
+    await user.click(await planPick());
     const first = dialogTitle();
     await user.click(screen.getByRole("button", { name: /roll again/i }));
 
@@ -437,7 +451,7 @@ describe("the hiatus toggle", () => {
       ],
     });
 
-    await user.click(roll());
+    await user.click(await roll());
 
     expect(dialogTitle()).not.toBe("Solo Leveling");
   });
@@ -453,7 +467,7 @@ describe("the hiatus toggle", () => {
       ],
     });
 
-    await user.click(planPick());
+    await user.click(await planPick());
 
     expect(dialogTitle()).not.toBe("Solo Leveling");
   });

@@ -38,7 +38,7 @@ export function shouldStart(scrollY: number): boolean {
  * Touch only, by design: a mouse has no equivalent gesture, and binding this
  * to pointer events would turn an ordinary drag-select near the top of the
  * page into a refresh. Desktop refreshes through the controls already on the
- * page (the library's Sync button) or the browser's own reload.
+ * page (the library's Refresh button) or the browser's own reload.
  *
  * The indicator is fixed under the header rather than pushing the page down.
  * Translating the whole document would fight the sticky filter row, which is

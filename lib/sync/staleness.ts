@@ -16,7 +16,7 @@ export function isStale(
   return elapsedMs > thresholdMinutes * 60_000;
 }
 
-/** "3 hours ago" / "just now", for the sync button. */
+/** "3 hours ago" / "just now", for the Refresh library button. */
 export function formatLastSynced(lastSyncedAt: string | null): string {
   if (!lastSyncedAt) return "Never synced";
 

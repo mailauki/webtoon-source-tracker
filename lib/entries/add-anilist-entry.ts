@@ -183,7 +183,7 @@ export async function addAniListOnlyEntry(
     console.error("[add-anilist-entry] catalog upsert failed:", cause);
     return {
       ok: false,
-      error: "Added to AniList, but the local copy didn't save. Sync to catch up.",
+      error: "Added to AniList, but the local copy didn't save. Refresh your library to catch up.",
     };
   }
 
@@ -234,7 +234,7 @@ export async function addAniListOnlyEntry(
     // AniList succeeded, so the user's data is safe; only our cache is stale.
     return {
       ok: false,
-      error: "Added to AniList, but the local copy didn't save. Sync to catch up.",
+      error: "Added to AniList, but the local copy didn't save. Refresh your library to catch up.",
     };
   }
 

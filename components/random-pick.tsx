@@ -1,11 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Dices, ExternalLink } from "lucide-react";
+import { Dices, ExternalLink, Sparkles } from "lucide-react";
 import { useState } from "react";
 
 import { CoverImage } from "@/components/cover-image";
-import { ProTeaser } from "@/components/pro-teaser";
 import { useLibraryFilters } from "@/components/library-grid";
 import { SourceBadge } from "@/components/source-badge";
 import { Button } from "@/components/ui/button";
@@ -17,13 +16,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { PRO_MESSAGES } from "@/lib/pro";
 import { pickNext, selectByMode, type PickMode } from "@/lib/data/pick-random";
 import { readingLink } from "@/lib/data/source-links";
 import type { LibraryRow } from "@/lib/data/entries";
 import { displayTitle } from "@/lib/data/display-title";
 import { entryCover } from "@/lib/data/entry-cover";
 import { statusLabel } from "@/lib/data/entry-labels";
-import { cn } from "@/lib/utils";
 
 /** What each button offers, and what the reveal calls the draw it came from. */
 const MODES: { mode: PickMode; label: string; drawnFrom: string }[] = [
@@ -45,7 +52,12 @@ const MODES: { mode: PickMode; label: string; drawnFrom: string }[] = [
 ];
 
 /**
- * "Not sure what to read?" — a small banner over the shelf.
+ * "Not sure what to read?" — a dice button in the library's control row.
+ *
+ * It used to be a banner over the shelf, with all three questions as buttons.
+ * That put a full-width panel between the header and the covers on every
+ * visit, for something used now and then, so it now lives beside Filters and
+ * Select and asks its three questions from a menu.
  *
  * Three questions, not three filters. "Surprise me" is a die over the shelf as
  * the chips have left it, so what it returns is always something the user can
@@ -115,52 +127,47 @@ function RandomPicker() {
 
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 rounded-lg border border-border bg-card px-4 py-3">
-        <div className="flex min-w-50 flex-1 items-center gap-3">
-          <Dices className="size-5 shrink-0 text-brand" aria-hidden />
-          <div className="min-w-0">
-            <p className="font-display text-sm font-semibold">
-              Not sure what to read?
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Let the shelf decide for you.
-            </p>
-          </div>
-        </div>
-
-        {/* The primary leads and the two shortcuts follow it, so the common
-            case reads as one button and the other questions stay one press
-            away rather than behind a menu. Wraps to its own line on a phone,
-            which is why the group is a flex row of its own. */}
-        <div className="flex flex-wrap items-center gap-2">
+      {/* Not modal: a modal menu that opens a dialog from one of its items
+          can leave the page unclickable once both close, and nothing here
+          needs the rest of the page held still while the menu is open. */}
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="outline"
+            className="rounded-full"
+            aria-label="Pick something to read"
+            title="Not sure what to read? Let the shelf decide."
+          >
+            <Dices data-icon="inline-start" />
+            {/* Icon-only on a phone, where the row already holds two
+                labelled buttons. */}
+            <span className="max-sm:sr-only">Pick</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="min-w-56">
+          <DropdownMenuLabel className="font-display">
+            Not sure what to read?
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
           {pools.map(({ mode: m, label, candidates }) => {
             // One candidate can only ever return itself, so a mode with fewer
             // than two says so rather than performing a choice it lacks.
             const disabled = candidates.length < 2;
-            const primary = m === "surprise";
-
             return (
-              <Button
+              <DropdownMenuItem
                 key={m}
-                type="button"
-								size="sm"
-                onClick={() => roll(m)}
                 disabled={disabled}
-								variant={primary ? "default" : "outline"}
-                title={
-                  disabled
-                    ? "Not enough titles here to pick from"
-                    : `Pick from ${candidates.length} titles`
-                }
-								className={cn("rounded-full", primary && "bg-brand font-bold text-brand-foreground hover:bg-brand/90")}
+                onSelect={() => roll(m)}
               >
                 {label}
-              </Button>
+                <span className="ml-auto pl-4 text-xs text-muted-foreground tabular-nums">
+                  {disabled ? "Too few" : candidates.length}
+                </span>
+              </DropdownMenuItem>
             );
           })}
-        </div>
-      </div>
-
+        </DropdownMenuContent>
+      </DropdownMenu>
       <Dialog
         open={picked !== null}
         onOpenChange={(open) => {
@@ -216,7 +223,20 @@ function RandomPicker() {
 }
 
 export function RandomPick({ isPro }: { isPro: boolean }) {
-  return isPro ? <RandomPicker /> : <ProTeaser feature="pick" />;
+  if (isPro) return <RandomPicker />;
+
+  // The same button in the same place, leading to /pro, so the row does not
+  // change shape between plans and the feature is still discoverable.
+  return (
+    <Button asChild variant="outline" className="rounded-full">
+      <Link href="/pro" title={PRO_MESSAGES.pick}>
+        <Dices data-icon="inline-start" />
+        <span className="max-sm:sr-only">Pick</span>
+        <Sparkles aria-hidden className="size-3.5 text-brand" />
+        <span className="sr-only">: {PRO_MESSAGES.pick} Get Pro</span>
+      </Link>
+    </Button>
+  );
 }
 
 /** The reveal: cover, title, where it is on the shelf, and where to read it. */

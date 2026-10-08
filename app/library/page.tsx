@@ -122,8 +122,9 @@ export default async function LibraryPage() {
     getIsPro(),
   ]);
   // Whichever sites are linked, the shelf is stale when ANY of them is due —
-  // one button syncs them all, so it should light up if there is anything for
-  // it to do. The label follows the oldest of the two for the same reason.
+  // one button refreshes from them all, so it should flag a refresh as due if
+  // there is anything for it to do. The label follows the oldest of the two
+  // for the same reason.
   const syncedAts = [
     ...(malLinked ? [connection!.last_synced_at] : []),
     ...(anilistLinked ? [anilist!.last_synced_at] : []),
@@ -137,7 +138,7 @@ export default async function LibraryPage() {
   /**
    * Titles that exist here but have never been matched to AniList.
    *
-   * The Sync button only ever PULLS — MyAnimeList into the app, AniList into
+   * Refresh library only ever PULLS — MyAnimeList into the app, AniList into
    * the app. Copying the library the other way is a bulk write to an account
    * this app does not own, so it stays behind the confirmation dialog on
    * /settings. What this count fixes is the button quietly doing half of what
@@ -198,6 +199,12 @@ export default async function LibraryPage() {
           <div className="flex items-center gap-2">
             <LibraryFilterMenu statuses={statusChips} sources={sourceChips} />
             <SelectToggle />
+            {/* Pushed to the far end: it is not a filter, and two of its
+                three questions reach past the filters. It used to be a
+                banner over the shelf; see RandomPick. */}
+            <div className="ml-auto">
+              <RandomPick isPro={isPro} />
+            </div>
           </div>
         }
       >
@@ -220,11 +227,6 @@ export default async function LibraryPage() {
             />
           </div>
 
-          {/* Above the shelf rather than in the filter row: two of its three
-              questions reach past the filters, so it is not a filter control
-              and sitting beside the menu would suggest it was. */}
-          <RandomPick isPro={isPro} />
-
           {connection?.status === "needs_reauth" ? (
             <p className="rounded-md bg-alert/10 px-3 py-2 text-sm text-alert">
               Your MyAnimeList connection expired.{" "}
@@ -241,8 +243,8 @@ export default async function LibraryPage() {
             <p className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
               {unpushedToAniList}{" "}
               {unpushedToAniList === 1 ? "title isn't" : "titles aren't"} on
-              AniList yet. Syncing here only brings titles in —{" "}
-              <Link href="/settings" className="font-medium underline">
+              AniList yet. Refreshing only brings titles in —{" "}
+              <Link href="/settings#copy-between-sites" className="font-medium underline">
                 copy them to AniList
               </Link>{" "}
               from Settings.
@@ -275,8 +277,8 @@ export default async function LibraryPage() {
             // without re-rendering this page per click.
             emptyUnfiltered={
               <EmptyState
-                title="Nothing synced yet"
-                body="Hit Sync to pull your list from MyAnimeList."
+                title="Nothing here yet"
+                body="Use the refresh button beside the title to bring your list in."
               />
             }
           />
