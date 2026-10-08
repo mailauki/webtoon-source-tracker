@@ -3,7 +3,8 @@ import "server-only";
 import { kindForMalGenre } from "@/lib/data/mal-taxonomy";
 import { slugify } from "@/lib/data/tag-items";
 import { MalClient } from "@/lib/mal/client";
-import { findGenresByMalIds } from "@/lib/anilist/endpoints";
+import { linkAniListIds } from "@/lib/anilist/catalog";
+import { findAniListByMalIds } from "@/lib/anilist/endpoints";
 import { malGenresFor } from "@/lib/anilist/genres";
 import { malAltTitles } from "@/lib/mal/alt-titles";
 import { getMangaList } from "@/lib/mal/endpoints";
@@ -367,18 +368,38 @@ export async function syncMalList(
   // Separate from the MAL half so either failing leaves the other's tags in
   // place; an AniList outage or rate limit costs these links until the next
   // sync, and nothing else.
+  let anilist = new Map<number, { anilistId: number; genres: string[] }>();
   try {
-    const anilistGenres = await findGenresByMalIds([...idMap.keys()]);
+    anilist = await findAniListByMalIds([...idMap.keys()]);
     await syncGenres(
       admin,
-      [...anilistGenres].map(([malId, genres]) => ({
+      [...anilist].map(([malId, match]) => ({
         id: malId,
-        genres: malGenresFor(genres),
+        genres: malGenresFor(match.genres),
       })),
       idMap,
     );
   } catch (error) {
     console.error("AniList genre sync failed:", error);
+  }
+
+  // The same lookup also says which AniList entry each of these titles is,
+  // and that is what catches a duplicate: a title the catalog already held as
+  // an AniList-only row before it reached this MyAnimeList list. The two are
+  // merged into the MAL row here, before the entries below are written, so
+  // this user's copy lands on the row MAL's progress is about to be written
+  // to. A failure costs the merge until the next sync, never the sync itself.
+  try {
+    await linkAniListIds(
+      admin,
+      [...anilist].map(([malMediaId, match]) => ({
+        malMediaId,
+        anilistMediaId: match.anilistId,
+      })),
+      userId,
+    );
+  } catch (error) {
+    console.error("Merging AniList duplicates failed:", error);
   }
 
   // --- 3. Upsert this user's entries --------------------------------------

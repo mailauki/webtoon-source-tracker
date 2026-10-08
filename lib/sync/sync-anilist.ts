@@ -2,7 +2,11 @@ import "server-only";
 
 import { AniListClient } from "@/lib/anilist/client";
 import { getMangaList } from "@/lib/anilist/endpoints";
-import { anilistAltTitles, upsertAniListTitle } from "@/lib/anilist/catalog";
+import {
+  anilistAltTitles,
+  linkAniListIds,
+  upsertAniListTitle,
+} from "@/lib/anilist/catalog";
 import { malGenresFor } from "@/lib/anilist/genres";
 import { toMalScore, toMalStatus } from "@/lib/anilist/mapping";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -125,6 +129,27 @@ export async function syncAniListList(
   }
 
   const now = new Date().toISOString();
+
+  // --- 0. Merge duplicates this list can identify ----------------------------
+  //
+  // Every entry carrying a MAL id is AniList saying which MyAnimeList title it
+  // is. Recording that on the MAL row is what lets an AniList-only copy of the
+  // same work — added before AniList had linked the two — be merged into it.
+  // Done first so the lookups below see the merged catalog. No user is passed
+  // as being on MyAnimeList: this is their AniList list, which says nothing
+  // about what their MyAnimeList list holds. Best-effort, like the genres.
+  try {
+    await linkAniListIds(
+      admin,
+      entries.flatMap((e) =>
+        e.media.idMal === null
+          ? []
+          : [{ malMediaId: e.media.idMal, anilistMediaId: e.mediaId }],
+      ),
+    );
+  } catch (error) {
+    console.error("Merging AniList duplicates failed:", error);
+  }
 
   // --- 1. Which of these the catalog already knows --------------------------
   //

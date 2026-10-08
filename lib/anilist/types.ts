@@ -104,6 +104,7 @@ export const anilistGenresByMalPageSchema = z.object({
     pageInfo: z.object({ hasNextPage: z.boolean().nullable() }),
     media: z.array(
       z.object({
+        id: z.number(),
         idMal: z.number().nullable(),
         genres: z.array(z.string()).nullable(),
       }),
