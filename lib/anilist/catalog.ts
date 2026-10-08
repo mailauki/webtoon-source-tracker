@@ -121,3 +121,39 @@ export async function upsertAniListTitle(
 
   return data;
 }
+
+/** One MyAnimeList title and the AniList entry AniList maps it to. */
+export type AniListLink = { malMediaId: number; anilistMediaId: number };
+
+/**
+ * Records AniList ids on MyAnimeList catalog rows, then merges any AniList-only
+ * row that turns out to be the same work into the MyAnimeList one.
+ *
+ * Both syncs call this with the mapping they already have in hand, because a
+ * duplicate can only be recognised once the MyAnimeList row knows its AniList
+ * id. The merge itself — what moves where, and why an entry that only existed
+ * on AniList stops syncing to MyAnimeList — is in
+ * supabase/migrations/20261008120000_merge_duplicate_titles.sql.
+ *
+ * `userOnMal` is the user whose MyAnimeList list `links` came from, if any:
+ * those titles are on MyAnimeList for them, so their entries keep syncing
+ * there after the merge. Returns how many duplicates were merged.
+ */
+export async function linkAniListIds(
+  admin: SupabaseAdmin,
+  links: AniListLink[],
+  userOnMal?: string,
+): Promise<number> {
+  if (links.length === 0) return 0;
+
+  const { data, error } = await admin.rpc("link_anilist_ids", {
+    p_links: links.map((link) => ({
+      mal_media_id: link.malMediaId,
+      anilist_media_id: link.anilistMediaId,
+    })),
+    p_user_on_mal: userOnMal,
+  });
+
+  if (error) throw new Error(`Linking AniList ids failed: ${error.message}`);
+  return data ?? 0;
+}

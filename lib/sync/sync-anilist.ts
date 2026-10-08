@@ -2,10 +2,15 @@ import "server-only";
 
 import { AniListClient } from "@/lib/anilist/client";
 import { getMangaList } from "@/lib/anilist/endpoints";
-import { anilistAltTitles, upsertAniListTitle } from "@/lib/anilist/catalog";
+import {
+  anilistAltTitles,
+  linkAniListIds,
+  upsertAniListTitle,
+} from "@/lib/anilist/catalog";
 import { malGenresFor } from "@/lib/anilist/genres";
 import { toMalScore, toMalStatus } from "@/lib/anilist/mapping";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { ProgressReporter } from "./progress";
 import { isStale } from "./staleness";
 import { syncGenres } from "./sync-list";
 
@@ -88,7 +93,7 @@ function chunk<T>(items: T[], size: number): T[][] {
 
 export async function syncAniListList(
   userId: string,
-  options: { force?: boolean } = {},
+  options: { force?: boolean; onProgress?: ProgressReporter } = {},
 ): Promise<AniListSyncResult> {
   const startedAt = Date.now();
   const admin = createAdminClient();
@@ -110,6 +115,9 @@ export async function syncAniListList(
   if (!connection || connection.status !== "active") return empty(true);
   if (!options.force && !isStale(connection.last_synced_at)) return empty(true);
 
+  const report = options.onProgress;
+  report?.("Reading your AniList list", 0);
+
   const client = new AniListClient(userId);
   const { entries, complete } = await getMangaList(
     client,
@@ -125,6 +133,29 @@ export async function syncAniListList(
   }
 
   const now = new Date().toISOString();
+
+  report?.("Matching titles with MyAnimeList", 0.4);
+
+  // --- 0. Merge duplicates this list can identify ----------------------------
+  //
+  // Every entry carrying a MAL id is AniList saying which MyAnimeList title it
+  // is. Recording that on the MAL row is what lets an AniList-only copy of the
+  // same work — added before AniList had linked the two — be merged into it.
+  // Done first so the lookups below see the merged catalog. No user is passed
+  // as being on MyAnimeList: this is their AniList list, which says nothing
+  // about what their MyAnimeList list holds. Best-effort, like the genres.
+  try {
+    await linkAniListIds(
+      admin,
+      entries.flatMap((e) =>
+        e.media.idMal === null
+          ? []
+          : [{ malMediaId: e.media.idMal, anilistMediaId: e.mediaId }],
+      ),
+    );
+  } catch (error) {
+    console.error("Merging AniList duplicates failed:", error);
+  }
 
   // --- 1. Which of these the catalog already knows --------------------------
   //
@@ -184,6 +215,7 @@ export async function syncAniListList(
   );
 
   let titlesAdded = 0;
+  report?.("Adding new titles", 0.5);
 
   // One row at a time rather than a batch: these go through the
   // media_titles_upsert_anilist RPC, which restates the partial index's
@@ -211,6 +243,7 @@ export async function syncAniListList(
 
     known.set(entry.mediaId, { id, malBacked: false });
     titlesAdded++;
+    report?.("Adding new titles", 0.5 + 0.3 * (titlesAdded / newTitles.length));
   }
 
   // --- 2b. AniList's genres --------------------------------------------------
@@ -235,6 +268,8 @@ export async function syncAniListList(
   await syncGenres(admin, genreNodes, genreIdMap);
 
   // --- 3. Create the user's entries ----------------------------------------
+  report?.("Saving your progress", 0.85);
+
   //
   // ignoreDuplicates, not a merge: an entry that already exists is either
   // MAL's to own (rule 2 above) or already carries this user's progress, and

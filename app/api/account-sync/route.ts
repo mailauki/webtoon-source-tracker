@@ -9,6 +9,7 @@ import {
   describeAccountSync,
   type AccountSyncEvent,
 } from "@/lib/sync/plan-account-sync";
+import { isSameOrigin } from "@/lib/auth/same-origin";
 import { createClient } from "@/lib/supabase/server";
 
 // See MAL_WRITE_BUDGET_MS in lib/sync/account-sync.ts, which is sized to fit.
@@ -91,20 +92,6 @@ export async function POST(request: Request) {
       "X-Accel-Buffering": "no",
     },
   });
-}
-
-/** The Origin header's host against the host this request was sent to. */
-function isSameOrigin(request: Request): boolean {
-  const origin = request.headers.get("origin");
-  if (!origin) return false;
-
-  const host =
-    request.headers.get("x-forwarded-host") ?? request.headers.get("host");
-  try {
-    return new URL(origin).host === host;
-  } catch {
-    return false;
-  }
 }
 
 function errorMessage(cause: unknown): string {

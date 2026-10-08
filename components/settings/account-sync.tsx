@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { UnmatchedTitles } from "@/components/settings/unmatched-titles";
+import { SyncProgressBar } from "@/components/sync-progress";
 import { readSyncEvents } from "@/lib/sync/read-sync-events";
 import type {
   AccountSyncProgress,
@@ -33,7 +34,7 @@ const DIRECTIONS: {
   {
     value: "two_way",
     label: "Both ways — newest edit wins",
-    title: "Sync both ways?",
+    title: "Copy both ways?",
     confirm:
       "Each title is compared on both sites, and whichever was edited more recently is copied to the other. Titles on only one site are added to the other.",
   },
@@ -54,10 +55,14 @@ const DIRECTIONS: {
 ];
 
 /**
- * The MyAnimeList <-> AniList sync on /settings.
+ * "Copy between sites": the MyAnimeList <-> AniList sync on /settings.
  *
- * Confirmed through an AlertDialog before it runs: unlike the library's Sync
- * button, which only reads, this writes to two accounts the app does not own,
+ * Named apart from the library's "Refresh library" on purpose. The two used
+ * to both be "Sync", which hid the one difference that matters: Refresh only
+ * reads from the sites, and this writes to them.
+ *
+ * Confirmed through an AlertDialog before it runs: unlike Refresh library,
+ * which only reads, this writes to two accounts the app does not own,
  * and an overwrite there has no undo. The dialog says which side can be
  * overwritten for the direction picked, and that nothing is ever deleted.
  *
@@ -107,7 +112,7 @@ export function AccountSync({
         const body = (await response.json().catch(() => null)) as {
           error?: string;
         } | null;
-        fail(body?.error ?? "The sync could not start. Please try again.");
+        fail(body?.error ?? "The copy could not start. Please try again.");
         return;
       }
 
@@ -118,7 +123,7 @@ export function AccountSync({
           finished = true;
           setSummary(event.message);
           setUnmatched(event.result.unmatchedTitles);
-          toast.success("Accounts synced.");
+          toast.success("MyAnimeList and AniList copied.");
         } else {
           fail(event.error);
         }
@@ -127,10 +132,10 @@ export function AccountSync({
       // The stream closed without a last word: the server ran out of time.
       // Whatever was written stays written, and the next run carries on.
       if (!finished) {
-        fail("The sync was cut off before it finished. Run it again to continue.");
+        fail("The copy was cut off before it finished. Run it again to continue.");
       }
     } catch {
-      if (!finished) fail("The connection dropped during the sync. Run it again to continue.");
+      if (!finished) fail("The connection dropped during the copy. Run it again to continue.");
     } finally {
       running.current = false;
       setProgress(null);
@@ -139,8 +144,6 @@ export function AccountSync({
       router.refresh();
     }
   }
-
-  const percent = progress ? Math.round(progress.value * 100) : 0;
 
   return (
     <div className="grid gap-3 rounded-xl border border-border p-4">
@@ -176,31 +179,12 @@ export function AccountSync({
           ) : (
             <ArrowLeftRight aria-hidden data-icon="inline-start" />
           )}
-          {pending ? "Syncing…" : "Sync accounts"}
+          {pending ? "Copying…" : "Copy between sites"}
         </Button>
       </div>
 
       {progress ? (
-        <div className="grid gap-1.5">
-          <div
-            role="progressbar"
-            aria-label="Account sync progress"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={percent}
-            aria-valuetext={`${percent}% — ${progress.step}`}
-            className="h-2 overflow-hidden rounded-full bg-muted"
-          >
-            <div
-              className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out motion-reduce:transition-none"
-              style={{ width: `${percent}%` }}
-            />
-          </div>
-          <p className="flex justify-between gap-2 text-sm text-muted-foreground">
-            <span>{progress.step}…</span>
-            <span className="tabular-nums">{percent}%</span>
-          </p>
-        </div>
+        <SyncProgressBar label="Copy progress" progress={progress} />
       ) : (
         <p aria-live="polite" className="text-sm text-muted-foreground">
           {summary ?? lastSyncedLabel}
@@ -225,7 +209,7 @@ export function AccountSync({
                 void run();
               }}
             >
-              Sync
+              Copy
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -172,13 +172,14 @@ export async function findMediaByMalIds(
   return found;
 }
 
-const GENRES_BY_MAL_QUERY = /* GraphQL */ `
+const ANILIST_BY_MAL_QUERY = /* GraphQL */ `
   query ($ids: [Int], $page: Int) {
     Page(page: $page, perPage: 50) {
       pageInfo {
         hasNextPage
       }
       media(idMal_in: $ids, type: MANGA) {
+        id
         idMal
         genres
       }
@@ -187,24 +188,28 @@ const GENRES_BY_MAL_QUERY = /* GraphQL */ `
 `;
 
 /**
- * AniList's genres for titles MAL also has, keyed by MAL id.
+ * AniList's id and genres for titles MAL also has, keyed by MAL id.
  *
- * Anonymous, like searchManga: genres are public catalog data, so the MAL
- * sync can ask for them whether or not the user has connected AniList. Ids
- * AniList has no entry for are absent from the result; where AniList has two
- * entries claiming one MAL id, the first wins, as in findMediaByMalIds.
+ * Anonymous, like searchManga: both are public catalog data, so the MAL sync
+ * can ask for them whether or not the user has connected AniList. Ids AniList
+ * has no entry for are absent from the result; where AniList has two entries
+ * claiming one MAL id, the first wins, as in findMediaByMalIds.
+ *
+ * The id is what lets the MAL sync recognise a title it already holds as an
+ * AniList-only row — see link_anilist_ids in
+ * supabase/migrations/20261008120000_merge_duplicate_titles.sql.
  */
-export async function findGenresByMalIds(
+export async function findAniListByMalIds(
   malIds: number[],
-): Promise<Map<number, string[]>> {
-  const found = new Map<number, string[]>();
+): Promise<Map<number, { anilistId: number; genres: string[] }>> {
+  const found = new Map<number, { anilistId: number; genres: string[] }>();
   const unique = [...new Set(malIds)];
 
   for (let i = 0; i < unique.length; i += 50) {
     const ids = unique.slice(i, i + 50);
 
     for (let page = 1; page <= 5; page++) {
-      const raw = await anilistRequest<unknown>(null, GENRES_BY_MAL_QUERY, {
+      const raw = await anilistRequest<unknown>(null, ANILIST_BY_MAL_QUERY, {
         ids,
         page,
       });
@@ -212,7 +217,10 @@ export async function findGenresByMalIds(
 
       for (const media of parsed.media) {
         if (media.idMal !== null && !found.has(media.idMal)) {
-          found.set(media.idMal, media.genres ?? []);
+          found.set(media.idMal, {
+            anilistId: media.id,
+            genres: media.genres ?? [],
+          });
         }
       }
       if (!parsed.pageInfo.hasNextPage) break;

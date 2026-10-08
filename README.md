@@ -10,7 +10,7 @@ recovery works normally.
 
 AniList can be connected the same way. MyAnimeList stays the library's source
 of truth; AniList is kept in step with it — progress saved in the app is
-mirrored there, and **Settings → Sync accounts** reconciles the two lists
+mirrored there, and **Settings → Copy between sites** reconciles the two lists
 (both ways, newest edit wins, or one way). Nothing is ever deleted from
 either site.
 

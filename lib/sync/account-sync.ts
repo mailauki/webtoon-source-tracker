@@ -362,7 +362,7 @@ export async function syncAccounts(
 
   // --- 6. Refresh the local mirror ------------------------------------------
   // The writes above already landed on both sites, so a failure here must not
-  // turn the result into an error: the library's own Sync button (or its
+  // turn the result into an error: the library's own Refresh button (or its
   // staleness check) catches the mirror up later.
   if (malSaved > 0) {
     report("Refreshing your library", at(total - refreshUnits));

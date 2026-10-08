@@ -777,6 +777,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      link_anilist_ids: {
+        Args: { p_links: Json; p_user_on_mal?: string }
+        Returns: number
+      }
       mal_tokens_delete: { Args: { p_user_id: string }; Returns: undefined }
       mal_tokens_get: {
         Args: { p_user_id: string }
@@ -808,6 +812,10 @@ export type Database = {
           p_title: string
           p_title_en?: string
         }
+        Returns: number
+      }
+      merge_anilist_only_duplicates: {
+        Args: { p_mal_media_ids?: number[]; p_user_on_mal?: string }
         Returns: number
       }
     }

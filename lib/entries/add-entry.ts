@@ -132,7 +132,7 @@ export async function addMalEntry(
   if (catalogError || !title) {
     return {
       ok: false,
-      error: "Added to MyAnimeList, but the local copy didn't save. Sync to catch up.",
+      error: "Added to MyAnimeList, but the local copy didn't save. Refresh your library to catch up.",
     };
   }
 
@@ -163,7 +163,7 @@ export async function addMalEntry(
     // MAL succeeded, so the user's data is safe; only our cache is stale.
     return {
       ok: false,
-      error: "Added to MyAnimeList, but the local copy didn't save. Sync to catch up.",
+      error: "Added to MyAnimeList, but the local copy didn't save. Refresh your library to catch up.",
     };
   }
 

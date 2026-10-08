@@ -3,12 +3,14 @@ import "server-only";
 import { kindForMalGenre } from "@/lib/data/mal-taxonomy";
 import { slugify } from "@/lib/data/tag-items";
 import { MalClient } from "@/lib/mal/client";
-import { findGenresByMalIds } from "@/lib/anilist/endpoints";
+import { linkAniListIds } from "@/lib/anilist/catalog";
+import { findAniListByMalIds } from "@/lib/anilist/endpoints";
 import { malGenresFor } from "@/lib/anilist/genres";
 import { malAltTitles } from "@/lib/mal/alt-titles";
 import { getMangaList } from "@/lib/mal/endpoints";
 import type { MalListEntry } from "@/lib/mal/types";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { ProgressReporter } from "./progress";
 import { isStale } from "./staleness";
 
 /**
@@ -209,9 +211,13 @@ export async function syncGenres(
  *
  * `complete` is false when the page bound was hit before MAL said there was
  * no more — which the removal guard in syncMalList depends on knowing.
+ *
+ * `onPage` hears how many entries have arrived after each page, for a
+ * progress bar; MAL does not say how many pages there will be.
  */
 export async function fetchMalList(
   client: MalClient,
+  onPage?: (entriesSoFar: number) => void,
 ): Promise<{ entries: MalListEntry[]; pages: number; complete: boolean }> {
   const entries: MalListEntry[] = [];
   let pages = 0;
@@ -224,6 +230,7 @@ export async function fetchMalList(
 
     entries.push(...result.data);
     pages++;
+    onPage?.(entries.length);
 
     if (!result.paging.next) return { entries, pages, complete: true };
   }
@@ -233,7 +240,7 @@ export async function fetchMalList(
 
 export async function syncMalList(
   userId: string,
-  options: { force?: boolean } = {},
+  options: { force?: boolean; onProgress?: ProgressReporter } = {},
 ): Promise<SyncResult> {
   const startedAt = Date.now();
   const admin = createAdminClient();
@@ -261,9 +268,33 @@ export async function syncMalList(
     return empty(true);
   }
 
+  const report = options.onProgress;
+
   // --- 1. Page through the list -------------------------------------------
+  //
+  // MAL never says how long the list is, so the bar estimates from how many
+  // live entries the library already holds — the list is usually about that
+  // long — and never claims more than most of this step until MAL says done.
+  let expected = 0;
+  if (report) {
+    report("Reading your MyAnimeList list", 0);
+    const { count } = await admin
+      .from("user_entries")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .is("archived_at", null);
+    expected = count ?? 0;
+  }
+
   const { entries: collected, pages, complete } = await fetchMalList(
     new MalClient(userId),
+    report
+      ? (fetched) =>
+          report(
+            "Reading your MyAnimeList list",
+            0.5 * Math.min(0.95, fetched / Math.max(expected, fetched + PAGE_SIZE)),
+          )
+      : undefined,
   );
 
   if (collected.length === 0) {
@@ -277,6 +308,8 @@ export async function syncMalList(
   }
 
   // --- 2. Upsert the shared catalog ---------------------------------------
+  report?.("Updating titles", 0.5);
+
   // Deduplicate first: MAL can return the same title twice across pages if the
   // list is edited mid-sync, and a batch upsert with duplicate conflict keys
   // fails ("cannot affect row a second time").
@@ -348,6 +381,8 @@ export async function syncMalList(
     }
   }
 
+  report?.("Updating genres", 0.6);
+
   // Genres are catalog-level facts, so they are written with the catalog
   // rather than per user. A failure here must not fail the sync: the user's
   // progress is the point of this function, and a missing genre tag is
@@ -367,13 +402,14 @@ export async function syncMalList(
   // Separate from the MAL half so either failing leaves the other's tags in
   // place; an AniList outage or rate limit costs these links until the next
   // sync, and nothing else.
+  let anilist = new Map<number, { anilistId: number; genres: string[] }>();
   try {
-    const anilistGenres = await findGenresByMalIds([...idMap.keys()]);
+    anilist = await findAniListByMalIds([...idMap.keys()]);
     await syncGenres(
       admin,
-      [...anilistGenres].map(([malId, genres]) => ({
+      [...anilist].map(([malId, match]) => ({
         id: malId,
-        genres: malGenresFor(genres),
+        genres: malGenresFor(match.genres),
       })),
       idMap,
     );
@@ -381,7 +417,30 @@ export async function syncMalList(
     console.error("AniList genre sync failed:", error);
   }
 
+  report?.("Matching titles with AniList", 0.7);
+
+  // The same lookup also says which AniList entry each of these titles is,
+  // and that is what catches a duplicate: a title the catalog already held as
+  // an AniList-only row before it reached this MyAnimeList list. The two are
+  // merged into the MAL row here, before the entries below are written, so
+  // this user's copy lands on the row MAL's progress is about to be written
+  // to. A failure costs the merge until the next sync, never the sync itself.
+  try {
+    await linkAniListIds(
+      admin,
+      [...anilist].map(([malMediaId, match]) => ({
+        malMediaId,
+        anilistMediaId: match.anilistId,
+      })),
+      userId,
+    );
+  } catch (error) {
+    console.error("Merging AniList duplicates failed:", error);
+  }
+
   // --- 3. Upsert this user's entries --------------------------------------
+  report?.("Saving your progress", 0.8);
+
   const entryRows = [];
 
   for (const entry of collected) {
@@ -444,6 +503,8 @@ export async function syncMalList(
   }
 
   // --- 4. Removals, heavily guarded ---------------------------------------
+  report?.("Checking for removed titles", 0.9);
+
   //
   // Deleting entries that are no longer on MAL cascades to entry_sources,
   // destroying hand-entered source assignments. If MAL returned a partial list
