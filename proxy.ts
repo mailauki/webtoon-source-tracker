@@ -1,19 +1,26 @@
+import { createServerClient } from "@supabase/ssr";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 /**
  * Next 16 renamed the `middleware` convention to `proxy`.
  *
- * This deliberately does NOT create a Supabase client or call getUser().
- * Most Supabase tutorials do exactly that, but the Next docs are explicit that
- * proxy "is meant to be invoked separately of your render code... you should
- * not attempt relying on shared modules or globals" — and doing auth here
- * would fire a network request on every prefetch.
- *
- * So this is an *optimistic* check: it only asks whether a session cookie
- * exists, to avoid flashing a protected page before redirecting. It proves
+ * The redirects here are *optimistic*: they only ask whether a session cookie
+ * exists, to avoid flashing a protected page before redirecting. They prove
  * nothing about validity. Real enforcement lives in `lib/auth/dal.ts`, which
  * verifies the JWT and runs on every protected page and server action.
+ *
+ * What this does do with Supabase is keep the session fresh. Server Components
+ * cannot write cookies, so without this an expired access token was refreshed
+ * separately by every Supabase client a page created — and refresh tokens are
+ * single-use, so all but the first came back with no session. RLS then
+ * returned nothing, which read as "not Pro" or a stale shelf until a reload.
+ * Refreshing once here, before the render, and writing the new cookies onto
+ * both the request and the response means every client in the render sees
+ * the same valid token (see @supabase/ssr's README, "Concurrent requests").
+ *
+ * Cheap on prefetches: the project signs JWTs with ES256, so getClaims()
+ * verifies locally and only reaches the network when the token has expired.
  */
 
 const PROTECTED_PREFIXES = [
@@ -39,9 +46,35 @@ function hasSessionCookie(request: NextRequest): boolean {
     );
 }
 
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const signedIn = hasSessionCookie(request);
+  let response = NextResponse.next({ request });
+
+  if (signedIn) {
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll(cookiesToSet) {
+            for (const { name, value } of cookiesToSet) {
+              request.cookies.set(name, value);
+            }
+            response = NextResponse.next({ request });
+            for (const { name, value, options } of cookiesToSet) {
+              response.cookies.set(name, value, options);
+            }
+          },
+        },
+      },
+    );
+    // Refreshes the session if it has expired; the result is not used here.
+    await supabase.auth.getClaims();
+  }
 
   const isProtected = PROTECTED_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
@@ -70,11 +103,16 @@ export function proxy(request: NextRequest) {
       const url = request.nextUrl.clone();
       url.pathname = "/library";
       url.search = "";
-      return NextResponse.redirect(url);
+      // Carry any refreshed session cookies across the redirect.
+      const redirect = NextResponse.redirect(url);
+      for (const cookie of response.cookies.getAll()) {
+        redirect.cookies.set(cookie);
+      }
+      return redirect;
     }
   }
 
-  return NextResponse.next();
+  return response;
 }
 
 export const config = {

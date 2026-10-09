@@ -5,9 +5,8 @@ import type { LibraryMatch } from "@/lib/data/author-works";
 import { displayTitle } from "@/lib/data/display-title";
 import { duplicateKey } from "@/lib/data/duplicates";
 import { entryCover } from "@/lib/data/entry-cover";
-import { MATURE_RATINGS, screenMature } from "@/lib/data/nsfw";
+import { screenMature } from "@/lib/data/nsfw";
 import { readAllRows } from "@/lib/data/pagination";
-import { MAL_LIST_STATUSES } from "@/lib/mal/types";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -99,64 +98,6 @@ export async function getLibrary() {
 }
 
 export type LibraryRow = Awaited<ReturnType<typeof getLibrary>>[number];
-
-/**
- * Counts per status, for the filter chips.
- *
- * One `head: true` count per status rather than tallying the rows in JS. The
- * old shape selected every entry just to produce five integers, which was both
- * a whole table over the wire and — since that select was subject to
- * `max_rows` — a set of counts that silently stopped growing at a thousand.
- * PostgREST's exact count is not capped, so these stay true at any size.
- *
- * A failed count reads as 0, which drops that chip (the page only offers chips
- * with a count above zero). Losing one chip is the right degradation here: the
- * grid it filters is already on screen.
- *
- * The adult-content switch has to reach these too, or a chip would promise
- * twelve titles and the grid below it would show ten. It is applied in the
- * query rather than by counting rows in JS, so the counts keep the property
- * this shape exists for: PostgREST's exact count is not subject to `max_rows`,
- * and tallying rows would put the cap back.
- *
- * The filter is an explicit `is null OR not in (...)` rather than a bare
- * `not.in`, because SQL's `NULL NOT IN (...)` is NULL and not true — a plain
- * negation would drop every title the rating backfill has not reached yet,
- * which is most of the catalog on the day this ships.
- */
-export async function getStatusCounts(): Promise<Record<string, number>> {
-  const supabase = await createClient();
-  const hideMature = await hidesMatureTitles();
-
-  const counts = await Promise.all(
-    MAL_LIST_STATUSES.map(async (status) => {
-      // `!inner` is what lets the embedded filter narrow the parent rows; the
-      // unfiltered path keeps the plain select, so the common case still
-      // counts one table.
-      const query = hideMature
-        ? supabase
-            .from("user_entries")
-            .select("id, media_titles!inner(nsfw)", {
-              count: "exact",
-              head: true,
-            })
-            .is("archived_at", null)
-            .or(`nsfw.is.null,nsfw.not.in.(${[...MATURE_RATINGS].join(",")})`, {
-              referencedTable: "media_titles",
-            })
-        : supabase
-            .from("user_entries")
-            .select("id", { count: "exact", head: true })
-            .is("archived_at", null);
-
-      const { count, error } = await query.eq("list_status", status);
-
-      return [status, error ? 0 : (count ?? 0)] as const;
-    }),
-  );
-
-  return Object.fromEntries(counts);
-}
 
 /**
  * The reader's own entries for any of these titles, by AniList or MAL id —

@@ -6,7 +6,7 @@ import { PullToRefresh } from "@/components/pull-to-refresh";
 import { ThemeDefault } from "@/components/theme-default";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
-import { getProfile } from "@/lib/auth/dal";
+import { getProfile, type Profile } from "@/lib/auth/dal";
 import NavLink from "./nav-link";
 
 /**
@@ -41,20 +41,40 @@ import NavLink from "./nav-link";
  * is a nav destination like any other — which also means it no longer has to
  * be gated to the one page whose shelf it used to filter.
  */
-export async function AppShell({
-  children,
-  secondaryRow,
-  tertiaryRow,
-}: {
+type ShellProps = {
   children: React.ReactNode;
   secondaryRow?: React.ReactNode;
   tertiaryRow?: React.ReactNode;
-}) {
-  const profile = await getProfile();
+};
 
+export async function AppShell(props: ShellProps) {
+  return <ShellFrame {...props} profile={await getProfile()} />;
+}
+
+/**
+ * The shell without its data, for loading.tsx files.
+ *
+ * The shell is rendered by each page rather than a layout, so a loading
+ * boundary would otherwise show its skeleton with no header, no nav and no
+ * page gutter — and the whole frame would jump in when the page arrived. This
+ * draws the same frame synchronously; only the footer, which names the
+ * account, waits for the real page.
+ */
+export function ShellSkeleton(props: ShellProps) {
+  return <ShellFrame {...props} />;
+}
+
+function ShellFrame({
+  children,
+  secondaryRow,
+  tertiaryRow,
+  profile,
+}: ShellProps & { profile?: Profile | null }) {
   return (
     <div className="flex min-h-screen flex-col">
-      <ThemeDefault theme={profile?.theme ?? null} />
+      {profile !== undefined ? (
+        <ThemeDefault theme={profile?.theme ?? null} />
+      ) : null}
       <header className="fixed w-full top-0 z-40 border-b border-border bg-background/80 backdrop-blur px-4">
         <div className="h-[60px] mx-auto flex max-w-6xl items-center justify-between gap-4 py-3 pl-2">
 					<div className="flex items-center gap-3 max-sm:gap-6">
@@ -138,19 +158,21 @@ export async function AppShell({
         {children}
       </main>
 
-      <footer className="border-t border-border px-4 py-6">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-muted-foreground">
-          <p>Signed in as {profile?.display_name ?? "your account"}</p>
-          <nav className="flex gap-4">
-            <Link href="/privacy-policy" className="hover:text-foreground">
-              Privacy
-            </Link>
-            <Link href="/terms-of-service" className="hover:text-foreground">
-              Terms
-            </Link>
-          </nav>
-        </div>
-      </footer>
+      {profile !== undefined ? (
+        <footer className="border-t border-border px-4 py-6">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-muted-foreground">
+            <p>Signed in as {profile?.display_name ?? "your account"}</p>
+            <nav className="flex gap-4">
+              <Link href="/privacy-policy" className="hover:text-foreground">
+                Privacy
+              </Link>
+              <Link href="/terms-of-service" className="hover:text-foreground">
+                Terms
+              </Link>
+            </nav>
+          </div>
+        </footer>
+      ) : null}
     </div>
   );
 }

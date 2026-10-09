@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   useEntryCardActions,
+  type CardPatch,
   type SourceDialogRequest,
 } from "@/components/entry-card-menu";
 import type { LibraryRow } from "@/lib/data/entries";
@@ -35,6 +36,7 @@ export function EntryCardSheet({
   open,
   onOpenChange,
   onOpenDialog,
+  onPatch,
 }: {
   entry: LibraryRow;
   entryTitle: string;
@@ -42,10 +44,12 @@ export function EntryCardSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onOpenDialog: (request: SourceDialogRequest) => void;
+  onPatch?: (patch: CardPatch) => void;
 }) {
   const actions = useEntryCardActions({
     entry,
     topSources,
+    onPatch,
     // The sheet stays mounted while closed; AniList is asked on first open.
     open,
     // Opening the source dialog replaces this sheet rather than stacking on
