@@ -17,7 +17,8 @@ import {
 import { getLibrary } from "@/lib/data/entries";
 import { getIsPro } from "@/lib/data/pro";
 import { resolveMediaKind } from "@/lib/data/search";
-import { getSources, getTopSources } from "@/lib/data/sources";
+import { rankSources } from "@/lib/data/rank-sources";
+import { getSources } from "@/lib/data/sources";
 
 export const metadata = { title: "Search" };
 
@@ -67,13 +68,13 @@ export default async function SearchPage() {
   // title against rows already in the browser is what lets a keystroke narrow
   // the results in the same render, with no round-trip to interrupt typing.
   // The two source lists are what an EntryCard needs to offer its menu.
-  const [entries, sources, topSources, isAdult, isPro] = await Promise.all([
+  const [entries, sources, isAdult, isPro] = await Promise.all([
     getLibrary(),
     getSources(),
-    getTopSources(),
     isAgeConfirmedAdult(),
     getIsPro(),
   ]);
+  const topSources = rankSources(entries.flatMap((e) => e.entry_sources));
 
   return (
     // Wraps the shell: the field renders into the header's sticky row and the

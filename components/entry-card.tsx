@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { forwardRef, useState } from "react";
+import { forwardRef, useOptimistic, useState } from "react";
 import { Check, Ellipsis, ExternalLink } from "lucide-react";
 
 import { CoverImage } from "@/components/cover-image";
@@ -9,6 +9,7 @@ import { AddTitleButton } from "@/components/add-title-button";
 import { RemoveFromCollectionButton } from "@/components/remove-from-collection-button";
 import {
   EntryCardMenu,
+  type CardPatch,
   type SourceDialogRequest,
 } from "@/components/entry-card-menu";
 import { EntrySourceDialog } from "@/components/entry-source-dialog";
@@ -63,7 +64,7 @@ export type EntryLayout = "grid" | "row";
  * you can do to it.
  */
 export function EntryCard({
-  entry: row,
+  entry,
   view: given,
   layout = "grid",
   topSources = [],
@@ -116,13 +117,18 @@ export function EntryCard({
   // the menu component stays mounted (Radix only unmounts its content), and a
   // shelf of cards asking up front would be one AniList request per title.
   const [menuOpen, setMenuOpen] = useState(false);
+  // A menu or sheet edit shows here at once; the server's row replaces it
+  // when the save's re-render arrives, or restores it if the save failed.
+  const [row, patchRow] = useOptimistic(entry, (current, patch: CardPatch) =>
+    current ? { ...current, ...patch } : current,
+  );
 
   // Exactly one of the two is always passed. Not modelled as a union of two
   // prop shapes: that costs every call site its inference to catch a mistake
   // no caller is in a position to make, since which prop to pass follows from
   // what the page fetched.
   const view = given ?? entryView(row!);
-  const { name, entry } = view;
+  const { name, entry: tracked } = view;
   const body =
     layout === "row" ? (
       <EntryRowBody
@@ -168,35 +174,37 @@ export function EntryCard({
     );
   }
 
-  if (!entry) return body;
+  if (!tracked) return body;
 
   return (
     <ContextMenu onOpenChange={setMenuOpen}>
       <ContextMenuTrigger asChild>{body}</ContextMenuTrigger>
 
       <EntryCardMenu
-        entry={entry.row}
+        entry={tracked.row}
         topSources={topSources}
         onOpenDialog={setDialog}
+        onPatch={patchRow}
         open={menuOpen}
       />
 
       {/* Both sit outside <ContextMenuContent>: Radix unmounts menu content on
       close and would take them with it. */}
       <EntryCardSheet
-        entry={entry.row}
+        entry={tracked.row}
         entryTitle={name}
         topSources={topSources}
         open={sheetOpen}
         onOpenChange={setSheetOpen}
         onOpenDialog={setDialog}
+        onPatch={patchRow}
       />
 
       <EntrySourceDialog
-        entryId={entry.id}
+        entryId={tracked.id}
         entryTitle={name}
         request={dialog}
-        attached={entry.sources}
+        attached={tracked.sources}
         catalog={catalog}
         // The row already carries MAL's count, so the quick-edit dialog can
         // offer the same "own all" shortcut the entry page does.

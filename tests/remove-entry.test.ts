@@ -54,9 +54,8 @@ describe("archived titles stay out of the way", () => {
       readFile("lib/data/collections.ts", "utf8"),
     ]);
 
-    // getLibrary, both getStatusCounts branches, getLibraryMatches, and both
-    // collection reads.
-    expect(entries.match(/\.is\("archived_at", null\)/g) ?? []).toHaveLength(4);
+    // getLibrary, getLibraryMatches, and both collection reads.
+    expect(entries.match(/\.is\("archived_at", null\)/g) ?? []).toHaveLength(2);
     expect(collections.match(/\.is\("archived_at", null\)/g) ?? []).toHaveLength(2);
   });
 

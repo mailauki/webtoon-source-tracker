@@ -27,7 +27,6 @@ export type Source = {
 export const TOP_SOURCE_LIMIT = 5;
 
 type Attachment = {
-  source_id: number;
   sources: { id: number; name: string } | null;
 };
 
@@ -48,7 +47,7 @@ export function rankSources(rows: Attachment[]): RankedSource[] {
 
     const seen = counts.get(row.sources.id);
     if (seen) seen.count += 1;
-    else counts.set(row.sources.id, { ...row.sources, count: 1 });
+    else counts.set(row.sources.id, { id: row.sources.id, name: row.sources.name, count: 1 });
   }
 
   return [...counts.values()]

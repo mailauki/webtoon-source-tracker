@@ -19,11 +19,7 @@ import {
 } from "@/lib/auth/dal";
 import { countUnmatchedToAniList } from "@/lib/data/cross-search";
 import { findDuplicates } from "@/lib/data/duplicates";
-import {
-  getDismissedDuplicates,
-  getLibrary,
-  getStatusCounts,
-} from "@/lib/data/entries";
+import { getDismissedDuplicates, getLibrary } from "@/lib/data/entries";
 import {
   resolveActiveChip,
   resolveLayout,
@@ -31,7 +27,8 @@ import {
   resolveSort,
 } from "@/lib/data/library-prefs";
 import { getIsPro } from "@/lib/data/pro";
-import { getSources, getTopSources } from "@/lib/data/sources";
+import { rankSources } from "@/lib/data/rank-sources";
+import { getSources } from "@/lib/data/sources";
 import { formatLastSynced, isStale } from "@/lib/sync/staleness";
 
 const STATUS_CHIPS = [
@@ -46,9 +43,13 @@ export const metadata = { title: "Library" };
 
 export default async function LibraryPage() {
   await verifySession();
-  const [connection, anilist] = await Promise.all([
+  // One round-trip for everything the page branches on. The prefs and the
+  // age check are wasted only on the onboarding state below, which is rare.
+  const [connection, anilist, prefs, canSeeNsfw] = await Promise.all([
     getMalConnection(),
     getAniListConnection(),
+    getLibraryPrefs(),
+    isAgeConfirmedAdult(),
   ]);
 
   const malLinked = !!connection && connection.status !== "disconnected";
@@ -98,7 +99,6 @@ export default async function LibraryPage() {
   // This page takes no search params: searching moved to /search, which does
   // both halves of it — this shelf and the MyAnimeList catalog — off one
   // term.
-  const prefs = await getLibraryPrefs();
   const activeStatus = resolveActiveChip(prefs?.status);
   const activeSource = resolveActiveChip(prefs?.source);
   const activeSort = resolveSort(prefs?.sort);
@@ -116,18 +116,22 @@ export default async function LibraryPage() {
   // The stored preference matters only for a viewer who may see adult titles
   // at all; getLibrary() has already removed them for everyone else, so the
   // toggle would filter an empty set and the menu hides it.
-  const canSeeNsfw = await isAgeConfirmedAdult();
   const hideNsfw = canSeeNsfw && (prefs?.hide_nsfw ?? false);
 
-  const [entries, statusCounts, sources, topSources, isPro, dismissed] =
-    await Promise.all([
-      getLibrary(),
-      getStatusCounts(),
-      getSources(),
-      getTopSources(),
-      getIsPro(),
-      getDismissedDuplicates(),
-    ]);
+  const [entries, sources, isPro, dismissed] = await Promise.all([
+    getLibrary(),
+    getSources(),
+    getIsPro(),
+    getDismissedDuplicates(),
+  ]);
+  // Both tallied from the shelf already in hand rather than queried again:
+  // getLibrary reads every row and has already screened out adult titles, so
+  // these agree with the grid by construction and cost no round-trips.
+  const statusCounts: Record<string, number> = {};
+  for (const e of entries) {
+    statusCounts[e.list_status] = (statusCounts[e.list_status] ?? 0) + 1;
+  }
+  const topSources = rankSources(entries.flatMap((e) => e.entry_sources));
   // Whichever sites are linked, the shelf is stale when ANY of them is due —
   // one button refreshes from them all, so it should flag a refresh as due if
   // there is anything for it to do. The label follows the oldest of the two

@@ -32,6 +32,11 @@ import { syncTargets } from "@/lib/data/sync-targets";
 /**
  * Sends a partial progress update for one entry.
  */
+/** The fields a card action changes, applied to the card optimistically. */
+export type CardPatch = Partial<
+  Pick<LibraryRow, "num_chapters_read" | "list_status">
+>;
+
 export function submitPatch(
   entry: Pick<LibraryRow, "id">,
   patch: Record<string, string>,
@@ -230,11 +235,18 @@ export function useEntryCardActions({
   entry,
   topSources,
   onOpenDialog,
+  onPatch,
   open,
 }: {
   entry: LibraryRow;
   topSources: RankedSource[];
   onOpenDialog: (request: SourceDialogRequest) => void;
+  /**
+   * Shows a progress edit on the card before the save returns. The save
+   * writes to MyAnimeList first and then re-renders the whole shelf, so
+   * without this the card sat unchanged for that full round-trip.
+   */
+  onPatch?: (patch: CardPatch) => void;
   /**
    * Whether the surface is showing. AniList is only asked once it is: the
    * sheet stays mounted while closed, and a shelf of cards asking up front
@@ -273,8 +285,9 @@ export function useEntryCardActions({
     missingUrl.has(suggestion.attachedId),
   );
 
-  function run(action: () => Promise<ActionResult>) {
+  function run(action: () => Promise<ActionResult>, patch?: CardPatch) {
     startTransition(async () => {
+      if (patch) onPatch?.(patch);
       const result = await action();
       if (result?.error) toast.error(result.error);
     });
@@ -293,10 +306,12 @@ export function useEntryCardActions({
         : "Add 1 chapter",
       disabled: atEnd || isPending || nowhereToSave,
       run: () =>
-        run(() =>
-          submitPatch(entry, {
-            num_chapters_read: String(entry.num_chapters_read + 1),
-          }),
+        run(
+          () =>
+            submitPatch(entry, {
+              num_chapters_read: String(entry.num_chapters_read + 1),
+            }),
+          { num_chapters_read: entry.num_chapters_read + 1 },
         ),
     },
   ];
@@ -308,7 +323,10 @@ export function useEntryCardActions({
       Icon: Check,
       label: status.label,
       disabled: isPending || nowhereToSave,
-      run: () => run(() => submitStatus(entry, status.value)),
+      run: () =>
+        run(() => submitStatus(entry, status.value), {
+          list_status: status.value,
+        }),
     });
   }
 
@@ -433,11 +451,13 @@ export function EntryCardMenu({
   entry,
   topSources,
   onOpenDialog,
+  onPatch,
   open,
 }: {
   entry: LibraryRow;
   topSources: RankedSource[];
   onOpenDialog: (request: SourceDialogRequest) => void;
+  onPatch?: (patch: CardPatch) => void;
   /**
    * Whether the menu is showing. This component stays mounted while the menu
    * is closed — Radix unmounts only the content below — so AniList is asked
@@ -449,6 +469,7 @@ export function EntryCardMenu({
     entry,
     topSources,
     onOpenDialog,
+    onPatch,
     open,
   });
 
