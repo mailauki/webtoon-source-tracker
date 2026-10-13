@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { formatLastSynced, isStale } from "@/lib/sync/staleness";
+import { formatLastSynced, isStale, nextRefreshDue } from "@/lib/sync/staleness";
 
 const minutesAgo = (n: number) =>
   new Date(Date.now() - n * 60_000).toISOString();
@@ -37,5 +37,24 @@ describe("formatLastSynced", () => {
     expect(formatLastSynced(minutesAgo(5))).toBe("Synced 5m ago");
     expect(formatLastSynced(minutesAgo(3 * 60))).toBe("Synced 3h ago");
     expect(formatLastSynced(minutesAgo(2 * 24 * 60))).toBe("Synced 2d ago");
+  });
+});
+
+describe("nextRefreshDue", () => {
+  it("is never due with nothing to pull from", () => {
+    expect(nextRefreshDue([])).toBeNull();
+  });
+
+  it("is due now when any site has never synced", () => {
+    expect(nextRefreshDue([minutesAgo(5), null], 60)).toBe(0);
+  });
+
+  // One refresh pulls from every site, so the first to go stale decides.
+  it("follows the earliest site to go stale", () => {
+    const older = "2026-08-21T10:00:00.000Z";
+    const newer = "2026-08-21T11:30:00.000Z";
+    expect(nextRefreshDue([newer, older], 60)).toBe(
+      new Date("2026-08-21T11:00:00.000Z").getTime(),
+    );
   });
 });

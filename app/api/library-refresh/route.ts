@@ -16,8 +16,10 @@ import { createClient } from "@/lib/supabase/server";
  * as /api/account-sync: `progress` lines as the run moves, then one `done` or
  * `error` line. See RefreshEvent.
  *
- * A press always refreshes now, past the staleness gate: the button is the
- * only caller, and pressing it is the user saying "now".
+ * A press always refreshes now, past the staleness gate: pressing it is the
+ * user saying "now". The button also calls this on its own when a refresh is
+ * due, sending `{ "auto": true }`; that run keeps the gate, so a second tab
+ * or a stale page that asks again only gets "already up to date" back.
  */
 export async function POST(request: Request) {
   if (!isSameOrigin(request)) {
@@ -30,6 +32,10 @@ export async function POST(request: Request) {
   if (error || !userId) {
     return Response.json({ error: "Not signed in" }, { status: 401 });
   }
+
+  // No body is a press. Anything unreadable is treated the same way.
+  const body = (await request.json().catch(() => null)) as { auto?: unknown } | null;
+  const auto = body?.auto === true;
 
   const encoder = new TextEncoder();
 
@@ -49,7 +55,7 @@ export async function POST(request: Request) {
 
       try {
         const result = await refreshLibrary(userId, {
-          force: true,
+          force: !auto,
           onProgress: (step, value) => send({ type: "progress", step, value }),
         });
 

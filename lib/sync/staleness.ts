@@ -32,3 +32,24 @@ export function formatLastSynced(lastSyncedAt: string | null): string {
   const days = Math.floor(hours / 24);
   return `Synced ${days}d ago`;
 }
+
+/**
+ * When the next background refresh is due, as epoch milliseconds.
+ *
+ * Takes the last-synced time of every site that can actually be pulled from
+ * (connected and active). The earliest of them to go stale decides, because
+ * one refresh pulls from them all; a site that has never synced is due now.
+ * Null when there is nothing to pull from, so nothing is ever due.
+ */
+export function nextRefreshDue(
+  syncedAts: (string | null)[],
+  thresholdMinutes = staleMinutes(),
+): number | null {
+  if (syncedAts.length === 0) return null;
+  if (syncedAts.includes(null)) return 0;
+
+  const earliest = Math.min(
+    ...syncedAts.map((at) => new Date(at as string).getTime()),
+  );
+  return earliest + thresholdMinutes * 60_000;
+}
