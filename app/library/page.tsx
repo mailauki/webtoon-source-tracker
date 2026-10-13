@@ -29,7 +29,7 @@ import {
 import { getIsPro } from "@/lib/data/pro";
 import { rankSources } from "@/lib/data/rank-sources";
 import { getSources } from "@/lib/data/sources";
-import { formatLastSynced, isStale } from "@/lib/sync/staleness";
+import { formatLastSynced, isStale, nextRefreshDue } from "@/lib/sync/staleness";
 
 const STATUS_CHIPS = [
   { value: "reading", label: "Reading" },
@@ -145,6 +145,13 @@ export default async function LibraryPage() {
   const oldestSyncedAt = syncedAts.includes(null)
     ? null
     : syncedAts.sort()[0] ?? null;
+  // When the button should refresh on its own. Only the sites a pull can
+  // reach count: one waiting on a reconnect would otherwise keep the shelf
+  // "due" forever, and the reconnect notice below is what it needs instead.
+  const refreshDueAt = nextRefreshDue([
+    ...(connection?.status === "active" ? [connection.last_synced_at] : []),
+    ...(anilist?.status === "active" ? [anilist.last_synced_at] : []),
+  ]);
 
   /**
    * Titles that exist here but have never been matched to AniList.
@@ -239,6 +246,7 @@ export default async function LibraryPage() {
             <SyncButton
               lastSyncedLabel={formatLastSynced(oldestSyncedAt)}
               stale={stale}
+              dueAt={refreshDueAt}
             />
           </div>
 
