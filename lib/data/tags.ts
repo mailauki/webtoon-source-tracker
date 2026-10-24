@@ -1,11 +1,20 @@
 import "server-only";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { hidesMatureTitles } from "@/lib/auth/dal";
 import type { CollectionTitle } from "@/lib/data/collection-items";
 import { screenMature } from "@/lib/data/nsfw";
 import { readAllRows } from "@/lib/data/pagination";
 import { isExplicitKind, sortTags, type Tag } from "@/lib/data/tag-items";
 import { createClient } from "@/lib/supabase/server";
+import type { Database } from "@/lib/supabase/types";
+
+/**
+ * Who a tag read is for, when it isn't the cookie session: the iOS app's
+ * client and that user's adult-content answer (see hidesMatureTitles).
+ */
+export type TagReader = { supabase: SupabaseClient<Database>; hideMature: boolean };
 
 /**
  * Tag reads.
@@ -56,9 +65,10 @@ export async function getActiveTags(): Promise<Tag[]> {
  */
 export async function getTagsForMalGenres(
   malGenreIds: readonly number[],
+  reader?: TagReader,
 ): Promise<Tag[]> {
   if (malGenreIds.length === 0) return [];
-  const supabase = await createClient();
+  const supabase = reader?.supabase ?? (await createClient());
 
   const [{ data, error }, hideMature] = await Promise.all([
     supabase
@@ -66,7 +76,7 @@ export async function getTagsForMalGenres(
       .select(TAG_COLUMNS)
       .eq("is_active", true)
       .in("mal_genre_id", [...new Set(malGenreIds)]),
-    hidesMatureTitles(),
+    reader ? reader.hideMature : hidesMatureTitles(),
   ]);
 
   // A garnish, like getTagsForTitle: the saved tags still show without these.
@@ -182,8 +192,9 @@ export async function getTaggedTitleCounts(): Promise<Map<number, number>> {
  */
 export async function getTagsForTitle(
   titleId: number,
+  reader?: TagReader,
 ): Promise<(Tag & { from_api: boolean })[]> {
-  const supabase = await createClient();
+  const supabase = reader?.supabase ?? (await createClient());
 
   const [{ data, error }, hideMature] = await Promise.all([
     supabase
@@ -191,7 +202,7 @@ export async function getTagsForTitle(
       .select(`from_api, tags!inner ( ${TAG_COLUMNS} )`)
       .eq("title_id", titleId)
       .is("owner_id", null),
-    hidesMatureTitles(),
+    reader ? reader.hideMature : hidesMatureTitles(),
   ]);
 
   // Chips are a garnish; losing them should not take the entry page down.
