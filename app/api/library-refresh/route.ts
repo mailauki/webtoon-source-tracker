@@ -1,9 +1,7 @@
 import { revalidatePath } from "next/cache";
 
-import { userClientFromBearer } from "@/lib/auth/app-link";
-import { isSameOrigin } from "@/lib/auth/same-origin";
+import { routeUser } from "@/lib/auth/app-link";
 import { refreshLibrary, type RefreshEvent } from "@/lib/sync/refresh-library";
-import { createClient } from "@/lib/supabase/server";
 
 // No maxDuration, deliberately: this ran as a server action on /library with
 // the platform default, and a first refresh of a long list can need it.
@@ -23,18 +21,10 @@ import { createClient } from "@/lib/supabase/server";
  * or a stale page that asks again only gets "already up to date" back.
  */
 export async function POST(request: Request) {
-  // The iOS app signs in with its access token. A browser never attaches one
-  // on its own, so a cross-site page can't start a refresh this way either.
-  const app = await userClientFromBearer(request);
-  if (!app && !isSameOrigin(request)) {
-    return Response.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  const supabase = app?.supabase ?? (await createClient());
-  const userId = app?.userId ?? (await supabase.auth.getClaims()).data?.claims?.sub;
-  if (!userId) {
-    return Response.json({ error: "Not signed in" }, { status: 401 });
-  }
+  // The web's button or the iOS app; see routeUser.
+  const user = await routeUser(request);
+  if (user instanceof Response) return user;
+  const { userId, supabase } = user;
 
   // No body is a press. Anything unreadable is treated the same way.
   const body = (await request.json().catch(() => null)) as { auto?: unknown } | null;

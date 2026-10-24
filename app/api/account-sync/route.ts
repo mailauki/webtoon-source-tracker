@@ -9,8 +9,7 @@ import {
   describeAccountSync,
   type AccountSyncEvent,
 } from "@/lib/sync/plan-account-sync";
-import { isSameOrigin } from "@/lib/auth/same-origin";
-import { createClient } from "@/lib/supabase/server";
+import { routeUser } from "@/lib/auth/app-link";
 
 // See MAL_WRITE_BUDGET_MS in lib/sync/account-sync.ts, which is sized to fit.
 export const maxDuration = 60;
@@ -27,20 +26,14 @@ const bodySchema = z.object({ direction: z.enum(SYNC_DIRECTIONS) });
  * real progress bar. See AccountSyncEvent for the line shapes.
  *
  * Server actions get a same-origin check for free and this does not, so it
- * makes the same one: a cross-site page must not be able to start a write to
- * two accounts the app does not own.
+ * makes the same one (routeUser): a cross-site page must not be able to start
+ * a write to two accounts the app does not own. The iOS app calls it with its
+ * access token instead.
  */
 export async function POST(request: Request) {
-  if (!isSameOrigin(request)) {
-    return Response.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
-  const userId = data?.claims?.sub;
-  if (error || !userId) {
-    return Response.json({ error: "Not signed in" }, { status: 401 });
-  }
+  const user = await routeUser(request);
+  if (user instanceof Response) return user;
+  const { userId } = user;
 
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {

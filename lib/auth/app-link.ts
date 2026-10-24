@@ -3,7 +3,9 @@ import "server-only";
 import { createHmac } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
+import { isSameOrigin } from "@/lib/auth/same-origin";
 import { createState, verifyState } from "@/lib/mal/oauth";
+import { createClient as createSessionClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 
 /**
@@ -95,6 +97,28 @@ export async function userClientFromBearer(
   const { data, error } = await supabase.auth.getClaims(token);
   const userId = data?.claims?.sub;
   return error || !userId ? null : { userId, supabase };
+}
+
+/**
+ * The caller of a route both the web and the iOS app use: the app by its
+ * bearer token, a browser by its session cookie and only from this site's
+ * own pages. A browser never attaches the bearer by itself, so a cross-site
+ * page can't take the first path either. A JSON error response otherwise,
+ * to send back as-is.
+ */
+export async function routeUser(
+  request: Request,
+): Promise<{ userId: string; supabase: SupabaseClient<Database> } | Response> {
+  const app = await userClientFromBearer(request);
+  if (app) return app;
+  if (!isSameOrigin(request)) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+  const supabase = await createSessionClient();
+  const userId = (await supabase.auth.getClaims()).data?.claims?.sub;
+  return userId
+    ? { userId, supabase }
+    : Response.json({ error: "Not signed in" }, { status: 401 });
 }
 
 /**
