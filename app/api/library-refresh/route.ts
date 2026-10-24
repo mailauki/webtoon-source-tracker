@@ -1,8 +1,7 @@
 import { revalidatePath } from "next/cache";
 
-import { isSameOrigin } from "@/lib/auth/same-origin";
+import { routeUser } from "@/lib/auth/app-link";
 import { refreshLibrary, type RefreshEvent } from "@/lib/sync/refresh-library";
-import { createClient } from "@/lib/supabase/server";
 
 // No maxDuration, deliberately: this ran as a server action on /library with
 // the platform default, and a first refresh of a long list can need it.
@@ -22,16 +21,10 @@ import { createClient } from "@/lib/supabase/server";
  * or a stale page that asks again only gets "already up to date" back.
  */
 export async function POST(request: Request) {
-  if (!isSameOrigin(request)) {
-    return Response.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
-  const userId = data?.claims?.sub;
-  if (error || !userId) {
-    return Response.json({ error: "Not signed in" }, { status: 401 });
-  }
+  // The web's button or the iOS app; see routeUser.
+  const user = await routeUser(request);
+  if (user instanceof Response) return user;
+  const { userId, supabase } = user;
 
   // No body is a press. Anything unreadable is treated the same way.
   const body = (await request.json().catch(() => null)) as { auto?: unknown } | null;
@@ -56,6 +49,7 @@ export async function POST(request: Request) {
       try {
         const result = await refreshLibrary(userId, {
           force: !auto,
+          supabase,
           onProgress: (step, value) => send({ type: "progress", step, value }),
         });
 

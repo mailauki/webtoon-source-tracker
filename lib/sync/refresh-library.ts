@@ -1,10 +1,13 @@
 import "server-only";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { AniListAuthError, AniListRateLimitError } from "@/lib/anilist/errors";
 import { enforceRemovalRules } from "@/lib/entries/removal-rules";
 import { MalAuthError, MalRateLimitError } from "@/lib/mal/errors";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import type { Database } from "@/lib/supabase/types";
 import { progressSlice, type ProgressReporter, type SyncProgress } from "./progress";
 import { syncAniListList } from "./sync-anilist";
 import { syncMalList, type SyncResult } from "./sync-list";
@@ -42,7 +45,12 @@ const RULES_AT = 0.92;
  */
 export async function refreshLibrary(
   userId: string,
-  options: { force?: boolean; onProgress?: ProgressReporter } = {},
+  options: {
+    force?: boolean;
+    onProgress?: ProgressReporter;
+    /** The user's own client, for the removal rules. Defaults to the cookie session's. */
+    supabase?: SupabaseClient<Database>;
+  } = {},
 ): Promise<RefreshResult> {
   const { force = false, onProgress } = options;
 
@@ -109,7 +117,7 @@ export async function refreshLibrary(
   // changed there and genres the sync added are all checked against the
   // user's removal rules. A failure here must not hide what the sync did.
   onProgress?.("Applying your removal rules", RULES_AT);
-  const rules = await enforceRemovalRules(await createClient(), userId).catch(
+  const rules = await enforceRemovalRules(options.supabase ?? (await createClient()), userId).catch(
     () => null,
   );
 
