@@ -4,6 +4,7 @@ import { malGenresFor } from "@/lib/anilist/genres";
 import { hidesMature } from "@/lib/data/age";
 import { chapterDifference, higherChapterCount } from "@/lib/data/anilist-links";
 import { mergeAuthors } from "@/lib/data/author-works";
+import { POSTER_SOURCE_LABELS, posterOptions } from "@/lib/data/entry-cover";
 import { mergeTags, sortTags } from "@/lib/data/tag-items";
 import { getTagsForMalGenres, getTagsForTitle } from "@/lib/data/tags";
 import { getMalLiveDetails } from "@/lib/mal/endpoints";
@@ -23,6 +24,8 @@ const SITE_NAMES = { mal: "MyAnimeList", anilist: "AniList" } as const;
  * - `authorMismatches` / `chapterDifference`: where the two sites disagree,
  *   as the sentences the web shows; only for a title MyAnimeList has.
  * - `total`: the higher of the stored and both sites' chapter counts.
+ * - `posters`: every poster the picker offers, `{ url, label }`, in its
+ *   order — the catalog's (what a reset goes back to) first.
  *
  * Either site being slow or down costs only its part, as on the web page.
  */
@@ -42,7 +45,9 @@ export async function GET(
   const [{ data: entry }, profile, prefs] = await Promise.all([
     user.supabase
       .from("user_entries")
-      .select("media_titles!inner (id, mal_media_id, anilist_media_id, num_chapters)")
+      .select(
+        "cover_url, media_titles!inner (id, mal_media_id, anilist_media_id, num_chapters, main_picture_url)",
+      )
       .eq("id", entryId)
       .maybeSingle(),
     user.supabase.from("profiles").select("age_range").eq("id", user.userId).maybeSingle(),
@@ -105,5 +110,12 @@ export async function GET(
     // No AniList answer means nothing to compare against, not a difference.
     chapterDifference: onMal && media ? chapterDifference(malChapters, media.chapters) : null,
     total: higherChapterCount(title.num_chapters, onMal ? malChapters : null, media?.chapters),
+    posters: posterOptions({
+      catalog: title.main_picture_url,
+      current: entry.cover_url,
+      myanimelist: mal?.pictures,
+      anilist: [media?.coverImage?.extraLarge ?? media?.coverImage?.large],
+      anilistBanner: media?.bannerImage,
+    }).map((option) => ({ url: option.url, label: POSTER_SOURCE_LABELS[option.source] })),
   });
 }
