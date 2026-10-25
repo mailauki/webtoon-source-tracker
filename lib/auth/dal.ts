@@ -3,7 +3,7 @@ import "server-only";
 import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
 
-import { isAdult } from "@/lib/data/age";
+import { hidesMature, isAdult } from "@/lib/data/age";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 
@@ -187,10 +187,8 @@ export const isAgeConfirmedAdult = cache(async (): Promise<boolean> => {
  * callers run in one render.
  */
 export const hidesMatureTitles = cache(async (): Promise<boolean> => {
-  if (!(await isAgeConfirmedAdult())) return true;
-
-  const prefs = await getLibraryPrefs();
-  return prefs?.hide_nsfw ?? false;
+  const [profile, prefs] = await Promise.all([getProfile(), getLibraryPrefs()]);
+  return hidesMature(profile?.age_range, prefs?.hide_nsfw);
 });
 
 /**

@@ -4,47 +4,9 @@ import { CopyButton } from "@/components/copy-button";
 import { DismissDuplicateButton } from "@/components/dismiss-duplicate-button";
 import { MergeDuplicateButton } from "@/components/merge-duplicate-button";
 import { Button } from "@/components/ui/button";
-import { kindsCompatible, nameKeys } from "@/lib/data/cross-search";
-import { displayTitle } from "@/lib/data/display-title";
-import { findDuplicates, type DuplicateRow } from "@/lib/data/duplicates";
-import { getDismissedDuplicates } from "@/lib/data/entries";
-import { malAltTitles } from "@/lib/mal/alt-titles";
-import { searchManga } from "@/lib/mal/endpoints";
+import { findMalLink, type Title } from "@/lib/data/mal-link";
 import { searchOtherSiteUrl } from "@/lib/sync/unmatched-titles";
 import { createClient } from "@/lib/supabase/server";
-
-type Title = DuplicateRow["media_titles"] & { anilist_media_id: number };
-
-/**
- * The MyAnimeList title an AniList-only title looks like, by the same strict
- * name rule as findDuplicates, from a live MAL search. Null when MAL has no
- * single match or cannot be reached.
- */
-async function findOnMal(title: Title) {
-  try {
-    const page = await searchManga(null, title.title.slice(0, 64), 10, {
-      includeMature: true,
-    });
-    const keys = nameKeys({ ...title, alt_titles: title.alt_titles ?? [] });
-    const matches = page.data
-      .map(({ node }) => node)
-      .filter(
-        (node) =>
-          kindsCompatible(node.media_type ?? null, title.mal_media_kind) &&
-          [
-            ...nameKeys({
-              title: node.title,
-              title_en: node.alternative_titles?.en || null,
-              alt_titles: malAltTitles(node),
-            }),
-          ].some((key) => keys.has(key)),
-      );
-    return matches.length === 1 ? matches[0] : null;
-  } catch (cause) {
-    console.error("[entry-mal-link] MAL search failed:", cause);
-    return null;
-  }
-}
 
 /**
  * For a title only AniList has: how to link it to MyAnimeList.
@@ -62,32 +24,7 @@ export async function EntryMalLink({
   entryId: number;
   title: Title;
 }) {
-  const found = await findOnMal(title);
-
-  // The library copy, if any, and only when it passes the same check the
-  // merge action makes — so the button is never offered to be refused.
-  let twin: { id: number; titleId: number; title: string } | null = null;
-  if (found) {
-    const supabase = await createClient();
-    const { data } = await supabase
-      .from("user_entries")
-      .select(
-        "id, media_titles!inner (id, mal_media_id, anilist_media_id, title, title_en, alt_titles, mal_media_kind)",
-      )
-      .is("archived_at", null)
-      .eq("media_titles.mal_media_id", found.id);
-    const [pair] = findDuplicates(
-      [{ id: entryId, media_titles: title }, ...(data ?? [])],
-      await getDismissedDuplicates(),
-    );
-    if (pair?.anilist.id === entryId) {
-      twin = {
-        id: pair.mal.id,
-        titleId: pair.mal.media_titles.id,
-        title: displayTitle(pair.mal.media_titles),
-      };
-    }
-  }
+  const { found, twin } = await findMalLink(await createClient(), entryId, title);
 
   const malUrl = found ? `https://myanimelist.net/manga/${found.id}` : null;
 
