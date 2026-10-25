@@ -1,7 +1,7 @@
 import { userClientFromBearer } from "@/lib/auth/app-link";
 import { getMediaExtras } from "@/lib/anilist/endpoints";
 import { malGenresFor } from "@/lib/anilist/genres";
-import { isAdult } from "@/lib/data/age";
+import { hidesMature } from "@/lib/data/age";
 import { chapterDifference, higherChapterCount } from "@/lib/data/anilist-links";
 import { mergeAuthors } from "@/lib/data/author-works";
 import { mergeTags, sortTags } from "@/lib/data/tag-items";
@@ -39,7 +39,7 @@ export async function GET(
   }
 
   // RLS: someone else's entry reads as missing, as on the web page.
-  const [{ data: entry }, { data: profile }, { data: prefs }] = await Promise.all([
+  const [{ data: entry }, profile, prefs] = await Promise.all([
     user.supabase
       .from("user_entries")
       .select("media_titles!inner (id, mal_media_id, anilist_media_id, num_chapters)")
@@ -51,10 +51,13 @@ export async function GET(
   if (!entry) return Response.json({ error: "Not found" }, { status: 404 });
 
   const title = entry.media_titles;
-  // As hidesMatureTitles: under the age floor always, else the user's switch.
+  // hidesMatureTitles' rule, and hidden outright if either row can't be
+  // read: an unknown answer to "may this be shown?" is no.
   const reader = {
     supabase: user.supabase,
-    hideMature: !isAdult(profile?.age_range) || (prefs?.hide_nsfw ?? false),
+    hideMature:
+      Boolean(profile.error || prefs.error) ||
+      hidesMature(profile.data?.age_range, prefs.data?.hide_nsfw),
   };
 
   const [media, mal, saved] = await Promise.all([

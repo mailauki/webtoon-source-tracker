@@ -96,3 +96,15 @@ export function rangeFromBounds(
   if (lowerBound >= 13) return "13_to_15";
   return "under_13";
 }
+
+/**
+ * Whether adult titles are left out: always under the age floor, else when
+ * the user has hidden them. The one rule hidesMatureTitles and the iOS app's
+ * routes both apply, so the two can't drift apart.
+ */
+export function hidesMature(
+  range: string | null | undefined,
+  hideNsfw: boolean | null | undefined,
+): boolean {
+  return !isAdult(range) || (hideNsfw ?? false);
+}
