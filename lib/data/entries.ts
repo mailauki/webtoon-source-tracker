@@ -1,5 +1,7 @@
 import "server-only";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { hidesMatureTitles } from "@/lib/auth/dal";
 import type { LibraryMatch } from "@/lib/data/author-works";
 import { displayTitle } from "@/lib/data/display-title";
@@ -8,6 +10,7 @@ import { entryCover } from "@/lib/data/entry-cover";
 import { screenMature } from "@/lib/data/nsfw";
 import { readAllRows } from "@/lib/data/pagination";
 import { createClient } from "@/lib/supabase/server";
+import type { Database } from "@/lib/supabase/types";
 
 /**
  * Library reads.
@@ -107,11 +110,16 @@ export type LibraryRow = Awaited<ReturnType<typeof getLibrary>>[number];
  * point of view, and linking to it would send them to a restore page rather
  * than to a title they track. A failed read is an empty shelf, not an error —
  * every work still links out to AniList without it.
+ *
+ * `client` reads as someone other than the cookie session: the iOS app.
  */
-export async function getLibraryMatches(ids: {
-  anilistIds: number[];
-  malIds: number[];
-}): Promise<LibraryMatch[]> {
+export async function getLibraryMatches(
+  ids: {
+    anilistIds: number[];
+    malIds: number[];
+  },
+  client?: SupabaseClient<Database>,
+): Promise<LibraryMatch[]> {
   const filters = [
     ids.anilistIds.length > 0
       ? `anilist_media_id.in.(${ids.anilistIds.join(",")})`
@@ -120,7 +128,7 @@ export async function getLibraryMatches(ids: {
   ].filter((filter): filter is string => filter !== null);
   if (filters.length === 0) return [];
 
-  const supabase = await createClient();
+  const supabase = client ?? (await createClient());
   const { data, error } = await supabase
     .from("user_entries")
     .select(

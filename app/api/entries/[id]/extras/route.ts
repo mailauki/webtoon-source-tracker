@@ -3,12 +3,15 @@ import { getMediaExtras } from "@/lib/anilist/endpoints";
 import { malGenresFor } from "@/lib/anilist/genres";
 import { hidesMature } from "@/lib/data/age";
 import { chapterDifference, higherChapterCount } from "@/lib/data/anilist-links";
-import { mergeAuthors } from "@/lib/data/author-works";
+import { authorWorks, mergeAuthors, relatedWorks, withMalWorks } from "@/lib/data/author-works";
+import { getLibraryMatches } from "@/lib/data/entries";
 import { POSTER_SOURCE_LABELS, posterOptions } from "@/lib/data/entry-cover";
 import { findMalLink } from "@/lib/data/mal-link";
+import { hasPro } from "@/lib/data/pro";
 import { mergeTags, sortTags } from "@/lib/data/tag-items";
 import { getTagsForMalGenres, getTagsForTitle } from "@/lib/data/tags";
 import { getMalLiveDetails } from "@/lib/mal/endpoints";
+import { getPersonManga } from "@/lib/mal/jikan";
 import { searchOtherSiteUrl } from "@/lib/sync/unmatched-titles";
 
 const SITE_NAMES = { mal: "MyAnimeList", anilist: "AniList" } as const;
@@ -31,6 +34,9 @@ const SITE_NAMES = { mal: "MyAnimeList", anilist: "AniList" } as const;
  * - `malLink`: only for a title AniList alone has — what MyAnimeList seems
  *   to call it (`found`), its entry in the library if it can be merged
  *   (`twin`), and AniList's edit page and a MyAnimeList search. Null else.
+ * - `works`: Pro only (null without it) — the authors' other works, each
+ *   `{ title, entryId }` with `title` shaped as a Search result so the app's
+ *   catalog card can add it, and `entryId` set when it's already tracked.
  *
  * Either site being slow or down costs only its part, as on the web page.
  */
@@ -47,7 +53,7 @@ export async function GET(
   }
 
   // RLS: someone else's entry reads as missing, as on the web page.
-  const [{ data: entry }, profile, prefs] = await Promise.all([
+  const [{ data: entry }, profile, prefs, isPro] = await Promise.all([
     user.supabase
       .from("user_entries")
       .select(
@@ -57,6 +63,7 @@ export async function GET(
       .maybeSingle(),
     user.supabase.from("profiles").select("age_range").eq("id", user.userId).maybeSingle(),
     user.supabase.from("library_prefs").select("hide_nsfw").eq("user_id", user.userId).maybeSingle(),
+    hasPro(user.supabase, user.userId),
   ]);
   if (!entry) return Response.json({ error: "Not found" }, { status: 404 });
 
@@ -72,9 +79,11 @@ export async function GET(
 
   const anilistOnly = title.mal_media_id === null && title.anilist_media_id !== null;
   const [media, mal, saved, malLink] = await Promise.all([
+    // With Pro, the same AniList request also carries the authors' works.
     getMediaExtras({
       anilistMediaId: title.anilist_media_id,
       malMediaId: title.mal_media_id,
+      withWorks: isPro,
     }),
     title.mal_media_id === null ? null : getMalLiveDetails(title.mal_media_id),
     getTagsForTitle(title.id, reader),
@@ -99,6 +108,42 @@ export async function GET(
   ]);
   const { authors, mismatches } = mergeAuthors(mal?.authors ?? null, media?.staff);
   const malChapters = mal?.numChapters ?? title.num_chapters;
+
+  // As the entry page's AuthorWorks: AniList's on the response above, plus
+  // MyAnimeList's by Jikan — capped, since it allows about three a second.
+  let works = null;
+  if (isPro) {
+    const malWorks = await Promise.all(
+      authors
+        .flatMap((author) => (author.mal ? [author.mal.id] : []))
+        .slice(0, 3)
+        .map(getPersonManga),
+    );
+    const all = withMalWorks(authorWorks(media), malWorks.flat(), title.mal_media_id);
+    const library =
+      all.length === 0
+        ? []
+        : await getLibraryMatches(
+            {
+              anilistIds: all.flatMap((work) => (work.anilistId === null ? [] : [work.anilistId])),
+              malIds: all.flatMap((work) => (work.malId === null ? [] : [work.malId])),
+            },
+            user.supabase,
+          );
+    works = relatedWorks(all, library, { hideMature: reader.hideMature }).map((work) => ({
+      title: {
+        key: `${work.malId ?? ""}:${work.anilistId ?? ""}`,
+        source: work.malId !== null && work.anilistId !== null ? "both" : work.malId !== null ? "mal" : "anilist",
+        mal_media_id: work.malId,
+        anilist_media_id: work.anilistId,
+        title: work.title,
+        title_en: null,
+        main_picture_url: work.cover,
+        media_kind: null,
+      },
+      entryId: work.entryId,
+    }));
+  }
   const onMal = title.mal_media_id !== null;
 
   return Response.json({
@@ -127,6 +172,7 @@ export async function GET(
       anilist: [media?.coverImage?.extraLarge ?? media?.coverImage?.large],
       anilistBanner: media?.bannerImage,
     }).map((option) => ({ url: option.url, label: POSTER_SOURCE_LABELS[option.source] })),
+    works,
     malLink: malLink && {
       found: malLink.found && {
         id: malLink.found.id,
