@@ -5,9 +5,11 @@ import { hidesMature } from "@/lib/data/age";
 import { chapterDifference, higherChapterCount } from "@/lib/data/anilist-links";
 import { mergeAuthors } from "@/lib/data/author-works";
 import { POSTER_SOURCE_LABELS, posterOptions } from "@/lib/data/entry-cover";
+import { findMalLink } from "@/lib/data/mal-link";
 import { mergeTags, sortTags } from "@/lib/data/tag-items";
 import { getTagsForMalGenres, getTagsForTitle } from "@/lib/data/tags";
 import { getMalLiveDetails } from "@/lib/mal/endpoints";
+import { searchOtherSiteUrl } from "@/lib/sync/unmatched-titles";
 
 const SITE_NAMES = { mal: "MyAnimeList", anilist: "AniList" } as const;
 
@@ -26,6 +28,9 @@ const SITE_NAMES = { mal: "MyAnimeList", anilist: "AniList" } as const;
  * - `total`: the higher of the stored and both sites' chapter counts.
  * - `posters`: every poster the picker offers, `{ url, label }`, in its
  *   order — the catalog's (what a reset goes back to) first.
+ * - `malLink`: only for a title AniList alone has — what MyAnimeList seems
+ *   to call it (`found`), its entry in the library if it can be merged
+ *   (`twin`), and AniList's edit page and a MyAnimeList search. Null else.
  *
  * Either site being slow or down costs only its part, as on the web page.
  */
@@ -46,7 +51,7 @@ export async function GET(
     user.supabase
       .from("user_entries")
       .select(
-        "cover_url, media_titles!inner (id, mal_media_id, anilist_media_id, num_chapters, main_picture_url)",
+        "cover_url, media_titles!inner (id, mal_media_id, anilist_media_id, num_chapters, main_picture_url, title, title_en, alt_titles, mal_media_kind)",
       )
       .eq("id", entryId)
       .maybeSingle(),
@@ -65,13 +70,18 @@ export async function GET(
       hidesMature(profile.data?.age_range, prefs.data?.hide_nsfw),
   };
 
-  const [media, mal, saved] = await Promise.all([
+  const anilistOnly = title.mal_media_id === null && title.anilist_media_id !== null;
+  const [media, mal, saved, malLink] = await Promise.all([
     getMediaExtras({
       anilistMediaId: title.anilist_media_id,
       malMediaId: title.mal_media_id,
     }),
     title.mal_media_id === null ? null : getMalLiveDetails(title.mal_media_id),
     getTagsForTitle(title.id, reader),
+    // A live MAL search, so only for the titles it's about.
+    anilistOnly
+      ? findMalLink(user.supabase, entryId, { ...title, anilist_media_id: title.anilist_media_id! })
+      : null,
   ]);
   const live = await getTagsForMalGenres(
     [
@@ -117,5 +127,19 @@ export async function GET(
       anilist: [media?.coverImage?.extraLarge ?? media?.coverImage?.large],
       anilistBanner: media?.bannerImage,
     }).map((option) => ({ url: option.url, label: POSTER_SOURCE_LABELS[option.source] })),
+    malLink: malLink && {
+      found: malLink.found && {
+        id: malLink.found.id,
+        title: malLink.found.title,
+        url: `https://myanimelist.net/manga/${malLink.found.id}`,
+      },
+      twin: malLink.twin && {
+        entryId: malLink.twin.id,
+        titleId: malLink.twin.titleId,
+        title: malLink.twin.title,
+      },
+      editUrl: `https://anilist.co/edit/manga/${title.anilist_media_id}`,
+      searchUrl: searchOtherSiteUrl({ onlyOn: "anilist", id: title.anilist_media_id!, title: title.title }),
+    },
   });
 }
