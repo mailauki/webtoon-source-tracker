@@ -1,5 +1,7 @@
 import "server-only";
 
+import { LIVE_TTL_MS, memoizeLive } from "@/lib/live-cache";
+
 import { anilistRequest, type AniListClient } from "./client";
 import { AniListApiError } from "./errors";
 import {
@@ -538,7 +540,16 @@ const MEDIA_EXTRAS_QUERY = /* GraphQL */ `
  * the entry page shows this as a hint beside data it already has, so an
  * AniList outage must cost the hint and nothing else.
  */
-export async function getMediaExtras(ids: {
+export const getMediaExtras = memoizeLive(readMediaExtras, {
+  // Anonymous and the same for every reader, so a few minutes' reuse spares
+  // the re-render after each save a round trip to AniList. See
+  // lib/live-cache.ts.
+  key: (ids) =>
+    `${ids.anilistMediaId ?? ""}:${ids.malMediaId ?? ""}:${ids.withWorks ? 1 : 0}`,
+  ttlMs: LIVE_TTL_MS,
+});
+
+async function readMediaExtras(ids: {
   anilistMediaId: number | null;
   malMediaId: number | null;
   /** Also each author's other manga — the Pro "more from this author". */
