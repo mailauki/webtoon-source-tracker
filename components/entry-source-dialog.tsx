@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { startTransition, useActionState, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -23,6 +23,7 @@ import {
 import { Label } from "@/components/ui/label";
 import type { ChapterTotal } from "@/lib/data/chapter-totals";
 import type { Source } from "@/lib/data/rank-sources";
+import { submitKeepingFields } from "@/lib/forms/submit-keeping-fields";
 
 /**
  * Attach or edit one source without leaving the library.
@@ -56,7 +57,7 @@ export function EntrySourceDialog({
       ? (attached.find((s) => s.id === request.entrySourceId) ?? null)
       : null;
 
-  const [state, action] = useActionState<EntrySourceState, FormData>(
+  const [state, action, isPending] = useActionState<EntrySourceState, FormData>(
     async (prev, formData) => {
       const result = editing
         ? await updateEntrySource(prev, formData)
@@ -65,7 +66,9 @@ export function EntrySourceDialog({
       if (result?.error) toast.error(result.error);
       if (result?.message) {
         toast.success(result.message);
-        onClose();
+        // In a transition, so the dialog closes in the same commit as the
+        // re-render carrying the saved row, rather than a beat before it.
+        startTransition(onClose);
       }
       return result;
     },
@@ -95,7 +98,7 @@ export function EntrySourceDialog({
           <DialogDescription>{entryTitle}</DialogDescription>
         </DialogHeader>
 
-        <form action={action} className="grid gap-3">
+        <form onSubmit={submitKeepingFields(action)} className="grid gap-3">
           <input type="hidden" name="entry_id" value={entryId} />
           {editing ? (
             <input type="hidden" name="id" value={editing.id} />
@@ -163,8 +166,11 @@ export function EntrySourceDialog({
             ) : (
               <span />
             )}
-            <SubmitButton className="rounded-pill bg-brand px-6 font-bold text-brand-foreground hover:bg-brand/90">
-              {editing ? "Save" : "Add"}
+            <SubmitButton
+              pending={isPending}
+              className="rounded-pill bg-brand px-6 font-bold text-brand-foreground hover:bg-brand/90"
+            >
+              {isPending ? (editing ? "Saving…" : "Adding…") : editing ? "Save" : "Add"}
             </SubmitButton>
           </DialogFooter>
         </form>
