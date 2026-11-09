@@ -260,6 +260,24 @@ describe("the library half", () => {
     expect(visibleIds()).toEqual([6, 1]);
   });
 
+  // Mounting every card a short term matches, in one commit, is what froze
+  // the field on a phone; the closest matches are drawn and the rest wait.
+  it("draws the closest matches first and the rest on request", async () => {
+    const entries = Array.from({ length: 30 }, (_, i) => row(100 + i, `Solo Story ${i}`));
+    setup({ entries });
+    await userEvent.type(field(), "solo");
+
+    expect(visibleIds()).toHaveLength(24);
+    expect(screen.getByText("30")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Show all 30" }));
+    expect(visibleIds()).toHaveLength(30);
+
+    // A new term starts capped again.
+    await userEvent.type(field(), " s");
+    expect(visibleIds()).toHaveLength(24);
+  });
+
   it("says so plainly when the shelf has no match", async () => {
     setup();
     await userEvent.type(field(), "nonesuch");
