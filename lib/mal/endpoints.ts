@@ -3,6 +3,7 @@ import "server-only";
 import { z } from "zod";
 
 import { isMature } from "@/lib/data/nsfw";
+import { LIVE_TTL_MS, memoizeLive } from "@/lib/live-cache";
 
 import { malPublicRequest, type MalClient } from "./client";
 import { MalApiError } from "./errors";
@@ -110,7 +111,15 @@ type MalPicture = { medium?: string; large?: string };
  * chapter check and tags want today's. Null when MAL cannot be
  * reached — the caller falls back to what it has stored.
  */
-export async function getMalLiveDetails(
+export const getMalLiveDetails = memoizeLive(readMalLiveDetails, {
+  // Reused for a few minutes: every save on the entry page re-renders it,
+  // and MAL's public catalog data has not changed in the meantime. See
+  // lib/live-cache.ts.
+  key: (mangaId) => String(mangaId),
+  ttlMs: LIVE_TTL_MS,
+});
+
+async function readMalLiveDetails(
   mangaId: number,
 ): Promise<MalLiveDetails | null> {
   try {

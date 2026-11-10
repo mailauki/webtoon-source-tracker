@@ -14,11 +14,18 @@ import { Button } from "@/components/ui/button";
 export function SubmitButton({
   children,
   className,
+  pending: given,
 }: {
   children: React.ReactNode;
   className?: string;
+  /**
+   * For a form submitted through `onSubmit` rather than `action` (see
+   * lib/forms/submit-keeping-fields.ts), which `useFormStatus` cannot see.
+   */
+  pending?: boolean;
 }) {
-  const { pending } = useFormStatus();
+  const status = useFormStatus();
+  const pending = given ?? status.pending;
 
   return (
     <Button

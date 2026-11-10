@@ -1,11 +1,23 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { LibraryBig } from "lucide-react";
 
 import { EntryCard } from "@/components/entry-card";
+import { Button } from "@/components/ui/button";
 import { useSearchFilters } from "@/components/search/search-filters";
 import type { RankedSource, Source } from "@/lib/data/rank-sources";
 import { matchesMediaKind, titleMatchScore } from "@/lib/data/search";
+import type { LibraryRow } from "@/lib/data/entries";
+
+/**
+ * How many matches are drawn before "Show all". A short term matches much
+ * of a shelf, and mounting every one of those cards in a single commit is
+ * what a phone felt as the field freezing — a commit cannot be interrupted
+ * the way the deferred render before it can. The closest matches sort first,
+ * so the cap only ever hides the loosest ones.
+ */
+const RESULTS_SHOWN = 24;
 
 /**
  * The half of the search page that looks at titles you already track.
@@ -50,26 +62,22 @@ export function LibraryResults({
   const { deferredQuery, mediaKind, entries } = useSearchFilters();
   const term = deferredQuery.trim();
 
+  // Memoized, so a render that did not change the term (a switch saving, a
+  // card's own update) does not run the match over the whole shelf again.
+  const matches = useMemo(
+    () => (term === "" ? [] : matchShelf(entries, term, mediaKind)),
+    [entries, term, mediaKind],
+  );
+
+  // Back to the cap whenever the term changes: "Show all" answered the term
+  // it was pressed for, not every one after it.
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const showAll = expanded === term;
+  const shown = showAll ? matches : matches.slice(0, RESULTS_SHOWN);
+
   // Nothing typed yet: the page's own prompt covers the empty state, and a
   // heading over no rows would just be noise above it.
   if (term === "") return null;
-
-  // Closest first: a title containing the term as typed outranks one that
-  // only matches ignoring spaces, which outranks one found through a typo.
-  // The sort is stable, so within a tier the shelf keeps its own order.
-  const matches = entries
-    .filter((entry) =>
-      matchesMediaKind(entry.media_titles?.mal_media_kind, mediaKind),
-    )
-    .map((entry) => ({
-      entry,
-      score: titleMatchScore(entry.media_titles, term),
-    }))
-    .filter((match): match is { entry: typeof match.entry; score: number } =>
-      match.score !== null,
-    )
-    .sort((a, b) => a.score - b.score)
-    .map((match) => match.entry);
 
   return (
     <section className="grid gap-3">
@@ -93,7 +101,7 @@ export function LibraryResults({
         // The same columns the library grid uses, so a card is the size the
         // user already knows it at.
         <div className="grid grid-cols-2 items-stretch gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {matches.map((entry) => (
+          {shown.map((entry) => (
             <EntryCard
               key={entry.id}
               entry={entry}
@@ -104,6 +112,43 @@ export function LibraryResults({
           ))}
         </div>
       )}
+
+      {shown.length < matches.length ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="justify-self-center rounded-full"
+          onClick={() => setExpanded(term)}
+        >
+          Show all {matches.length}
+        </Button>
+      ) : null}
     </section>
   );
+}
+
+/**
+ * The shelf's rows matching `term`, closest first: a title containing the
+ * term as typed outranks one that only matches ignoring spaces, which
+ * outranks one found through a typo. The sort is stable, so within a tier
+ * the shelf keeps its own order.
+ */
+function matchShelf(
+  entries: LibraryRow[],
+  term: string,
+  mediaKind: ReturnType<typeof useSearchFilters>["mediaKind"],
+): LibraryRow[] {
+  return entries
+    .filter((entry) =>
+      matchesMediaKind(entry.media_titles?.mal_media_kind, mediaKind),
+    )
+    .map((entry) => ({
+      entry,
+      score: titleMatchScore(entry.media_titles, term),
+    }))
+    .filter((match): match is { entry: LibraryRow; score: number } =>
+      match.score !== null,
+    )
+    .sort((a, b) => a.score - b.score)
+    .map((match) => match.entry);
 }
