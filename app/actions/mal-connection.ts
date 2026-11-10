@@ -3,41 +3,17 @@
 import { revalidatePath } from "next/cache";
 
 import { verifySession } from "@/lib/auth/dal";
-import { deleteTokens } from "@/lib/mal/token-store";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { disconnectProvider } from "@/lib/sync/disconnect";
 
 export type MalConnectionState = { error?: string; message?: string } | null;
 
-/**
- * Disconnects MyAnimeList.
- *
- * Deliberately keeps `user_entries` and `entry_sources`: source assignments
- * are hand-entered and irreplaceable, so the library goes read-only rather
- * than being destroyed. Reconnecting the same MAL account resumes cleanly.
- *
- * Tokens ARE deleted — there is no reason to hold credentials for a
- * connection the user just severed.
- */
+/** Disconnects MyAnimeList; see disconnectProvider. */
 export async function disconnectMal(): Promise<MalConnectionState> {
   const { userId } = await verifySession();
-  const admin = createAdminClient();
-
-  const { error } = await admin
-    .from("mal_connections")
-    .update({ status: "disconnected", updated_at: new Date().toISOString() })
-    .eq("user_id", userId);
-
-  if (error) {
-    return { error: `Could not disconnect: ${error.message}` };
+  const result = await disconnectProvider("mal", userId);
+  if (!result.error) {
+    revalidatePath("/settings");
+    revalidatePath("/library");
   }
-
-  try {
-    await deleteTokens(userId);
-  } catch (cause) {
-    return { error: `Could not clear credentials: ${(cause as Error).message}` };
-  }
-
-  revalidatePath("/settings");
-  revalidatePath("/library");
-  return { message: "MyAnimeList disconnected. Your sources are still saved." };
+  return result;
 }

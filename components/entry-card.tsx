@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { forwardRef, useOptimistic, useState } from "react";
+import { forwardRef, memo, useOptimistic, useState } from "react";
 import { Check, Ellipsis, ExternalLink } from "lucide-react";
 
 import { CoverImage } from "@/components/cover-image";
@@ -63,7 +63,13 @@ export type EntryLayout = "grid" | "row";
  * row is a different shape for the same title, not a different set of things
  * you can do to it.
  */
-export function EntryCard({
+/**
+ * Memoized: the search page re-renders its results on every settled
+ * keystroke, and a card whose row and props have not changed — most of them,
+ * as a term narrows — has nothing new to draw. Its props are the page's own
+ * stable rows and lists, so the comparison holds.
+ */
+export const EntryCard = memo(function EntryCard({
   entry,
   view: given,
   layout = "grid",
@@ -214,7 +220,7 @@ export function EntryCard({
       />
     </ContextMenu>
   );
-}
+});
 
 /* ------------------------------------------------------------------------ */
 /* The corner / trailing controls, shared by both layouts                   */

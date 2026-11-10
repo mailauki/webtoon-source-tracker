@@ -153,4 +153,69 @@ describe("SyncButton", () => {
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Not signed in"));
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
   });
+
+  describe("in the background", () => {
+    const autoRequest = {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ auto: true }),
+    };
+
+    it("refreshes on its own once due, quietly", async () => {
+      const stream = controlledStream();
+      fetchMock.mockResolvedValue(stream.response);
+      render(<SyncButton lastSyncedLabel="Synced 2h ago" stale dueAt={0} />);
+
+      await waitFor(() =>
+        expect(fetchMock).toHaveBeenCalledWith("/api/library-refresh", autoRequest),
+      );
+      expect(button()).toHaveTextContent("Refreshing…");
+
+      act(() => {
+        stream.send({ type: "progress", step: "Updating titles", value: 0.5 });
+      });
+      expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+
+      act(() => {
+        stream.send({ type: "done", message: "12 titles synced." });
+        stream.close();
+      });
+
+      await waitFor(() => expect(refresh).toHaveBeenCalled());
+      expect(toast.success).not.toHaveBeenCalled();
+      expect(button()).toBeEnabled();
+    });
+
+    it("does not run before it is due", () => {
+      render(
+        <SyncButton
+          lastSyncedLabel="Synced just now"
+          stale={false}
+          dueAt={Date.now() + 60 * 60_000}
+        />,
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("never runs with nothing to pull from", () => {
+      render(<SyncButton lastSyncedLabel="Never synced" stale dueAt={null} />);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    // A site that is down should not be asked again on every tab switch.
+    it("stays quiet on failure and does not retry the same due time", async () => {
+      fetchMock.mockResolvedValue(
+        Response.json({ error: "MyAnimeList is down." }, { status: 502 }),
+      );
+      render(<SyncButton lastSyncedLabel="Synced 2h ago" stale dueAt={0} />);
+
+      await waitFor(() => expect(refresh).toHaveBeenCalled());
+      expect(toast.error).not.toHaveBeenCalled();
+
+      act(() => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+  });
 });

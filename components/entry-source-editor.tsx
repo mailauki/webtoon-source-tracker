@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { startTransition, useActionState, useOptimistic, useState } from "react";
 import {
   BookmarkCheck,
   Crown,
@@ -33,13 +33,34 @@ import {
 } from "@/lib/data/chapter-ranges";
 import { ownedCountLabel, type ChapterTotal } from "@/lib/data/chapter-totals";
 import type { Source } from "@/lib/data/rank-sources";
+import { submitKeepingFields } from "@/lib/forms/submit-keeping-fields";
+import { useSettled } from "@/lib/hooks/use-settled";
+import {
+  applySourceChange,
+  sourceColumnsFrom,
+  type SourceChange,
+} from "@/lib/sources/optimistic-source";
+
+type ApplyChange = (change: SourceChange<EntrySource>) => void;
+
+/**
+ * Ids for rows that exist only optimistically, between an Add and the
+ * re-render that brings the saved row. Negative, so they can never collide
+ * with a database id.
+ */
+let pendingId = 0;
+const nextPendingId = () => --pendingId;
+
+const NO_LINKS: Record<number, string> = {};
+const NO_IDS: ReadonlySet<number> = new Set();
 
 export function EntrySourceEditor({
   entryId,
-  sources,
+  sources: saved,
   catalog,
   total = null,
-  anilistLinks = {},
+  anilistLinks: storedLinks = NO_LINKS,
+  liveAnilistLinks,
   isPro,
 }: {
   entryId: number;
@@ -49,13 +70,37 @@ export function EntrySourceEditor({
   total?: ChapterTotal | null;
   /** AniList's reading link per source id — see catalogLinks. */
   anilistLinks?: Record<number, string>;
+  /**
+   * The same, streamed in by the entry page once AniList answers. Read here
+   * rather than by re-rendering the editor behind Suspense, which remounted
+   * it — closing a form someone had open and dropping what they had typed.
+   */
+  liveAnilistLinks?: Promise<Record<number, string>>;
   /** Owned chapters are Pro-only; a free account sees a teaser instead. */
   isPro: boolean;
 }) {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const anilistLinks = useSettled(liveAnilistLinks, storedLinks);
 
-  const attachedIds = new Set(sources.map((s) => s.sources?.id));
+  // Every add, edit and removal shows at once and holds until the save's
+  // re-render brings the stored rows — so a closed form never flashes the
+  // row's old values before the new ones arrive. A failed save drops the
+  // change and the stored rows show through again.
+  const [sources, applyChange] = useOptimistic(
+    saved,
+    applySourceChange<EntrySource>,
+  );
+  // Rows being removed are hidden, not dropped: the row's own Remove form has
+  // to stay mounted for its save to finish, and for the row to come back if
+  // the removal is refused.
+  const [removing, markRemoving] = useOptimistic(
+    NO_IDS,
+    (ids: ReadonlySet<number>, id: number) => new Set(ids).add(id),
+  );
+  const listed = sources.filter((s) => !removing.has(s.id));
+
+  const attachedIds = new Set(listed.map((s) => s.sources?.id));
   const available = catalog.filter((c) => !attachedIds.has(c.id));
 
   return (
@@ -67,9 +112,9 @@ export function EntrySourceEditor({
             Where I read it
           </h2>
           <p className="text-sm text-muted-foreground">
-            {sources.length === 0
+            {listed.length === 0
               ? "No source recorded yet."
-              : `${sources.length} ${sources.length === 1 ? "source" : "sources"}`}
+              : `${listed.length} ${listed.length === 1 ? "source" : "sources"}`}
           </p>
         </div>
         {!adding && available.length > 0 ? (
@@ -85,7 +130,7 @@ export function EntrySourceEditor({
         ) : null}
       </div>
 
-      <OwnedAcrossSources sources={sources} total={total} />
+      <OwnedAcrossSources sources={listed} total={total} />
 
       {adding ? (
         <AddSourceForm
@@ -94,11 +139,12 @@ export function EntrySourceEditor({
           total={total}
           anilistLinks={anilistLinks}
           isPro={isPro}
+          onChange={applyChange}
           onDone={() => setAdding(false)}
         />
       ) : null}
 
-      {sources.length === 0 && !adding ? (
+      {listed.length === 0 && !adding ? (
         <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
           Record where you read this — the app, the site, or a physical copy.
         </p>
@@ -113,13 +159,19 @@ export function EntrySourceEditor({
                 source={source}
                 total={total}
                 isPro={isPro}
+                onChange={applyChange}
                 onDone={() => setEditingId(null)}
               />
             </li>
           ) : (
             <li
               key={source.id}
-              className="flex items-start justify-between gap-4 rounded-lg border border-border bg-card p-3"
+              // A row still being added has no id to edit or remove by yet.
+              aria-busy={source.id < 0 || undefined}
+              hidden={removing.has(source.id)}
+              className={`flex items-start justify-between gap-4 rounded-lg border border-border bg-card p-3 ${
+                source.id < 0 ? "opacity-60" : ""
+              }`}
             >
               <div className="min-w-0 grid gap-1">
                 <div className="flex flex-wrap items-center gap-2">
@@ -200,11 +252,16 @@ export function EntrySourceEditor({
                   size="icon"
                   className="rounded-pill"
                   onClick={() => setEditingId(source.id)}
+                  disabled={source.id < 0}
                   aria-label={`Edit ${source.sources?.name}`}
                 >
                   <Pencil className="size-4" />
                 </Button>
-                <RemoveButton entryId={entryId} sourceRowId={source.id} />
+                <RemoveButton
+                  entryId={entryId}
+                  sourceRowId={source.id}
+                  onRemove={markRemoving}
+                />
               </div>
             </li>
           ),
@@ -303,6 +360,7 @@ function AddSourceForm({
   total,
   anilistLinks,
   isPro,
+  onChange,
   onDone,
 }: {
   entryId: number;
@@ -310,12 +368,14 @@ function AddSourceForm({
   total: ChapterTotal | null;
   anilistLinks: Record<number, string>;
   isPro: boolean;
+  onChange: ApplyChange;
   onDone: () => void;
 }) {
-  const [state, action] = useActionState<EntrySourceState, FormData>(
+  const [state, action, isPending] = useActionState<EntrySourceState, FormData>(
     async (prev, formData) => {
+      addOptimistically(formData, available, onChange);
       const result = await addEntrySource(prev, formData);
-      if (result?.message) onDone();
+      if (result?.message) startTransition(onDone);
       return result;
     },
     null,
@@ -345,6 +405,7 @@ function AddSourceForm({
                 entryId={entryId}
                 source={s}
                 url={anilistLinks[s.id]}
+                onChange={onChange}
                 onDone={onDone}
               />
             ))}
@@ -382,7 +443,7 @@ function AddSourceForm({
         </form>
       ) : null}
 
-      <form action={action} className="grid gap-3">
+      <form onSubmit={submitKeepingFields(action)} className="grid gap-3">
         <input type="hidden" name="entry_id" value={entryId} />
 
         <div className="grid gap-2">
@@ -432,8 +493,11 @@ function AddSourceForm({
         ) : null}
 
         <div className="flex gap-2">
-          <SubmitButton className="rounded-pill bg-brand px-6 font-bold text-brand-foreground hover:bg-brand/90">
-            Add
+          <SubmitButton
+            pending={isPending}
+            className="rounded-pill bg-brand px-6 font-bold text-brand-foreground hover:bg-brand/90"
+          >
+            {isPending ? "Adding…" : "Add"}
           </SubmitButton>
           <Button
             type="button"
@@ -463,17 +527,20 @@ function QuickAdd({
   entryId,
   source,
   url,
+  onChange,
   onDone,
 }: {
   entryId: number;
   source: Source;
   url: string;
+  onChange: ApplyChange;
   onDone: () => void;
 }) {
   const [state, action] = useActionState<EntrySourceState, FormData>(
     async (prev, formData) => {
+      addOptimistically(formData, [source], onChange);
       const result = await addEntrySource(prev, formData);
-      if (result?.message) onDone();
+      if (result?.message) startTransition(onDone);
       return result;
     },
     null,
@@ -513,18 +580,25 @@ function EditSourceForm({
   source,
   total,
   isPro,
+  onChange,
   onDone,
 }: {
   entryId: number;
   source: EntrySource;
   total: ChapterTotal | null;
   isPro: boolean;
+  onChange: ApplyChange;
   onDone: () => void;
 }) {
-  const [state, action] = useActionState<EntrySourceState, FormData>(
+  const [state, action, isPending] = useActionState<EntrySourceState, FormData>(
     async (prev, formData) => {
+      const columns = sourceColumnsFrom(formData);
+      if (columns) onChange({ type: "update", id: source.id, columns });
+      // Closed in a transition, as are the other forms here: closing after
+      // the await as a plain update committed before the page's re-render,
+      // so the row showed its old values for a beat after a save.
       const result = await updateEntrySource(prev, formData);
-      if (result?.message) onDone();
+      if (result?.message) startTransition(onDone);
       return result;
     },
     null,
@@ -532,7 +606,7 @@ function EditSourceForm({
 
   return (
     <form
-      action={action}
+      onSubmit={submitKeepingFields(action)}
       className="grid gap-3 rounded-lg border border-border bg-card p-4"
     >
       <input type="hidden" name="id" value={source.id} />
@@ -560,8 +634,11 @@ function EditSourceForm({
         </p>
       ) : null}
 
-      <SubmitButton className="rounded-pill bg-brand px-6 font-bold text-brand-foreground hover:bg-brand/90">
-        Save
+      <SubmitButton
+        pending={isPending}
+        className="rounded-pill bg-brand px-6 font-bold text-brand-foreground hover:bg-brand/90"
+      >
+        {isPending ? "Saving…" : "Save"}
       </SubmitButton>
     </form>
   );
@@ -570,11 +647,19 @@ function EditSourceForm({
 function RemoveButton({
   entryId,
   sourceRowId,
+  onRemove,
 }: {
   entryId: number;
   sourceRowId: number;
+  onRemove: (id: number) => void;
 }) {
-  const [, action] = useActionState(removeEntrySource, null);
+  const [, action, isPending] = useActionState<EntrySourceState, FormData>(
+    async (prev, formData) => {
+      onRemove(sourceRowId);
+      return removeEntrySource(prev, formData);
+    },
+    null,
+  );
 
   // TODO(confirm-destructive): this deletes immediately on click, with no undo.
   // The URL, per-source progress, and notes are hand-entered and unrecoverable
@@ -590,10 +675,36 @@ function RemoveButton({
         variant="ghost"
         size="icon"
         className="rounded-pill text-muted-foreground hover:text-alert"
+        disabled={sourceRowId < 0 || isPending}
         aria-label="Remove source"
       >
         <Trash2 className="size-4" />
       </Button>
     </form>
   );
+}
+
+/**
+ * Shows a source being added as a row straight away, named from the catalog
+ * it was picked from. Skipped when the form would be refused, or names a
+ * source this list does not know.
+ */
+function addOptimistically(
+  formData: FormData,
+  catalog: Source[],
+  onChange: ApplyChange,
+) {
+  const columns = sourceColumnsFrom(formData);
+  const picked = catalog.find(
+    (s) => String(s.id) === String(formData.get("source_id")),
+  );
+  if (!columns || !picked) return;
+  onChange({
+    type: "add",
+    row: {
+      id: nextPendingId(),
+      ...columns,
+      sources: { id: picked.id, name: picked.name },
+    },
+  });
 }

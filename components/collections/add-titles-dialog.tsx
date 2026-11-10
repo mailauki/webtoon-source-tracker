@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useDeferredValue, useMemo, useState } from "react";
 import { Check, Loader2, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 
@@ -64,8 +64,11 @@ export function AddTitlesDialog({
     [presentTitleIds],
   );
 
+  // The list narrows a beat behind the field, never in the same render as
+  // the keystroke, so a long library cannot make typing stutter.
+  const deferredQuery = useDeferredValue(query);
   const matches = useMemo(() => {
-    const term = query.trim().toLowerCase();
+    const term = deferredQuery.trim().toLowerCase();
     return library.filter((row) => {
       if (present.has(row.media_titles.id)) return false;
       if (!term) return true;
@@ -75,7 +78,7 @@ export function AddTitlesDialog({
       // lib/data/search.ts's titleMatchScore.
       return matchesTitle(row.media_titles, term);
     });
-  }, [library, present, query]);
+  }, [library, present, deferredQuery]);
 
   return (
     <>

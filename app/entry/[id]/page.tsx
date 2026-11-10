@@ -45,11 +45,7 @@ import { chapterTotal } from "@/lib/data/chapter-totals";
 import { displayTitle } from "@/lib/data/display-title";
 import { posterOptions } from "@/lib/data/entry-cover";
 import { getCollectionTargets } from "@/lib/data/collections";
-import {
-  getEntry,
-  getLibraryMatches,
-  type EntryDetail,
-} from "@/lib/data/entries";
+import { getEntry, getLibraryMatches } from "@/lib/data/entries";
 import { getIsPro } from "@/lib/data/pro";
 import { getSources } from "@/lib/data/sources";
 import { mergeTags, type Tag } from "@/lib/data/tag-items";
@@ -253,38 +249,27 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
           </Suspense>
         ) : null}
 
-        {/* The stored count first, swapped for the higher of the two sites'
-            once both have answered. */}
-        <Suspense fallback={<ProgressEditor entry={entry} />}>
-          <ProgressWithTotal
-            entry={entry}
-            extras={anilist}
-            malChapters={malChapters}
-          />
-        </Suspense>
+        {/* Both editors render from the database at once and stay mounted:
+            the live answers reach them as promises, so the count to count up
+            to and AniList's links arrive in place, without remounting an
+            editor someone is typing into. */}
+        <ProgressEditor
+          entry={entry}
+          liveTotal={Promise.all([anilist, malChapters]).then(([media, mal]) =>
+            higherChapterCount(title.num_chapters, mal, media?.chapters),
+          )}
+        />
 
-        {/* Without AniList's links first, then with them once AniList has
-            answered — the editor works either way. */}
-        <Suspense
-          fallback={
-            <EntrySourceEditor
-              entryId={entry.id}
-              sources={entry.entry_sources}
-              catalog={catalog}
-              total={chapterTotal(title)}
-              isPro={isPro}
-            />
-          }
-        >
-          <SourceEditorWithLinks
-            extras={anilist}
-            entryId={entry.id}
-            sources={entry.entry_sources}
-            catalog={catalog}
-            total={chapterTotal(title)}
-            isPro={isPro}
-          />
-        </Suspense>
+        <EntrySourceEditor
+          entryId={entry.id}
+          sources={entry.entry_sources}
+          catalog={catalog}
+          total={chapterTotal(title)}
+          isPro={isPro}
+          liveAnilistLinks={anilist.then((media) =>
+            catalogLinks(media?.externalLinks, catalog),
+          )}
+        />
 
         <Suspense fallback={null}>
           <AniListLinks
@@ -528,48 +513,6 @@ async function AniListLinks({
     <AniListLinkImport
       entryId={entryId}
       suggestions={suggestSourceLinks(media.externalLinks, attached)}
-    />
-  );
-}
-
-/** The progress editor, counting up to the higher of the two sites' counts. */
-async function ProgressWithTotal({
-  entry,
-  extras,
-  malChapters,
-}: {
-  entry: EntryDetail;
-  extras: Promise<AniListMediaExtras | null>;
-  malChapters: Promise<number | null>;
-}) {
-  const [media, mal] = await Promise.all([extras, malChapters]);
-
-  return (
-    <ProgressEditor
-      entry={entry}
-      total={higherChapterCount(
-        entry.media_titles.num_chapters,
-        mal,
-        media?.chapters,
-      )}
-    />
-  );
-}
-
-/** The source editor, with AniList's link for each source it lists. */
-async function SourceEditorWithLinks({
-  extras,
-  ...props
-}: { extras: Promise<AniListMediaExtras | null> } & Omit<
-  React.ComponentProps<typeof EntrySourceEditor>,
-  "anilistLinks"
->) {
-  const media = await extras;
-
-  return (
-    <EntrySourceEditor
-      {...props}
-      anilistLinks={catalogLinks(media?.externalLinks, props.catalog)}
     />
   );
 }
