@@ -1,6 +1,12 @@
 "use client";
 
-import { createContext, useContext, useState, useTransition } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useTransition,
+} from "react";
 
 import { saveLibraryPrefs } from "@/app/actions/library-prefs";
 import { EntryCard } from "@/components/entry-card";
@@ -8,7 +14,7 @@ import {
   SelectionBar,
   SelectToggle as SharedSelectToggle,
 } from "@/components/selection-bar";
-import { selectCandidates } from "@/lib/data/pick-random";
+import { selectCandidates, type Official } from "@/lib/data/pick-random";
 import {
   ALL,
   serializeSort,
@@ -18,7 +24,6 @@ import {
   type Sort,
 } from "@/lib/data/library-prefs";
 import type { LibraryRow } from "@/lib/data/entries";
-import type { RankedSource } from "@/lib/data/rank-sources";
 import type { Source } from "@/lib/data/rank-sources";
 
 /**
@@ -55,6 +60,10 @@ type Filters = {
   hideNsfw: boolean;
   /** Whether the series is still publishing; "" for both. */
   publication: Publication;
+  /** Titles with an official (or unofficial) source; "" for both. */
+  official: Official;
+  /** Hide titles paid everywhere they are read. */
+  hidePaid: boolean;
 };
 type State = Filters & { sort: Sort; layout: Layout };
 
@@ -65,8 +74,16 @@ type State = Filters & { sort: Sort; layout: Layout };
  */
 type InitialState = Omit<
   State,
-  "hideHiatus" | "ownedOnly" | "hideNsfw" | "layout" | "publication"
+  | "hideHiatus"
+  | "ownedOnly"
+  | "hideNsfw"
+  | "layout"
+  | "publication"
+  | "official"
+  | "hidePaid"
 > & {
+  official?: Official;
+  hidePaid?: boolean;
   /** Optional like the toggles: no stored choice shows both. */
   publication?: Publication;
   hideHiatus?: boolean;
@@ -100,6 +117,14 @@ type LibraryFilterContext = State & {
    * away, which is the whole point of a filter menu.
    */
   setHideNsfw: (value: boolean) => void;
+  setOfficial: (value: Official) => void;
+  setHidePaid: (value: boolean) => void;
+  /**
+   * Genre tag ids a title must all carry. Kept in this browser only, as the
+   * iOS app keeps it on the device: `library_prefs` has no column for it.
+   */
+  genres: number[];
+  setGenres: (value: number[]) => void;
   /**
    * False for an account under the age floor, which never receives adult rows
    * in the first place. The menu hides the item entirely when this is false:
@@ -131,6 +156,9 @@ type LibraryFilterContext = State & {
   selected: Set<number> | null;
   setSelected: (value: Set<number> | null) => void;
 };
+
+/** The same key the iOS app stores its genre filter under. */
+const GENRE_KEY = "genreFilter";
 
 const FilterContext = createContext<LibraryFilterContext | null>(null);
 
@@ -179,10 +207,30 @@ export function LibraryFilters({
     hideHiatus: false,
     ownedOnly: false,
     hideNsfw: false,
+    official: "",
+    hidePaid: false,
     layout: "grid",
     ...initial,
   });
   const [selected, setSelected] = useState<Set<number> | null>(null);
+  const [genres, setGenreState] = useState<number[]>([]);
+
+  // Read after mount: the server render has no localStorage, and reading it
+  // during the first render would make the two disagree.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(GENRE_KEY);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- a one-time read of browser-only storage
+      if (saved) setGenreState(saved.split(",").map(Number).filter(Boolean));
+    } catch {}
+  }, []);
+
+  function setGenres(next: number[]) {
+    setGenreState(next);
+    try {
+      localStorage.setItem(GENRE_KEY, next.join(","));
+    } catch {}
+  }
 
   function update(patch: Partial<Filters>) {
     setState((current) => ({ ...current, ...patch }));
@@ -229,6 +277,10 @@ export function LibraryFilters({
         setOwnedOnly: (ownedOnly) => update({ ownedOnly }),
         setPublication: (publication) => update({ publication }),
         setHideNsfw: (hideNsfw) => update({ hideNsfw }),
+        setOfficial: (official) => update({ official }),
+        setHidePaid: (hidePaid) => update({ hidePaid }),
+        genres,
+        setGenres,
         canSeeNsfw,
         setSort: updateSort,
         setLayout: updateLayout,
@@ -253,14 +305,12 @@ export function LibraryFilters({
  */
 export function LibraryGrid({
   entries,
-  topSources = [],
   catalog = [],
   emptyUnfiltered,
   emptyFiltered,
   isPro,
 }: {
   entries: LibraryRow[];
-  topSources?: RankedSource[];
   catalog?: Source[];
   /** Nothing on the shelf at all. */
   emptyUnfiltered: React.ReactNode;
@@ -276,6 +326,9 @@ export function LibraryGrid({
     ownedOnly,
     hideNsfw,
     publication,
+    official,
+    hidePaid,
+    genres,
     sort,
     layout,
     selected,
@@ -291,12 +344,23 @@ export function LibraryGrid({
     ownedOnly,
     hideNsfw,
     publication,
+    official,
+    hidePaid,
+    genres,
   });
   const ordered = sortEntries(visible, sort);
 
   if (visible.length === 0) {
     const narrowed =
-      status || source || hideHiatus || ownedOnly || hideNsfw || publication;
+      status ||
+      source ||
+      hideHiatus ||
+      ownedOnly ||
+      hideNsfw ||
+      publication ||
+      official ||
+      hidePaid ||
+      genres.length > 0;
     return <>{narrowed ? emptyFiltered : emptyUnfiltered}</>;
   }
 
@@ -325,7 +389,6 @@ export function LibraryGrid({
             key={entry.id}
             entry={entry}
             layout={layout}
-            topSources={topSources}
             catalog={catalog}
             isPro={isPro}
             selection={

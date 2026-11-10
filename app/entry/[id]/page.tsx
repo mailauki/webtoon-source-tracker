@@ -47,7 +47,7 @@ import { posterOptions } from "@/lib/data/entry-cover";
 import { getCollectionTargets } from "@/lib/data/collections";
 import { getEntry, getLibraryMatches } from "@/lib/data/entries";
 import { getIsPro } from "@/lib/data/pro";
-import { getSources } from "@/lib/data/sources";
+import { getSources, getTopSources } from "@/lib/data/sources";
 import { mergeTags, type Tag } from "@/lib/data/tag-items";
 import {
   getActiveTags,
@@ -73,7 +73,7 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
   // isAdmin() is called here and only here: the spec deliberately avoids an
   // admin check on every page render (AppShell included), so this is the one
   // place — the reader's own entry page — that asks.
-  const [entry, catalog, collections, admin, isPro] = await Promise.all([
+  const [entry, catalog, collections, admin, isPro, topSources] = await Promise.all([
     getEntry(entryId),
     getSources(),
     // withItemIds: this page can take a title back out of a collection, and
@@ -81,6 +81,7 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
     getCollectionTargets({ withItemIds: true }),
     isAdmin(),
     getIsPro(),
+    getTopSources(),
   ]);
 
   // RLS makes "does not exist" and "belongs to someone else" indistinguishable
@@ -265,6 +266,7 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
           sources={entry.entry_sources}
           catalog={catalog}
           total={chapterTotal(title)}
+          topSources={topSources}
           isPro={isPro}
           liveAnilistLinks={anilist.then((media) =>
             catalogLinks(media?.externalLinks, catalog),

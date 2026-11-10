@@ -15,7 +15,27 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { Source } from "@/lib/data/sources";
 
-export function CustomSources({ sources }: { sources: Source[] }) {
+/** "3 titles", for a source's row. */
+function TitleCount({ count = 0 }: { count?: number }) {
+  return (
+    <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+      {count} {count === 1 ? "title" : "titles"}
+    </span>
+  );
+}
+
+export function CustomSources({
+  sources,
+  others = [],
+  counts = {},
+}: {
+  /** The user's own sources, which can be renamed and deleted. */
+  sources: Source[];
+  /** The shared catalog, listed with counts only. */
+  others?: Source[];
+  /** Source id → titles in the library using it. */
+  counts?: Record<number, number>;
+}) {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [state, action] = useActionState<CustomSourceState, FormData>(
@@ -57,6 +77,7 @@ export function CustomSources({ sources }: { sources: Source[] }) {
                 ) : null}
               </div>
               <div className="flex shrink-0 items-center gap-1">
+                <TitleCount count={counts[source.id]} />
                 <Button
                   type="button"
                   variant="ghost"
@@ -147,6 +168,23 @@ export function CustomSources({ sources }: { sources: Source[] }) {
           </Button>
         </div>
       )}
+
+      {others.length > 0 ? (
+        <div className="grid gap-2 pt-2">
+          <h3 className="text-sm font-medium">Other sources</h3>
+          <ul className="grid divide-y divide-border rounded-lg border border-border bg-card">
+            {others.map((source) => (
+              <li
+                key={source.id}
+                className="flex items-center justify-between gap-4 px-4 py-2 text-sm"
+              >
+                <span className="truncate">{source.name}</span>
+                <TitleCount count={counts[source.id]} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -4,9 +4,11 @@ import { Compass, LayoutGrid } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { CollectionShelf } from "@/components/collection-shelf";
 import { NewCollection } from "@/components/collections/new-collection";
+import { RandomPick } from "@/components/random-pick";
 import { Button } from "@/components/ui/button";
-import { verifySession } from "@/lib/auth/dal";
+import { getLibraryPrefs, verifySession } from "@/lib/auth/dal";
 import { getCuratedShelves, getMyShelves } from "@/lib/data/collections";
+import { getLibrary } from "@/lib/data/entries";
 import { getIsPro } from "@/lib/data/pro";
 
 export const metadata = { title: "Discover" };
@@ -40,10 +42,12 @@ export const metadata = { title: "Discover" };
 export default async function DiscoverPage() {
   await verifySession();
 
-  const [mine, shelves, isPro] = await Promise.all([
+  const [mine, shelves, isPro, library, prefs] = await Promise.all([
     getMyShelves(),
     getCuratedShelves(),
     getIsPro(),
+    getLibrary(),
+    getLibraryPrefs(),
   ]);
 
   return (
@@ -59,8 +63,8 @@ export default async function DiscoverPage() {
           </p>
         </div>
 
-        {/* A banner rather than a button, in the same shape as the library's
-            RandomPick. */}
+        {/* A banner rather than a button, in the same shape as RandomPick
+            below it. */}
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 rounded-lg border border-border bg-card px-4 py-3">
           <div className="flex min-w-50 flex-1 items-center gap-3">
             <LayoutGrid className="size-5 shrink-0 text-brand" aria-hidden />
@@ -84,6 +88,15 @@ export default async function DiscoverPage() {
             </Button>
           </div>
         </div>
+
+        {library.length > 0 ? (
+          <RandomPick
+            isPro={isPro}
+            entries={library}
+            hideHiatus={prefs?.hide_hiatus ?? false}
+            ownedOnly={prefs?.owned_only ?? false}
+          />
+        ) : null}
 
         {/* Anchored so the entry page's "Make one" and "Manage your
             collections" links land on this section rather than the top. */}

@@ -2,18 +2,6 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { saveLibraryPrefs } = vi.hoisted(() => ({
-  saveLibraryPrefs: vi.fn(async () => {}),
-}));
-vi.mock("@/app/actions/library-prefs", () => ({ saveLibraryPrefs }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
-
-// Importing the filter context pulls in the grid, and with it EntryCard and
-// the server actions behind its menu — none of which this test renders.
-vi.mock("@/components/entry-card", () => ({
-  EntryCard: () => null,
-}));
-
 // next/image needs a configured loader; the cover is not what is under test.
 vi.mock("next/image", () => ({
   // eslint-disable-next-line @next/next/no-img-element -- a stub, not markup
@@ -28,9 +16,7 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-import { LibraryFilters } from "@/components/library-grid";
 import { RandomPick } from "@/components/random-pick";
-import { DEFAULT_SORT } from "@/lib/data/library-prefs";
 import type { LibraryRow } from "@/lib/data/entries";
 
 /**
@@ -81,31 +67,17 @@ const ROWS = [
 
 function setup({
   entries = ROWS,
-  status = "",
-  source = "",
   hideHiatus = false,
   isPro = true,
 } = {}) {
   return render(
-    <LibraryFilters
-      initial={{ status, source, hideHiatus, sort: DEFAULT_SORT }}
-      entries={entries}
-    >
-      <RandomPick isPro={isPro} />
-    </LibraryFilters>,
+    <RandomPick isPro={isPro} entries={entries} hideHiatus={hideHiatus} />,
   );
 }
 
-/**
- * Opens the dice menu and returns one of its modes.
- *
- * The three questions live in a menu off one button in the library's control
- * row, so each has to be opened to before it can be pressed or inspected.
- */
+/** One of the banner's three buttons. */
 async function mode(name: RegExp) {
-  const user = userEvent.setup();
-  await user.click(screen.getByRole("button", { name: /pick something to read/i }));
-  return screen.getByRole("menuitem", { name });
+  return screen.getByRole("button", { name });
 }
 
 const roll = () => mode(/surprise me/i);
@@ -118,11 +90,11 @@ const dialogTitle = () =>
 afterEach(cleanup);
 
 describe("RandomPick", () => {
-  it("offers Pro instead of the dice to a free account", () => {
+  it("leads a free account to Pro instead of rolling", () => {
     setup({ isPro: false });
 
-    expect(screen.queryByRole("button", { name: /pick something to read/i })).toBeNull();
-    expect(screen.getByRole("link", { name: /get pro/i })).toHaveAttribute("href", "/pro");
+    expect(screen.queryByRole("button", { name: /surprise me/i })).toBeNull();
+    expect(screen.getByRole("link", { name: /surprise me/i })).toHaveAttribute("href", "/pro");
   });
 
   it("reveals a title from the shelf when rolled", async () => {
@@ -137,25 +109,6 @@ describe("RandomPick", () => {
       "Omniscient Reader",
       "Lore Olympus",
     ]).toContain(dialogTitle());
-  });
-
-  it("only picks from titles the active chips leave visible", async () => {
-    const user = userEvent.setup();
-    setup({ status: "completed", entries: [...ROWS, row(4, "completed", [], "Bastard")] });
-
-    await user.click(await roll());
-
-    expect(["Lore Olympus", "Bastard"]).toContain(dialogTitle());
-  });
-
-  it("only picks from titles matching the active source chip", async () => {
-    const user = userEvent.setup();
-    const extra = row(4, "reading", [], "Bastard");
-    setup({ source: "none", entries: [...ROWS, extra] });
-
-    await user.click(await roll());
-
-    expect(["Omniscient Reader", "Bastard"]).toContain(dialogTitle());
   });
 
   // The whole point of a re-roll: pressing it must work through the shelf
@@ -178,7 +131,7 @@ describe("RandomPick", () => {
       row(3, "reading", [], "Tower of God"),
       row(4, "reading", [], "Bastard"),
     ];
-    setup({ entries: shelf, status: "reading" });
+    setup({ entries: shelf });
 
     await user.click(await roll());
     const drawn = [dialogTitle()];
@@ -198,7 +151,7 @@ describe("RandomPick", () => {
 
   it("links the picked title to its entry page", async () => {
     const user = userEvent.setup();
-    setup({ status: "reading", entries: [ROWS[0], ROWS[1]] });
+    setup({ entries: [ROWS[0], ROWS[1]] });
 
     await user.click(await roll());
 
@@ -209,18 +162,18 @@ describe("RandomPick", () => {
     );
   });
 
-  it("is disabled when the filters leave nothing to pick from", async () => {
-    setup({ status: "dropped" });
+  it("is disabled when the library is empty", async () => {
+    setup({ entries: [] });
 
-    expect(await roll()).toHaveAttribute("aria-disabled", "true");
+    expect(await roll()).toBeDisabled();
   });
 
   // Rolling a die over one title is theatre: it can only ever return that
   // title, so the button says so instead of pretending to choose.
-  it("is disabled when the filters leave only one title", async () => {
-    setup({ status: "completed" });
+  it("is disabled when the library holds only one title", async () => {
+    setup({ entries: [ROWS[0]] });
 
-    expect(await roll()).toHaveAttribute("aria-disabled", "true");
+    expect(await roll()).toBeDisabled();
   });
 });
 
@@ -233,7 +186,6 @@ describe("the pick's read link", () => {
         row(1, "reading", first, "Solo Leveling"),
         row(2, "reading", [], "Omniscient Reader"),
       ],
-      status: "reading",
     };
   }
 
@@ -308,10 +260,7 @@ describe("the pick's read link", () => {
   });
 });
 
-/**
- * The two shortcut modes. Both answer a question the chips cannot express, so
- * both must reach past whatever the chips currently say.
- */
+/** The two shortcut modes, each drawing from its own slice of the library. */
 describe("the mode buttons", () => {
   // Five is the floor on the neglected slice, so a shelf this size makes
   // every parked title eligible and the assertions are about status, not the
@@ -342,31 +291,6 @@ describe("the mode buttons", () => {
     expect(["Solo Leveling", "Omniscient Reader"]).toContain(dialogTitle());
   });
 
-  // The modes are shortcuts past the chips, not narrowings of them: asking
-  // for something off the plan pile while the Reading chip is up must still
-  // return a plan-to-read title rather than nothing.
-  it("reaches past the active chips", async () => {
-    const user = userEvent.setup();
-    setup({ entries: SHELF, status: "reading" });
-
-    await user.click(await planPick());
-
-    expect(["Tower of God", "Bastard"]).toContain(dialogTitle());
-  });
-
-  // The plain roll is the one that still means "out of what I can see".
-  it("leaves the surprise roll bound to the chips", async () => {
-    const user = userEvent.setup();
-    setup({
-      entries: [...SHELF, row(6, "plan_to_read", [], "Noblesse", 2)],
-      status: "plan_to_read",
-    });
-
-    await user.click(await roll());
-
-    expect(["Tower of God", "Bastard", "Noblesse"]).toContain(dialogTitle());
-  });
-
   // Each button answers for its own pool. A shelf with nothing parked should
   // disable the neglected button while the others stay live.
   it("disables only the mode that has nothing to draw from", async () => {
@@ -377,11 +301,8 @@ describe("the mode buttons", () => {
       ],
     });
 
-    expect(await neglected()).toHaveAttribute("aria-disabled", "true");
-    // Same menu, already open: read the sibling rather than toggling it shut.
-    expect(
-      screen.getByRole("menuitem", { name: /from plan to read/i }),
-    ).not.toHaveAttribute("aria-disabled");
+    expect(await neglected()).toBeDisabled();
+    expect(await planPick()).not.toBeDisabled();
   });
 
   it("disables a mode holding only one title", async () => {
@@ -395,7 +316,7 @@ describe("the mode buttons", () => {
       ],
     });
 
-    expect(await planPick()).toHaveAttribute("aria-disabled", "true");
+    expect(await planPick()).toBeDisabled();
   });
 
   // Each mode is its own draw. Carrying the exclusions across would make a
@@ -443,7 +364,6 @@ describe("the hiatus toggle", () => {
     const user = userEvent.setup();
     setup({
       hideHiatus: true,
-      status: "reading",
       entries: [
         paused(1, "Solo Leveling"),
         row(2, "reading", [], "Omniscient Reader", 60),

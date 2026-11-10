@@ -85,6 +85,16 @@ export default async function SettingsPage({
     connection?.status === "active" && anilist?.status === "active";
 
   const customSources = catalog.filter((s) => s.owner_id !== null);
+  // Titles per source, from the shelf already in hand. getLibrary has screened
+  // out adult titles for a viewer who hides them, so those go uncounted.
+  const sourceCounts: Record<number, number> = {};
+  for (const es of library.flatMap((e) => e.entry_sources)) {
+    if (es.sources) sourceCounts[es.sources.id] = (sourceCounts[es.sources.id] ?? 0) + 1;
+  }
+  // Most-used first; ties keep the catalog's order (sort is stable).
+  const otherSources = catalog
+    .filter((s) => s.owner_id === null)
+    .sort((a, b) => (sourceCounts[b.id] ?? 0) - (sourceCounts[a.id] ?? 0));
 
   const hasPassword = identities.some((i) => i.provider === "email");
 
@@ -152,13 +162,11 @@ export default async function SettingsPage({
                 : "Owned chapters, syncing to both MyAnimeList and AniList, and more. One payment, yours for good."}
             </p>
           </div>
-          {isPro ? null : (
-            <div>
-              <Button asChild variant="outline" size="sm" className="rounded-pill">
-                <Link href="/pro">Get Pro</Link>
-              </Button>
-            </div>
-          )}
+          <div>
+            <Button asChild variant="outline" size="sm" className="rounded-pill">
+              <Link href="/pro">{isPro ? "What's included" : "Get Pro"}</Link>
+            </Button>
+          </div>
         </section>
 
         {!hasPassword ? (
@@ -315,13 +323,17 @@ export default async function SettingsPage({
 
         <section className="grid gap-3">
           <div>
-            <h2 className="font-display text-lg font-semibold">Your sources</h2>
+            <h2 className="font-display text-lg font-semibold">Sources</h2>
             <p className="text-sm text-muted-foreground">
               Private to you, and grouped under “Other” anywhere sources are
               aggregated.
             </p>
           </div>
-          <CustomSources sources={customSources} />
+          <CustomSources
+            sources={customSources}
+            others={otherSources}
+            counts={sourceCounts}
+          />
         </section>
 
         <section className="grid gap-3">

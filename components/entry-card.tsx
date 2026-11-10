@@ -28,7 +28,7 @@ import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import type { LibraryRow } from "@/lib/data/entries";
 import { progressLabel, statusLabel } from "@/lib/data/entry-labels";
 import { entryView, type EntryView } from "@/lib/data/entry-view";
-import type { RankedSource, Source } from "@/lib/data/rank-sources";
+import type { Source } from "@/lib/data/rank-sources";
 
 /**
  * How one title is drawn.
@@ -38,6 +38,7 @@ import type { RankedSource, Source } from "@/lib/data/rank-sources";
  * thumbnail at the leading edge, the text in the middle, the stats trailing.
  */
 export type EntryLayout = "grid" | "row";
+export type EntrySize = "small" | "medium" | "large";
 
 /**
  * One title, from either side of the app, in either layout.
@@ -73,7 +74,7 @@ export const EntryCard = memo(function EntryCard({
   entry,
   view: given,
   layout = "grid",
-  topSources = [],
+  size = "large",
   catalog = [],
   removable,
   selection,
@@ -92,7 +93,7 @@ export const EntryCard = memo(function EntryCard({
    */
   view?: EntryView;
   layout?: EntryLayout;
-  topSources?: RankedSource[];
+  size?: EntrySize;
   catalog?: Source[];
   /**
    * Turns the card into an editable one, for a collection the viewer owns.
@@ -145,6 +146,7 @@ export const EntryCard = memo(function EntryCard({
     ) : (
       <EntryGridBody
         view={view}
+        size={size}
         removable={removable}
         onOpenSheet={() => setSheetOpen(true)}
       />
@@ -188,7 +190,6 @@ export const EntryCard = memo(function EntryCard({
 
       <EntryCardMenu
         entry={tracked.row}
-        topSources={topSources}
         onOpenDialog={setDialog}
         onPatch={patchRow}
         open={menuOpen}
@@ -199,7 +200,6 @@ export const EntryCard = memo(function EntryCard({
       <EntryCardSheet
         entry={tracked.row}
         entryTitle={name}
-        topSources={topSources}
         open={sheetOpen}
         onOpenChange={setSheetOpen}
         onOpenDialog={setDialog}
@@ -343,10 +343,11 @@ const EntryGridBody = forwardRef<
   HTMLDivElement,
   {
     view: EntryView;
+    size?: EntrySize;
     removable?: { collectionId: number; itemId: number };
     onOpenSheet: () => void;
   } & React.ComponentPropsWithoutRef<"div">
->(function EntryGridBody({ view, removable, onOpenSheet, ...trigger }, ref) {
+>(function EntryGridBody({ view, size, removable, onOpenSheet, ...trigger }, ref) {
   const { name, entry, total } = view;
 
   return (
@@ -361,7 +362,7 @@ const EntryGridBody = forwardRef<
     on an element — without spreading them through, right-click reaches no
     handler and the menu never opens. */
     <div className="group/card" ref={ref} {...trigger}>
-			<div className="relative rounded-xl overflow-hidden">
+      <div className="relative rounded-xl overflow-hidden">
       <CardLink
         href={view.entryHref}
         name={name}
@@ -384,13 +385,12 @@ const EntryGridBody = forwardRef<
             className="object-cover object-top transition-transform duration-200 group-hover/card:scale-105"
           />
 
-          {/* Two layers, because white text over unknown artwork needs both.
-          The gradient darkens; the blur, faded in from its own midpoint by the
-          mask, kills the high-frequency detail that would otherwise fight the
-          text. A gradient heavy enough to beat busy art on its own buried the
-          cover. */}
-          <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
-          <div className="absolute inset-x-0 bottom-0 h-60 backdrop-blur-lg mask-t-from-50%" />
+          {/* A tinted blur faded in by the mask, as the iOS card's material:
+          it kills the art's detail behind the text, and the tint follows the
+          theme so the text can too. */}
+          <div
+            className={`absolute inset-x-0 bottom-0 bg-white/30 backdrop-blur-lg dark:bg-black/20 ${size === "large" ? "h-60 mask-t-from-60%" : "h-30 mask-t-from-40%"}`}
+          />
         </div>
 
         {/* Status badges, top-left. */}
@@ -417,12 +417,12 @@ const EntryGridBody = forwardRef<
           or two. An untracked title has no status, but keeps the block so a
           mixed shelf still lines up. */}
           <div className="flex h-17 flex-col items-start justify-between">
-            <span className="shrink-0 text-xs font-medium text-white/80 drop-shadow">
+            <span className="shrink-0 text-xs font-medium text-foreground/70 drop-shadow">
               {entry ? statusLabel(entry.listStatus) : ""}
             </span>
             {/* Two lines at most — `h-17` above is what that second line is
             budgeted against. */}
-            <h3 className="line-clamp-2 text-balance font-display text-xl font-semibold leading-tight text-white drop-shadow">
+            <h3 className={`line-clamp-2 text-balance font-display ${size === "large" ? "text-xl" : "text-sm"} font-semibold leading-tight text-foreground drop-shadow`}>
               {name}
             </h3>
           </div>
@@ -458,7 +458,7 @@ const EntryGridBody = forwardRef<
       ) : null}
 
       <CardFooter view={view} />
-			</div>
+      </div>
     </div>
   );
 });
@@ -499,7 +499,7 @@ function GridChips({ entry }: { entry: NonNullable<EntryView["entry"]> }) {
         ) : null,
       )}
       {overflow > 0 ? (
-        <span className="shrink-0 rounded-badge bg-white/20 px-1 text-xs font-bold text-white backdrop-blur-sm">
+        <span className="shrink-0 rounded-badge bg-white/30 dark:bg-black/20 px-1 text-xs font-bold text-foreground backdrop-blur-sm">
           +{overflow}
         </span>
       ) : null}
@@ -522,16 +522,15 @@ function GridStats({
   return (
     <div className="grid grid-cols-2 divide-x divide-white/20 rounded-md pt-1 text-center">
       <div className="px-1 py-1">
-        <p className="text-xs leading-none text-white/70">Read</p>
-        <p className="mt-0.5 truncate text-sm font-bold leading-none whitespace-nowrap text-white tabular-nums">
+        <p className="text-xs leading-none text-foreground/70">Read</p>
+        <p className="mt-0.5 truncate text-sm font-bold leading-none whitespace-nowrap text-foreground tabular-nums">
           {progressLabel(entry.chaptersRead, total)}
         </p>
       </div>
       <div className="px-1 py-1">
-        <p className="text-xs leading-none text-white/70">Left</p>
-        <p className="mt-0.5 truncate text-sm font-bold leading-none whitespace-nowrap text-white tabular-nums">
-          {/* What is left to read. Unknown when the total is. */}
-          {entry.remaining ?? "—"}
+        <p className="text-xs leading-none text-foreground/70">Score</p>
+        <p className="mt-0.5 truncate text-sm font-bold leading-none whitespace-nowrap text-foreground tabular-nums">
+          {entry.score ?? "—"}
         </p>
       </div>
     </div>
@@ -549,13 +548,13 @@ function GridStats({
 function ProgressRail({ pct }: { pct: number | null }) {
   if (pct === null) {
     return (
-      <div className="absolute inset-x-0 bottom-0 h-1 bg-white/20" aria-hidden />
+      <div className="absolute inset-x-0 bottom-0 h-1 bg-white/30 dark:bg-black/20" aria-hidden />
     );
   }
 
   return (
     <div
-      className="absolute inset-x-0 bottom-0 h-1 overflow-hidden bg-white/20"
+      className="absolute inset-x-0 bottom-0 h-1 overflow-hidden bg-white/30 dark:bg-black/20"
       role="progressbar"
       aria-valuenow={pct}
       aria-valuemin={0}
@@ -589,13 +588,13 @@ const EntryRowBody = forwardRef<
     the parser and break hydration. `...trigger` and the ref come from
     <ContextMenuTrigger asChild> — see EntryGridBody. */
     <div className="group/row" ref={ref} {...trigger}>
-			<div className="group relative overflow-hidden rounded-xl border border-border bg-card shadow-sm ring-offset-background transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+      <div className="group relative overflow-hidden rounded-xl border border-border bg-card shadow-sm ring-offset-background transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
       <CardLink
         href={view.entryHref}
         name={name}
         // `pr-24` keeps the text clear of the controls parked on the right.
         // className="group w-full flex justify-start gap-3 overflow-hidden rounded-xl border border-border bg-card pr-14 shadow-sm ring-offset-background transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-				className="flex mr-14"
+        className="flex mr-14"
       >
         {/* A square cover, full-bleed at the leading edge, and what sets the
         row's height: the card grows to the cover, not the cover shrunk to the
@@ -614,9 +613,9 @@ const EntryRowBody = forwardRef<
           </div>
         </div>
 
-				{/* <div className="flex flex-col gap-1 items-start flex-1 py-2 px-3">
-					
-				</div> */}
+        {/* <div className="flex flex-col gap-1 items-start flex-1 py-2 px-3">
+          
+        </div> */}
 
         {/* The entry header's layout at row scale — title and state
         badges, then status and sources, then the stat strip and its bar — so
@@ -666,11 +665,9 @@ const EntryRowBody = forwardRef<
                     label: "Chapters",
                     value: progressLabel(entry.chaptersRead, total),
                   },
-                  // No known total means no percentage to report — an ongoing
-                  // series would otherwise read as a confident 0%.
                   {
-                    label: "Progress",
-                    value: entry.pct !== null ? `${entry.pct}%` : "—",
+                    label: "Score",
+                    value: entry.score ?? "—",
                   },
                 ]}
               />
@@ -682,7 +679,7 @@ const EntryRowBody = forwardRef<
 
       {/* Parked at the trailing edge, vertically centred. */}
       {/* <div className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-1"> */}
-			<div className="absolute top-0 right-0 w-14 p-3 flex items-center gap-1">
+      <div className="absolute top-0 right-0 w-14 p-3 flex items-center gap-1">
         <CardControls view={view} onOpenSheet={onOpenSheet} overlay={false} />
         {/* An untracked title's one action, sized to sit in the same slot the
         read link would. */}
@@ -700,7 +697,7 @@ const EntryRowBody = forwardRef<
           />
         ) : null}
       </div>
-			</div>
+      </div>
     </div>
   );
 });

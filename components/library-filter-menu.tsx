@@ -24,6 +24,7 @@ import {
   type Publication,
   type SortKey,
 } from "@/lib/data/library-prefs";
+import { genresOf, resolveOfficial } from "@/lib/data/pick-random";
 import { Button } from "./ui/button";
 
 export type FilterChip = { value: string; label: string; count?: number };
@@ -37,6 +38,12 @@ const PUBLICATION_OPTIONS: { value: Publication; label: string }[] = [
   { value: "", label: "All" },
   { value: "ongoing", label: "Ongoing" },
   { value: "completed", label: "Completed" },
+];
+
+const OFFICIAL_OPTIONS = [
+  { value: "", label: "All" },
+  { value: "official", label: "Official" },
+  { value: "unofficial", label: "Unofficial" },
 ];
 
 /**
@@ -87,6 +94,13 @@ export function LibraryFilterMenu({
     hideNsfw,
     setHideNsfw,
     canSeeNsfw,
+    official,
+    setOfficial,
+    hidePaid,
+    setHidePaid,
+    genres,
+    setGenres,
+    entries,
     sort,
     setSort,
     layout,
@@ -109,13 +123,25 @@ export function LibraryFilterMenu({
 
   // The status is named on the trigger rather than counted, so it is not
   // counted again here — otherwise "Reading" would read as "Reading 1".
-  const extras = [source, publication, hideHiatus, ownedOnly, hideNsfw].filter(
-    Boolean,
-  ).length;
+  const extras = [
+    source,
+    publication,
+    official,
+    genres.length > 0,
+    hideHiatus,
+    ownedOnly,
+    hidePaid,
+    hideNsfw,
+  ].filter(Boolean).length;
 
-  const anyActive = Boolean(
-    status || source || publication || hideHiatus || ownedOnly || hideNsfw,
-  );
+  const anyActive = Boolean(status) || extras > 0;
+
+  // The genres on the shelf, A–Z: one that no title carries filters to nothing.
+  const shelfGenres = [
+    ...new Map(
+      entries.flatMap(genresOf).map((g) => [g.id, g.name] as const),
+    ),
+  ].sort((a, b) => a[1].localeCompare(b[1]));
 
   function clearAll() {
     // One patch per filter: `update` in the provider takes a partial and each
@@ -127,6 +153,9 @@ export function LibraryFilterMenu({
     if (hideHiatus) setHideHiatus(false);
     if (ownedOnly) setOwnedOnly(false);
     if (hideNsfw) setHideNsfw(false);
+    if (official) setOfficial("");
+    if (hidePaid) setHidePaid(false);
+    if (genres.length > 0) setGenres([]);
   }
 
   return (
@@ -235,6 +264,61 @@ export function LibraryFilterMenu({
           </DropdownMenuSubContent>
         </DropdownMenuSub>
 
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            Official
+            <span className="ml-auto pl-4 text-muted-foreground">
+              {OFFICIAL_OPTIONS.find((o) => o.value === official)?.label}
+            </span>
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="min-w-44">
+            <DropdownMenuRadioGroup
+              value={official}
+              onValueChange={(value) =>
+                value !== official && setOfficial(resolveOfficial(value))
+              }
+            >
+              {OFFICIAL_OPTIONS.map((option) => (
+                <DropdownMenuRadioItem
+                  key={option.value || "all"}
+                  value={option.value}
+                >
+                  {option.label}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+
+        {/* Any number at once, and a title must carry them all. Checkboxes
+            keep the submenu open so several can be picked in a row. */}
+        {shelfGenres.length > 0 ? (
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              Genres
+              <span className="ml-auto pl-4 text-muted-foreground">
+                {genres.length === 0 ? "Any" : genres.length}
+              </span>
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="max-h-80 min-w-44 overflow-y-auto">
+              {shelfGenres.map(([id, name]) => (
+                <DropdownMenuCheckboxItem
+                  key={id}
+                  checked={genres.includes(id)}
+                  onCheckedChange={(on) =>
+                    setGenres(
+                      on ? [...genres, id] : genres.filter((g) => g !== id),
+                    )
+                  }
+                  onSelect={(e) => e.preventDefault()}
+                >
+                  {name}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        ) : null}
+
         <DropdownMenuSeparator />
 
         {/* Both phrased as what is left showing rather than as an action:
@@ -254,6 +338,14 @@ export function LibraryFilterMenu({
           onSelect={(e) => e.preventDefault()}
         >
           Owned only
+        </DropdownMenuCheckboxItem>
+        {/* Only once every source is paid: one free source is a free read. */}
+        <DropdownMenuCheckboxItem
+          checked={hidePaid}
+          onCheckedChange={setHidePaid}
+          onSelect={(e) => e.preventDefault()}
+        >
+          Hide paid
         </DropdownMenuCheckboxItem>
         {/* Only for an account that may see adult titles at all. One under
             the age floor never receives those rows, so the item would be a

@@ -728,3 +728,62 @@ describe("matchesPublication", () => {
     ).toEqual([1]);
   });
 });
+
+// The filters the iOS app added first: official, paid and genres.
+describe("selectCandidates: official, paid and genres", () => {
+  const titled = (
+    id: number,
+    sources: { is_official?: boolean; is_paid?: boolean }[],
+    tags: { id: number; kind?: string; owner_id?: string | null }[] = [],
+  ) =>
+    ({
+      id,
+      list_status: "reading",
+      media_titles: {
+        title_tags: tags.map((t) => ({
+          owner_id: t.owner_id ?? null,
+          tags: { id: t.id, name: `Tag ${t.id}`, kind: t.kind ?? "genre" },
+        })),
+      },
+      entry_sources: sources.map((s) => ({
+        is_official: s.is_official ?? false,
+        is_paid: s.is_paid ?? false,
+        sources: { slug: "x" },
+      })),
+    }) as unknown as LibraryRow;
+
+  const base = { status: "", source: "" };
+
+  it("keeps a title with any source of the chosen kind", () => {
+    const shelf = [
+      titled(1, [{ is_official: true }]),
+      titled(2, [{ is_official: false }]),
+      titled(3, [{ is_official: true }, { is_official: false }]),
+      titled(4, []),
+    ];
+    expect(ids(selectCandidates(shelf, { ...base, official: "official" }))).toEqual([1, 3]);
+    expect(ids(selectCandidates(shelf, { ...base, official: "unofficial" }))).toEqual([2, 3]);
+  });
+
+  // One free source is a free read, and no source is not "paid".
+  it("hides a title only once every source is paid", () => {
+    const shelf = [
+      titled(1, [{ is_paid: true }]),
+      titled(2, [{ is_paid: true }, { is_paid: false }]),
+      titled(3, []),
+    ];
+    expect(ids(selectCandidates(shelf, { ...base, hidePaid: true }))).toEqual([2, 3]);
+  });
+
+  it("keeps only titles carrying every chosen genre", () => {
+    const shelf = [
+      titled(1, [], [{ id: 10 }, { id: 11 }]),
+      titled(2, [], [{ id: 10 }]),
+      // A theme, and a user's pending suggestion, are not genres yet.
+      titled(3, [], [{ id: 10 }, { id: 11, kind: "theme" }]),
+      titled(4, [], [{ id: 10 }, { id: 11, owner_id: "u1" }]),
+    ];
+    expect(ids(selectCandidates(shelf, { ...base, genres: [10, 11] }))).toEqual([1]);
+    expect(ids(selectCandidates(shelf, { ...base, genres: [10] }))).toEqual([1, 2, 3, 4]);
+  });
+});

@@ -33,7 +33,32 @@ export type CandidateFilters = {
    * only completed titles. Off by default, like the toggles.
    */
   publication?: Publication;
+  /** "official" or "unofficial": titles with a source of that kind. "" for both. */
+  official?: Official;
+  /** Hide titles that are paid everywhere they are read. */
+  hidePaid?: boolean;
+  /** Genre tag ids a title must all carry. */
+  genres?: number[];
 };
+
+export type Official = "" | "official" | "unofficial";
+
+/** The stored value, or "" for anything else (including the `all` sentinel). */
+export function resolveOfficial(saved: string | null | undefined): Official {
+  return saved === "official" || saved === "unofficial" ? saved : "";
+}
+
+/**
+ * A title's curated genres. A tag with an owner is a user's suggestion still
+ * waiting on an admin, so it does not count yet.
+ */
+export function genresOf(entry: LibraryRow): { id: number; name: string }[] {
+  return (entry.media_titles?.title_tags ?? []).flatMap((link) =>
+    link.owner_id === null && link.tags?.kind === "genre"
+      ? [{ id: link.tags.id, name: link.tags.name }]
+      : [],
+  );
+}
 
 /**
  * Whether a title matches the publication filter.
@@ -111,6 +136,9 @@ export function selectCandidates(
     ownedOnly = false,
     hideNsfw = false,
     publication = "",
+    official = "",
+    hidePaid = false,
+    genres = [],
   }: CandidateFilters,
 ): LibraryRow[] {
   return entries.filter((entry) => {
@@ -127,6 +155,27 @@ export function selectCandidates(
     // "No source" cards — correctly, since nowhere recorded is nowhere bought.
     if (ownedOnly && !isOwned(entry)) return false;
     if (hideNsfw && isMature(entry.media_titles)) return false;
+    // Official like owned, once any source is; paid like hiatus, only once
+    // every source is, since one free source is a free read.
+    if (
+      official &&
+      !entry.entry_sources.some(
+        (es) => es.is_official === (official === "official"),
+      )
+    ) {
+      return false;
+    }
+    if (
+      hidePaid &&
+      entry.entry_sources.length > 0 &&
+      entry.entry_sources.every((es) => es.is_paid)
+    ) {
+      return false;
+    }
+    if (genres.length > 0) {
+      const has = new Set(genresOf(entry).map((g) => g.id));
+      if (!genres.every((id) => has.has(id))) return false;
+    }
 
     if (source === "none") return entry.entry_sources.length === 0;
     if (source) {

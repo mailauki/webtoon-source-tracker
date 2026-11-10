@@ -5,7 +5,6 @@ import { Dices, ExternalLink, Sparkles } from "lucide-react";
 import { useState } from "react";
 
 import { CoverImage } from "@/components/cover-image";
-import { useLibraryFilters } from "@/components/library-grid";
 import { SourceBadge } from "@/components/source-badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,14 +15,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { PRO_MESSAGES } from "@/lib/pro";
 import { pickNext, selectByMode, type PickMode } from "@/lib/data/pick-random";
 import { readingLink } from "@/lib/data/source-links";
@@ -37,7 +28,7 @@ const MODES: { mode: PickMode; label: string; drawnFrom: string }[] = [
   {
     mode: "surprise",
     label: "Surprise me",
-    drawnFrom: "Drawn from the titles this view is showing.",
+    drawnFrom: "Drawn from your whole library.",
   },
   {
     mode: "neglected",
@@ -52,29 +43,28 @@ const MODES: { mode: PickMode; label: string; drawnFrom: string }[] = [
 ];
 
 /**
- * "Not sure what to read?" — a dice button in the library's control row.
+ * "Not sure what to read?" — a banner on Discover, as in the iOS app.
  *
- * It used to be a banner over the shelf, with all three questions as buttons.
- * That put a full-width panel between the header and the covers on every
- * visit, for something used now and then, so it now lives beside Filters and
- * Select and asks its three questions from a menu.
+ * It used to sit in the library's control row and roll over the shelf as the
+ * filters had left it. Discover is where "what should I read next" is asked,
+ * so it lives there now and draws from the whole library, less what the user
+ * has ruled out for good: adult titles (already screened by getLibrary), and
+ * the hiatus and owned-only toggles, which say a title is not worth offering.
  *
- * Three questions, not three filters. "Surprise me" is a die over the shelf as
- * the chips have left it, so what it returns is always something the user can
- * see. The other two answer questions the chips cannot express — how long a
- * title has sat, and what was never started — so they reach past the chips to
- * their own pool. Making them narrow within the chips instead would leave the
- * plan-to-read button dead whenever the Reading chip was up, for a reason the
- * user never asked about.
- *
- * Which titles each mode may return is `selectByMode`, next to the same
- * `selectCandidates` the grid narrows with, so the shelf and the dice can
- * never disagree about what "Reading + Webtoon" covers.
+ * For Pro. Without it each button leads to /pro, so the feature is still
+ * there to find.
  */
-function RandomPicker() {
-  const { entries, status, source, hideHiatus, ownedOnly, publication } =
-    useLibraryFilters();
-
+export function RandomPick({
+  isPro,
+  entries,
+  hideHiatus = false,
+  ownedOnly = false,
+}: {
+  isPro: boolean;
+  entries: LibraryRow[];
+  hideHiatus?: boolean;
+  ownedOnly?: boolean;
+}) {
   const [picked, setPicked] = useState<LibraryRow | null>(null);
   // Which mode produced the title on screen — the reveal names it, and
   // "Roll again" has to draw from the same pool the first press did.
@@ -83,15 +73,7 @@ function RandomPicker() {
   // it stays valid across the re-renders that bring new row objects.
   const [seen, setSeen] = useState<Set<number>>(new Set());
 
-  // Both toggles ride along with the chips: they are the user saying a paused
-  // title is not worth their time, or that they only want what they already
-  // own — as true of a recommendation as it is of the shelf. Unlike the chips,
-  // these still apply in the two modes that reach past them (see
-  // selectByMode), because they rule titles out rather than choosing a view.
-  //
-  // The Series filter rides along too: "only completed series" is a standing
-  // choice about what to read next, not just about what to look at.
-  const filters = { status, source, hideHiatus, ownedOnly, publication };
+  const filters = { status: "", source: "", hideHiatus, ownedOnly };
   const pools = MODES.map((m) => ({
     ...m,
     candidates: selectByMode(entries, m.mode, filters),
@@ -126,48 +108,51 @@ function RandomPicker() {
   const readAt = picked ? readingLink(picked.entry_sources) : null;
 
   return (
-    <>
-      {/* Not modal: a modal menu that opens a dialog from one of its items
-          can leave the page unclickable once both close, and nothing here
-          needs the rest of the page held still while the menu is open. */}
-      <DropdownMenu modal={false}>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="outline"
-            className="rounded-full"
-            aria-label="Pick something to read"
-            title="Not sure what to read? Let the shelf decide."
-          >
-            <Dices data-icon="inline-start" />
-            {/* Icon-only on a phone, where the row already holds two
-                labelled buttons. */}
-            <span className="max-sm:sr-only">Pick</span>
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="min-w-56">
-          <DropdownMenuLabel className="font-display">
-            Not sure what to read?
-          </DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          {pools.map(({ mode: m, label, candidates }) => {
-            // One candidate can only ever return itself, so a mode with fewer
-            // than two says so rather than performing a choice it lacks.
-            const disabled = candidates.length < 2;
-            return (
-              <DropdownMenuItem
-                key={m}
-                disabled={disabled}
-                onSelect={() => roll(m)}
-              >
+    <section className="grid gap-3 rounded-lg border border-border bg-card px-4 py-3">
+      <div className="flex items-center gap-3">
+        <Dices className="size-5 shrink-0 text-brand" aria-hidden />
+        <p className="font-display text-sm font-semibold">
+          Not sure what to read?
+        </p>
+        {isPro ? null : (
+          <Sparkles aria-hidden className="ml-auto size-4 text-brand" />
+        )}
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-3">
+        {pools.map(({ mode: m, label, candidates }) => {
+          // One candidate can only ever return itself, so a mode with fewer
+          // than two says so rather than performing a choice it lacks.
+          const tooFew = candidates.length < 2;
+          const count = (
+            <span className="ml-auto pl-4 text-xs text-muted-foreground tabular-nums">
+              {tooFew ? "Too few" : `${candidates.length} titles`}
+            </span>
+          );
+          return isPro ? (
+            <Button
+              key={m}
+              type="button"
+              variant="outline"
+              className="rounded-full"
+              disabled={tooFew}
+              onClick={() => roll(m)}
+            >
+              {label}
+              {count}
+            </Button>
+          ) : (
+            <Button key={m} asChild variant="outline" className="rounded-full">
+              <Link href="/pro" title={PRO_MESSAGES.pick}>
                 {label}
-                <span className="ml-auto pl-4 text-xs text-muted-foreground tabular-nums">
-                  {disabled ? "Too few" : candidates.length}
-                </span>
-              </DropdownMenuItem>
-            );
-          })}
-        </DropdownMenuContent>
-      </DropdownMenu>
+                {count}
+                <span className="sr-only">: {PRO_MESSAGES.pick} Get Pro</span>
+              </Link>
+            </Button>
+          );
+        })}
+      </div>
+
       <Dialog
         open={picked !== null}
         onOpenChange={(open) => {
@@ -218,24 +203,7 @@ function RandomPicker() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
-  );
-}
-
-export function RandomPick({ isPro }: { isPro: boolean }) {
-  if (isPro) return <RandomPicker />;
-
-  // The same button in the same place, leading to /pro, so the row does not
-  // change shape between plans and the feature is still discoverable.
-  return (
-    <Button asChild variant="outline" className="rounded-full">
-      <Link href="/pro" title={PRO_MESSAGES.pick}>
-        <Dices data-icon="inline-start" />
-        <span className="max-sm:sr-only">Pick</span>
-        <Sparkles aria-hidden className="size-3.5 text-brand" />
-        <span className="sr-only">: {PRO_MESSAGES.pick} Get Pro</span>
-      </Link>
-    </Button>
+    </section>
   );
 }
 

@@ -25,7 +25,6 @@ import {
 } from "@/components/ui/context-menu";
 import type { LinkSuggestion } from "@/lib/data/anilist-links";
 import type { LibraryRow } from "@/lib/data/entries";
-import type { RankedSource } from "@/lib/data/rank-sources";
 import { linkableSources } from "@/lib/data/source-links";
 import { syncTargets } from "@/lib/data/sync-targets";
 
@@ -172,21 +171,6 @@ export function nextStatus(
   }
 }
 
-/**
- * The quick-add shortcuts worth showing for one entry.
- *
- * A source already attached is not offered again — the unique index on
- * (entry_id, source_id) would reject it, so the item could only ever produce
- * an error toast.
- */
-export function addableSources(
-  attached: { sources: { id: number } | null }[],
-  topSources: RankedSource[],
-): RankedSource[] {
-  const attachedIds = new Set(attached.map((es) => es.sources?.id));
-  return topSources.filter((s) => !attachedIds.has(s.id));
-}
-
 export type SourceDialogRequest =
   { mode: "add" } | { mode: "edit"; entrySourceId: number };
 
@@ -233,13 +217,11 @@ export type CardAction =
  */
 export function useEntryCardActions({
   entry,
-  topSources,
   onOpenDialog,
   onPatch,
   open,
 }: {
   entry: LibraryRow;
-  topSources: RankedSource[];
   onOpenDialog: (request: SourceDialogRequest) => void;
   /**
    * Shows a progress edit on the card before the save returns. The save
@@ -270,7 +252,6 @@ export function useEntryCardActions({
 
   const attached = entry.entry_sources;
   const linkable = linkableSources(attached);
-  const addable = addableSources(attached, topSources);
   const status = nextStatus(entry.list_status);
 
   // AniList's links, filtered against what the entry has now rather than when
@@ -391,36 +372,20 @@ export function useEntryCardActions({
     });
   }
 
-  // With nothing attached and nothing from AniList, the usual shortcuts are
-  // the whole point of the list; once something is attached, editing it
-  // matters more than attaching another.
-  if (attached.length === 0 && anilist !== undefined && anilistAdds.length === 0) {
-    actions.push(
-      ...addable.map(
-        (source): CardAction => ({
-          kind: "run",
-          key: `add-${source.id}`,
-          Icon: Plus,
-          label: `Add ${source.name}`,
-          disabled: isPending,
-          run: () => run(() => quickAddSource(entry, source.id)),
-        }),
-      ),
-    );
-  } else {
-    actions.push(
-      ...attached.map(
-        (es): CardAction => ({
-          kind: "run",
-          key: `edit-${es.id}`,
-          Icon: Pencil,
-          label: `Edit ${es.sources?.name ?? "source"}`,
-          disabled: false,
-          run: () => onOpenDialog({ mode: "edit", entrySourceId: es.id }),
-        }),
-      ),
-    );
-  }
+  // Only AniList's adds here, as in the iOS app: the user's usual sources
+  // are one-tap adds on the entry page, where the source list is.
+  actions.push(
+    ...attached.map(
+      (es): CardAction => ({
+        kind: "run",
+        key: `edit-${es.id}`,
+        Icon: Pencil,
+        label: `Edit ${es.sources?.name ?? "source"}`,
+        disabled: false,
+        run: () => onOpenDialog({ mode: "edit", entrySourceId: es.id }),
+      }),
+    ),
+  );
 
   actions.push({
     kind: "run",
@@ -449,13 +414,11 @@ export function useEntryCardActions({
  */
 export function EntryCardMenu({
   entry,
-  topSources,
   onOpenDialog,
   onPatch,
   open,
 }: {
   entry: LibraryRow;
-  topSources: RankedSource[];
   onOpenDialog: (request: SourceDialogRequest) => void;
   onPatch?: (patch: CardPatch) => void;
   /**
@@ -467,7 +430,6 @@ export function EntryCardMenu({
 }) {
   const actions = useEntryCardActions({
     entry,
-    topSources,
     onOpenDialog,
     onPatch,
     open,

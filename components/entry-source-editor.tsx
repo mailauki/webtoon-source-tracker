@@ -1,6 +1,13 @@
 "use client";
 
-import { startTransition, useActionState, useOptimistic, useState } from "react";
+import {
+  startTransition,
+  useActionState,
+  useOptimistic,
+  useState,
+  useTransition,
+} from "react";
+import { toast } from "sonner";
 import {
   BookmarkCheck,
   Crown,
@@ -32,7 +39,7 @@ import {
   ownedAcross,
 } from "@/lib/data/chapter-ranges";
 import { ownedCountLabel, type ChapterTotal } from "@/lib/data/chapter-totals";
-import type { Source } from "@/lib/data/rank-sources";
+import type { RankedSource, Source } from "@/lib/data/rank-sources";
 import { submitKeepingFields } from "@/lib/forms/submit-keeping-fields";
 import { useSettled } from "@/lib/hooks/use-settled";
 import {
@@ -61,6 +68,7 @@ export function EntrySourceEditor({
   total = null,
   anilistLinks: storedLinks = NO_LINKS,
   liveAnilistLinks,
+  topSources = [],
   isPro,
 }: {
   entryId: number;
@@ -76,9 +84,12 @@ export function EntrySourceEditor({
    * it — closing a form someone had open and dropping what they had typed.
    */
   liveAnilistLinks?: Promise<Record<number, string>>;
+  /** The sources the user reads on most, offered as one-tap adds. */
+  topSources?: RankedSource[];
   /** Owned chapters are Pro-only; a free account sees a teaser instead. */
   isPro: boolean;
 }) {
+  const [quickAdding, startQuickAdd] = useTransition();
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const anilistLinks = useSettled(liveAnilistLinks, storedLinks);
@@ -102,6 +113,7 @@ export function EntrySourceEditor({
 
   const attachedIds = new Set(listed.map((s) => s.sources?.id));
   const available = catalog.filter((c) => !attachedIds.has(c.id));
+  const quickAdds = topSources.filter((s) => !attachedIds.has(s.id));
 
   return (
     // Anchor kept so /entry/[id]#sources lands on this section.
@@ -131,6 +143,35 @@ export function EntrySourceEditor({
       </div>
 
       <OwnedAcrossSources sources={listed} total={total} />
+
+      {/* The usual sources, one press each, where not already attached. The
+          URL and the rest are filled in from the row's Edit afterwards. */}
+      {!adding && quickAdds.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {quickAdds.map((source) => (
+            <Button
+              key={source.id}
+              type="button"
+              variant="outline"
+              size="sm"
+              className="rounded-pill"
+              disabled={quickAdding}
+              onClick={() =>
+                startQuickAdd(async () => {
+                  const formData = new FormData();
+                  formData.set("entry_id", String(entryId));
+                  formData.set("source_id", String(source.id));
+                  const result = await addEntrySource(null, formData);
+                  if (result?.error) toast.error(result.error);
+                })
+              }
+            >
+              <Plus className="size-4" />
+              Add {source.name}
+            </Button>
+          ))}
+        </div>
+      ) : null}
 
       {adding ? (
         <AddSourceForm
