@@ -73,7 +73,7 @@ export async function getLibrary() {
       media_titles!inner (
         id, mal_media_id, anilist_media_id, title, title_en, alt_titles,
         main_picture_url, mal_media_kind, num_chapters, num_volumes, mal_status,
-        nsfw
+        nsfw, title_tags ( owner_id, tags ( id, name, kind ) )
       ),
       entry_sources (
         id, url, chapters_read, chapters_owned,

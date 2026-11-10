@@ -6,7 +6,7 @@ import { LibraryBig } from "lucide-react";
 import { EntryCard } from "@/components/entry-card";
 import { Button } from "@/components/ui/button";
 import { useSearchFilters } from "@/components/search/search-filters";
-import type { RankedSource, Source } from "@/lib/data/rank-sources";
+import type { Source } from "@/lib/data/rank-sources";
 import { matchesMediaKind, titleMatchScore } from "@/lib/data/search";
 import type { LibraryRow } from "@/lib/data/entries";
 
@@ -50,11 +50,9 @@ const RESULTS_SHOWN = 24;
  * with `nsfw: true`.
  */
 export function LibraryResults({
-  topSources = [],
   catalog = [],
   isPro,
 }: {
-  topSources?: RankedSource[];
   catalog?: Source[];
   /** Owned chapters are Pro-only; passed straight through to each card. */
   isPro: boolean;
@@ -105,7 +103,6 @@ export function LibraryResults({
             <EntryCard
               key={entry.id}
               entry={entry}
-              topSources={topSources}
               catalog={catalog}
               isPro={isPro}
             />

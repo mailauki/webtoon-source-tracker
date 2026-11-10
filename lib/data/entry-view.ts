@@ -35,6 +35,8 @@ export type TrackedView = {
   chaptersRead: number;
   /** Percent read, or null when the total is unknown (most ongoing series). */
   pct: number | null;
+  /** The user's score, or null when unscored (MAL stores that as 0). */
+  score: number | null;
   /** How many chapters are left, or null when that cannot be known. */
   remaining: number | null;
   onHiatus: boolean;
@@ -117,6 +119,7 @@ export function entryView(row: LibraryRow): EntryView {
       listStatus: row.list_status,
       chaptersRead: row.num_chapters_read,
       pct: percent(row.num_chapters_read, total),
+      score: row.score > 0 ? row.score : null,
       remaining:
         total && total > 0 ? Math.max(0, total - row.num_chapters_read) : null,
       onHiatus: isOnHiatus(row),

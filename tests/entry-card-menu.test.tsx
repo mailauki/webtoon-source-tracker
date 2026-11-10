@@ -50,7 +50,6 @@ vi.mock("sonner", () => ({
 import type { ProgressState } from "@/app/actions/progress";
 import { EntryCard } from "@/components/entry-card";
 import {
-  addableSources,
   nextStatus,
   quickAddSource,
 } from "@/components/entry-card-menu";
@@ -73,11 +72,6 @@ function row(overrides: Partial<LibraryRow> = {}): LibraryRow {
   } as unknown as LibraryRow;
 }
 
-const TOP_SOURCES = [
-  { id: 1, name: "Tapas", count: 9 },
-  { id: 2, name: "Webtoon", count: 4 },
-];
-
 /** The cover: a plain link to the entry page, and the menu's trigger. */
 function cardTrigger() {
   return screen.getByRole("link", { name: /^Tower of God$/ });
@@ -94,7 +88,7 @@ function sheetButton() {
  */
 async function openMenu(entry: LibraryRow = row()) {
   const user = userEvent.setup();
-  render(<EntryCard entry={entry} topSources={TOP_SOURCES} isPro />);
+  render(<EntryCard entry={entry} isPro />);
   await user.pointer({ keys: "[MouseRight]", target: cardTrigger() });
   return user;
 }
@@ -102,7 +96,7 @@ async function openMenu(entry: LibraryRow = row()) {
 /** The same actions, reached the way a phone reaches them. */
 async function openSheet(entry: LibraryRow = row()) {
   const user = userEvent.setup();
-  render(<EntryCard entry={entry} topSources={TOP_SOURCES} isPro />);
+  render(<EntryCard entry={entry} isPro />);
   await user.click(sheetButton());
   return user;
 }
@@ -136,7 +130,7 @@ describe("entry card quick-access menu", () => {
    * produces. A bare pointer-down must therefore leave the menu shut.
    */
   it("stays shut on pointer-down alone, so a swipe can scroll past", () => {
-    render(<EntryCard entry={row()} topSources={TOP_SOURCES} isPro />);
+    render(<EntryCard entry={row()} isPro />);
 
     fireEvent.pointerDown(cardTrigger(), { button: 0, ctrlKey: false });
 
@@ -147,7 +141,7 @@ describe("entry card quick-access menu", () => {
   // is produced, so nothing opens.
   it("stays shut when a press on a card is dragged away and released", async () => {
     const user = userEvent.setup();
-    render(<EntryCard entry={row()} topSources={TOP_SOURCES} isPro />);
+    render(<EntryCard entry={row()} isPro />);
 
     await user.pointer([
       { keys: "[MouseLeft>]", target: cardTrigger() },
@@ -170,7 +164,7 @@ describe("entry card quick-access menu", () => {
    */
   it("reaches the actions from the keyboard, through the overflow button", async () => {
     const user = userEvent.setup();
-    render(<EntryCard entry={row()} topSources={TOP_SOURCES} isPro />);
+    render(<EntryCard entry={row()} isPro />);
 
     sheetButton().focus();
     expect(sheetButton()).toHaveFocus();
@@ -347,31 +341,6 @@ describe("entry card quick-access menu", () => {
 });
 
 describe("source shortcuts", () => {
-  it("offers every top source when the entry has none attached", () => {
-    expect(addableSources([], TOP_SOURCES).map((s) => s.name)).toEqual([
-      "Tapas",
-      "Webtoon",
-    ]);
-  });
-
-  it("does not offer a source the entry already has", () => {
-    const attached = [{ sources: { id: 1 } }];
-
-    expect(addableSources(attached, TOP_SOURCES).map((s) => s.name)).toEqual([
-      "Webtoon",
-    ]);
-  });
-
-  it("offers nothing once every top source is attached", () => {
-    const attached = [{ sources: { id: 1 } }, { sources: { id: 2 } }];
-    expect(addableSources(attached, TOP_SOURCES)).toEqual([]);
-  });
-
-  // A source row that failed to join must not knock out a real shortcut.
-  it("ignores attachments whose source did not join", () => {
-    expect(addableSources([{ sources: null }], TOP_SOURCES)).toHaveLength(2);
-  });
-
   it("attaches a source with no url, leaving the details for later", async () => {
     await quickAddSource({ id: 7 }, 2);
 
@@ -478,7 +447,7 @@ describe("nextStatus", () => {
  */
 describe("the actions sheet", () => {
   it("does not exist until the overflow button is pressed", () => {
-    render(<EntryCard entry={row()} topSources={TOP_SOURCES} isPro />);
+    render(<EntryCard entry={row()} isPro />);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -701,7 +670,7 @@ describe("AniList links in the card's actions", () => {
   it("does not ask AniList until the sheet is opened", async () => {
     const fetchMock = stubAniList({ add: [], fill: [] });
     const user = userEvent.setup();
-    render(<EntryCard entry={row({ id: 103 })} topSources={TOP_SOURCES} isPro />);
+    render(<EntryCard entry={row({ id: 103 })} isPro />);
 
     expect(fetchMock).not.toHaveBeenCalled();
     await user.click(sheetButton());
@@ -719,7 +688,7 @@ describe("AniList links in the card's actions", () => {
       fill: [],
     });
     const user = userEvent.setup();
-    render(<EntryCard entry={row({ id: 107 })} topSources={TOP_SOURCES} isPro />);
+    render(<EntryCard entry={row({ id: 107 })} isPro />);
 
     expect(fetchMock).not.toHaveBeenCalled();
     await user.pointer({ keys: "[MouseRight]", target: cardTrigger() });
@@ -729,14 +698,17 @@ describe("AniList links in the card's actions", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("falls back to the usual shortcuts when AniList has nothing", async () => {
+  // The usual sources are one-tap adds on the entry page now, as in the
+  // iOS app; the card offers only what AniList links.
+  it("offers no other adds when AniList has nothing", async () => {
     stubAniList({ add: [], fill: [] });
     await openSheet(row({ id: 104 }));
 
     expect(
-      await screen.findByRole("button", { name: "Add Tapas" }),
+      await screen.findByRole("button", { name: "Add source…" }),
     ).toBeInTheDocument();
     expect(screen.queryByText(/from AniList/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add Tapas" })).toBeNull();
   });
 
   it("says it is checking AniList while the answer is on its way", async () => {

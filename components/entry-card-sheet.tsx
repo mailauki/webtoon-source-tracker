@@ -11,7 +11,6 @@ import {
   type SourceDialogRequest,
 } from "@/components/entry-card-menu";
 import type { LibraryRow } from "@/lib/data/entries";
-import type { RankedSource } from "@/lib/data/rank-sources";
 
 /**
  * The quick actions as a sheet that rises from the bottom — the touch surface.
@@ -32,7 +31,6 @@ import type { RankedSource } from "@/lib/data/rank-sources";
 export function EntryCardSheet({
   entry,
   entryTitle,
-  topSources,
   open,
   onOpenChange,
   onOpenDialog,
@@ -40,7 +38,6 @@ export function EntryCardSheet({
 }: {
   entry: LibraryRow;
   entryTitle: string;
-  topSources: RankedSource[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onOpenDialog: (request: SourceDialogRequest) => void;
@@ -48,7 +45,6 @@ export function EntryCardSheet({
 }) {
   const actions = useEntryCardActions({
     entry,
-    topSources,
     onPatch,
     // The sheet stays mounted while closed; AniList is asked on first open.
     open,

@@ -87,10 +87,10 @@ export function CollectionShelf({
           Nothing in here yet — open it to add titles from your library.
         </Link>
       ) : (
-        <ul className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2">
+        <ul className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 ml-0 pb-2">
           {collection.items.map((item) => (
             <li key={item.id} className="w-[130px] shrink-0 snap-start">
-              <EntryCard view={collectionView(item)} isPro={isPro} />
+              <EntryCard view={collectionView(item)} isPro={isPro} size="small" />
             </li>
           ))}
         </ul>

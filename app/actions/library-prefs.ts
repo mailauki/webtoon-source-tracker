@@ -54,6 +54,8 @@ const prefsSchema = z.object({
   // `sort` — a value this version does not know falls back to the default
   // instead of failing the write.
   layout: prefSchema.optional(),
+  official: prefSchema.optional(),
+  hidePaid: z.boolean().optional(),
 });
 
 export type LibraryPrefsPatch = z.input<typeof prefsSchema>;
@@ -80,6 +82,8 @@ export async function saveLibraryPrefs(patch: LibraryPrefsPatch) {
     search_media_kind?: string | null;
     hide_nsfw?: boolean;
     layout?: string | null;
+    official?: string;
+    hide_paid?: boolean;
   } = {
     user_id: userId,
   };
@@ -128,6 +132,14 @@ export async function saveLibraryPrefs(patch: LibraryPrefsPatch) {
   // drawn some way, so an empty value is "no preference" — which is null.
   if (parsed.data.layout !== undefined) {
     row.layout = parsed.data.layout || null;
+  }
+
+  // The same sentinel as the chips, which is what the iOS app reads back.
+  if (parsed.data.official !== undefined) {
+    row.official = parsed.data.official || ALL;
+  }
+  if (parsed.data.hidePaid !== undefined) {
+    row.hide_paid = parsed.data.hidePaid;
   }
 
   if (Object.keys(row).length === 1) return;

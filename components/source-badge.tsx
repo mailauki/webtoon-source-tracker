@@ -2,7 +2,6 @@ import {
   BookmarkCheck,
   Check,
   Crown,
-  EyeOff,
   Lock,
   PauseCircle,
 } from "lucide-react";
@@ -145,7 +144,6 @@ export function MatureBadge({ overlay = false }: { overlay?: boolean }) {
       className="gap-1"
       title="MyAnimeList rates this title as adult"
     >
-      <EyeOff className="size-2.5" aria-hidden />
       18+
     </Badge>
   );

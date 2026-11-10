@@ -17,7 +17,6 @@ import {
 import { getLibrary } from "@/lib/data/entries";
 import { getIsPro } from "@/lib/data/pro";
 import { resolveMediaKind } from "@/lib/data/search";
-import { rankSources } from "@/lib/data/rank-sources";
 import { getSources } from "@/lib/data/sources";
 
 export const metadata = { title: "Search" };
@@ -74,8 +73,6 @@ export default async function SearchPage() {
     isAgeConfirmedAdult(),
     getIsPro(),
   ]);
-  const topSources = rankSources(entries.flatMap((e) => e.entry_sources));
-
   return (
     // Wraps the shell: the field renders into the header's sticky row and the
     // results into the body, and both run off the same term.
@@ -112,7 +109,7 @@ export default async function SearchPage() {
           ) : null}
 
           <SearchPrompt />
-          <LibraryResults topSources={topSources} catalog={sources} isPro={isPro} />
+          <LibraryResults catalog={sources} isPro={isPro} />
           <CatalogResults anilistConnected={anilistConnected} />
         </div>
       </AppShell>

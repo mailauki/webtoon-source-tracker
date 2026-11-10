@@ -7,7 +7,6 @@ import {
   LibraryGrid,
   SelectToggle,
 } from "@/components/library-grid";
-import { RandomPick } from "@/components/random-pick";
 import { SyncButton } from "@/components/sync-button";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,8 +25,8 @@ import {
   resolvePublication,
   resolveSort,
 } from "@/lib/data/library-prefs";
+import { resolveOfficial } from "@/lib/data/pick-random";
 import { getIsPro } from "@/lib/data/pro";
-import { rankSources } from "@/lib/data/rank-sources";
 import { getSources } from "@/lib/data/sources";
 import { formatLastSynced, isStale, nextRefreshDue } from "@/lib/sync/staleness";
 
@@ -117,6 +116,8 @@ export default async function LibraryPage() {
   // at all; getLibrary() has already removed them for everyone else, so the
   // toggle would filter an empty set and the menu hides it.
   const hideNsfw = canSeeNsfw && (prefs?.hide_nsfw ?? false);
+  const official = resolveOfficial(prefs?.official);
+  const hidePaid = prefs?.hide_paid ?? false;
 
   const [entries, sources, isPro, dismissed] = await Promise.all([
     getLibrary(),
@@ -131,7 +132,6 @@ export default async function LibraryPage() {
   for (const e of entries) {
     statusCounts[e.list_status] = (statusCounts[e.list_status] ?? 0) + 1;
   }
-  const topSources = rankSources(entries.flatMap((e) => e.entry_sources));
   // Whichever sites are linked, the shelf is stale when ANY of them is due —
   // one button refreshes from them all, so it should flag a refresh as due if
   // there is anything for it to do. The label follows the oldest of the two
@@ -206,6 +206,8 @@ export default async function LibraryPage() {
         ownedOnly,
         publication,
         hideNsfw,
+        official,
+        hidePaid,
         sort: activeSort,
         layout: activeLayout,
       }}
@@ -221,12 +223,6 @@ export default async function LibraryPage() {
           <div className="flex items-center gap-2">
             <LibraryFilterMenu statuses={statusChips} sources={sourceChips} />
             <SelectToggle />
-            {/* Pushed to the far end: it is not a filter, and two of its
-                three questions reach past the filters. It used to be a
-                banner over the shelf; see RandomPick. */}
-            <div className="ml-auto">
-              <RandomPick isPro={isPro} />
-            </div>
           </div>
         }
       >
@@ -296,7 +292,6 @@ export default async function LibraryPage() {
 
           <LibraryGrid
             entries={entries}
-            topSources={topSources}
             catalog={sources}
             isPro={isPro}
             emptyFiltered={
